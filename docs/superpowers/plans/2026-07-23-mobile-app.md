@@ -6,7 +6,9 @@
 
 **Architecture:** A single Expo project (`mobile/`) using file-based routing (Expo Router). Auth and branch selection live in React Context; all server data (providers, products, orders) is fetched and cached with TanStack Query. Publishing an order calls the backend, then opens a `wa.me` deep link built from the response.
 
-**Tech Stack:** Expo (React Native + TypeScript), Expo Router, TanStack Query, `axios`, `expo-secure-store`, `expo-camera` (barcode scanning), `jest-expo`.
+**Tech Stack:** Expo (React Native + TypeScript), Expo Router, TanStack Query, `axios`, `expo-secure-store`, `expo-camera` (barcode scanning), `expo-updates` (RTL bootstrap reload), `jest-expo`.
+
+**UI language:** Hebrew, right-to-left, throughout — not an English app with translations layered on. See the design spec's "UI language" note.
 
 **Prerequisite:** `docs/superpowers/plans/2026-07-23-backend-api.md` must be implemented and runnable first (`npm run start:dev` in `backend/`) — every task here talks to that API.
 
@@ -70,13 +72,57 @@ Add a URL scheme to `mobile/app.json` (required by Expo Router and useful later 
 }
 ```
 
-- [ ] **Step 3: Root layout and placeholder home route**
+- [ ] **Step 3: Force right-to-left layout**
+
+The entire app is Hebrew/RTL — not an English app with a translation layer. React Native's `I18nManager` needs `forceRTL(true)` called as early as possible, and native layout direction only fully applies after the app reloads once (a one-time cost on first launch; subsequent launches are already RTL and skip the reload).
+
+```bash
+npx expo install expo-updates
+```
+
+```typescript
+// mobile/src/i18n/rtl.ts
+import { I18nManager } from 'react-native';
+import * as Updates from 'expo-updates';
+
+export async function ensureRTL(): Promise<void> {
+  if (I18nManager.isRTL) {
+    return;
+  }
+  I18nManager.allowRTL(true);
+  I18nManager.forceRTL(true);
+  try {
+    await Updates.reloadAsync();
+  } catch {
+    // reloadAsync is unavailable in some dev environments (e.g. plain Expo Go on web);
+    // in those cases the RTL flags still take effect on the next manual reload.
+  }
+}
+```
+
+- [ ] **Step 4: Root layout (applies RTL before first render) and placeholder home route**
 
 ```typescript
 // mobile/app/_layout.tsx
+import { useEffect, useState } from 'react';
+import { I18nManager } from 'react-native';
 import { Stack } from 'expo-router';
+import { ensureRTL } from '../src/i18n/rtl';
 
 export default function RootLayout() {
+  const [isRtlReady, setIsRtlReady] = useState(I18nManager.isRTL);
+
+  useEffect(() => {
+    if (!I18nManager.isRTL) {
+      ensureRTL();
+      return; // a reload is in flight; this component will remount once it lands
+    }
+    setIsRtlReady(true);
+  }, []);
+
+  if (!isRtlReady) {
+    return null;
+  }
   return <Stack />;
 }
 ```
@@ -94,7 +140,7 @@ export default function Index() {
 }
 ```
 
-- [ ] **Step 4: Add Jest (`jest-expo`) and a sanity test**
+- [ ] **Step 5: Add Jest (`jest-expo`) and a sanity test**
 
 ```bash
 npx expo install jest-expo jest --dev
@@ -122,21 +168,21 @@ describe('project setup', () => {
 });
 ```
 
-- [ ] **Step 5: Run test, verify it passes**
+- [ ] **Step 6: Run test, verify it passes**
 
 ```bash
 cd mobile && npx jest src/__tests__/sanity.test.ts
 ```
 Expected: PASS.
 
-- [ ] **Step 6: Confirm the app boots**
+- [ ] **Step 7: Confirm the app boots and is RTL**
 
 ```bash
 npx expo start
 ```
-Expected: Metro bundler starts; scanning the QR with Expo Go (or pressing `i`/`a` for a simulator) shows the "sapako" placeholder screen.
+Expected: Metro bundler starts; scanning the QR with Expo Go (or pressing `i`/`a` for a simulator) shows the "sapako" placeholder screen, reloading once automatically on first launch (the RTL bootstrap from Step 3). After that one-time reload, confirm layout is right-to-left — e.g. temporarily add a second `Text` element next to the first and observe it renders on the left, not the right.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add mobile
@@ -486,7 +532,7 @@ export default function LoginScreen() {
       await login(username, password);
       router.replace('/');
     } catch {
-      setError('Invalid username or password');
+      setError('שם משתמש או סיסמה שגויים');
     } finally {
       setIsSubmitting(false);
     }
@@ -497,20 +543,20 @@ export default function LoginScreen() {
       <Text style={styles.title}>sapako</Text>
       <TextInput
         style={styles.input}
-        placeholder="Username"
+        placeholder="שם משתמש"
         autoCapitalize="none"
         value={username}
         onChangeText={setUsername}
       />
       <TextInput
         style={styles.input}
-        placeholder="Password"
+        placeholder="סיסמה"
         secureTextEntry
         value={password}
         onChangeText={setPassword}
       />
       {error && <Text style={styles.error}>{error}</Text>}
-      <Button title={isSubmitting ? 'Signing in…' : 'Sign in'} onPress={handleSubmit} disabled={isSubmitting} />
+      <Button title={isSubmitting ? 'מתחבר…' : 'התחברות'} onPress={handleSubmit} disabled={isSubmitting} />
     </View>
   );
 }
@@ -518,8 +564,8 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', padding: 24, gap: 12 },
   title: { fontSize: 28, fontWeight: '700', textAlign: 'center', marginBottom: 24 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
-  error: { color: '#c0392b' },
+  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12, textAlign: 'right' },
+  error: { color: '#c0392b', textAlign: 'right' },
 });
 ```
 
@@ -719,14 +765,14 @@ export default function SelectBranchScreen() {
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <Text>Loading branches…</Text>
+        <Text>טוען סניפים…</Text>
       </View>
     );
   }
   if (error) {
     return (
       <View style={styles.centered}>
-        <Text>Could not load branches. Pull to retry.</Text>
+        <Text>לא ניתן לטעון סניפים. יש למשוך לרענון.</Text>
       </View>
     );
   }
@@ -818,8 +864,8 @@ export default function HomeScreen() {
         <Text style={styles.branchName}>{selectedBranch!.name} ▾</Text>
       </Pressable>
 
-      {isLoading && <Text>Loading providers…</Text>}
-      {error && <Text>Could not load providers. Pull to retry.</Text>}
+      {isLoading && <Text>טוען ספקים…</Text>}
+      {error && <Text>לא ניתן לטעון ספקים. יש למשוך לרענון.</Text>}
 
       <FlatList
         refreshing={isRefetching}
@@ -834,7 +880,7 @@ export default function HomeScreen() {
             <Text style={styles.itemText}>{item.name}</Text>
           </Pressable>
         )}
-        ListEmptyComponent={!isLoading ? <Text>No providers yet for this branch.</Text> : null}
+        ListEmptyComponent={!isLoading ? <Text>אין עדיין ספקים לסניף זה.</Text> : null}
       />
     </View>
   );
@@ -1050,7 +1096,7 @@ import { buildOrderMessage } from './buildOrderMessage';
 import type { Order } from '../api/types';
 
 describe('buildOrderMessage', () => {
-  it('formats the provider name and each item on its own line', () => {
+  it('formats the provider name and each item on its own line, in Hebrew', () => {
     const order: Order = {
       id: 'o1',
       branchId: 'b1',
@@ -1058,17 +1104,17 @@ describe('buildOrderMessage', () => {
       status: 'PUBLISHED',
       createdAt: '2026-07-23T10:00:00.000Z',
       publishedAt: '2026-07-23T10:05:00.000Z',
-      provider: { id: 'p1', name: 'Meat Co', phone: '+972501234567' },
+      provider: { id: 'p1', name: 'חברת הבשר', phone: '+972501234567' },
       items: [
-        { id: 'i1', productId: 'pr1', productNameSnapshot: 'Ground Beef', unitType: 'kg', quantity: 5 },
-        { id: 'i2', productId: undefined, productNameSnapshot: 'Lamb Chops (extra lean)', unitType: 'kg', quantity: 2 },
+        { id: 'i1', productId: 'pr1', productNameSnapshot: 'בשר טחון', unitType: 'ק"ג', quantity: 5 },
+        { id: 'i2', productId: undefined, productNameSnapshot: 'צלעות כבש (רזות)', unitType: 'ק"ג', quantity: 2 },
       ],
     };
 
     const message = buildOrderMessage(order);
 
     expect(message).toBe(
-      'Order for Meat Co:\n- Ground Beef: 5 kg\n- Lamb Chops (extra lean): 2 kg',
+      'הזמנה עבור חברת הבשר:\n- בשר טחון: 5 ק"ג\n- צלעות כבש (רזות): 2 ק"ג',
     );
   });
 
@@ -1079,13 +1125,13 @@ describe('buildOrderMessage', () => {
       providerId: 'p1',
       status: 'PUBLISHED',
       createdAt: '2026-07-23T10:00:00.000Z',
-      provider: { id: 'p1', name: 'Veg Co', phone: '+972507654321' },
-      items: [{ id: 'i1', productId: 'pr1', productNameSnapshot: 'Tomatoes', unitType: 'crate', quantity: 3 }],
+      provider: { id: 'p1', name: 'ירקות השדה', phone: '+972507654321' },
+      items: [{ id: 'i1', productId: 'pr1', productNameSnapshot: 'עגבניות', unitType: 'ארגז', quantity: 3 }],
     };
 
     const message = buildOrderMessage(order);
 
-    expect(message).toBe('Order for Veg Co:\n- Tomatoes: 3 crate');
+    expect(message).toBe('הזמנה עבור ירקות השדה:\n- עגבניות: 3 ארגז');
   });
 });
 ```
@@ -1107,7 +1153,7 @@ export function buildOrderMessage(order: Order): string {
   const lines = order.items.map(
     (item) => `- ${item.productNameSnapshot}: ${item.quantity} ${item.unitType}`,
   );
-  return [`Order for ${order.provider.name}:`, ...lines].join('\n');
+  return [`הזמנה עבור ${order.provider.name}:`, ...lines].join('\n');
 }
 ```
 
@@ -1141,7 +1187,7 @@ export function PublishButton({ order, items }: PublishButtonProps) {
 
   const handlePublish = async () => {
     if (items.length === 0) {
-      Alert.alert('Add at least one item before publishing.');
+      Alert.alert('יש להוסיף לפחות פריט אחד לפני הפרסום.');
       return;
     }
     setIsPublishing(true);
@@ -1153,8 +1199,8 @@ export function PublishButton({ order, items }: PublishButtonProps) {
       const canOpen = await Linking.canOpenURL(url);
       if (!canOpen) {
         Alert.alert(
-          'Order saved, but WhatsApp could not be opened',
-          'The order was published successfully. Open WhatsApp manually to send it.',
+          'ההזמנה נשמרה, אך לא ניתן היה לפתוח את WhatsApp',
+          'ההזמנה פורסמה בהצלחה. יש לפתוח את WhatsApp ידנית כדי לשלוח אותה.',
         );
         router.replace('/');
         return;
@@ -1162,13 +1208,13 @@ export function PublishButton({ order, items }: PublishButtonProps) {
       await Linking.openURL(url);
       router.replace('/');
     } catch {
-      Alert.alert('Could not publish the order', 'Please check your connection and try again.');
+      Alert.alert('לא ניתן היה לפרסם את ההזמנה', 'יש לבדוק את החיבור לאינטרנט ולנסות שוב.');
     } finally {
       setIsPublishing(false);
     }
   };
 
-  return <Button title={isPublishing ? 'Publishing…' : 'Publish to WhatsApp'} onPress={handlePublish} />;
+  return <Button title={isPublishing ? 'מפרסם…' : 'פרסום לוואטסאפ'} onPress={handlePublish} />;
 }
 ```
 
@@ -1232,13 +1278,13 @@ export default function ActivityScreen() {
       renderItem={({ item: order }) => (
         <View style={styles.row}>
           <Text style={styles.providerName}>{order.provider.name}</Text>
-          <Text style={styles.itemCount}>{order.items.length} items</Text>
+          <Text style={styles.itemCount}>{order.items.length} פריטים</Text>
           <Text style={order.status === 'PUBLISHED' ? styles.sentBadge : styles.draftBadge}>
-            {order.status === 'PUBLISHED' ? 'sent' : 'draft'}
+            {order.status === 'PUBLISHED' ? 'נשלחה' : 'טיוטה'}
           </Text>
         </View>
       )}
-      ListEmptyComponent={!isLoading ? <Text>No orders yet.</Text> : null}
+      ListEmptyComponent={!isLoading ? <Text>אין הזמנות עדיין.</Text> : null}
     />
   );
 }
@@ -1266,7 +1312,7 @@ Add a link near the branch name in `mobile/app/(app)/index.tsx`:
 ```typescript
 import { Link } from 'expo-router';
 // inside the returned JSX, alongside the branch-name Pressable:
-<Link href="/activity" style={styles.activityLink}>Recent activity</Link>
+<Link href="/activity" style={styles.activityLink}>פעילות אחרונה</Link>
 ```
 Add the corresponding style to the `StyleSheet.create` call in that file:
 ```typescript
@@ -1275,7 +1321,7 @@ activityLink: { color: '#2563eb', marginBottom: 8 },
 
 - [ ] **Step 4: Manual verification**
 
-Publish an order (Task 7) and confirm it shows up on the Recent Activity screen with a "sent" badge; create a second order and leave it without publishing, confirm it shows "draft".
+Publish an order (Task 7) and confirm it shows up on the Recent Activity screen with a "נשלחה" (sent) badge; create a second order and leave it without publishing, confirm it shows "טיוטה" (draft).
 
 - [ ] **Step 5: Commit**
 
@@ -1308,7 +1354,7 @@ Add the camera usage description (required by iOS) to `mobile/app.json`:
       [
         "expo-camera",
         {
-          "cameraPermission": "sapako uses the camera to scan product barcodes."
+          "cameraPermission": "sapako משתמש במצלמה כדי לסרוק ברקודים של מוצרים."
         }
       ]
     ]
@@ -1341,12 +1387,12 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
     return (
       <Modal visible transparent>
         <View style={styles.centered}>
-          <Text>Camera access is needed to scan barcodes.</Text>
+          <Text>נדרשת גישה למצלמה כדי לסרוק ברקודים.</Text>
           <Pressable onPress={requestPermission} style={styles.button}>
-            <Text>Grant permission</Text>
+            <Text>אישור הרשאה</Text>
           </Pressable>
           <Pressable onPress={onClose} style={styles.button}>
-            <Text>Cancel</Text>
+            <Text>ביטול</Text>
           </Pressable>
         </View>
       </Modal>
@@ -1364,7 +1410,7 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
         }}
       />
       <Pressable onPress={onClose} style={styles.closeButton}>
-        <Text style={styles.closeButtonText}>Cancel</Text>
+        <Text style={styles.closeButtonText}>ביטול</Text>
       </Pressable>
     </Modal>
   );
@@ -1393,7 +1439,7 @@ const [isScannerVisible, setIsScannerVisible] = useState(false);
 const handleBarcodeScanned = (barcode: string) => {
   const match = products?.find((product) => product.barcode === barcode);
   if (!match) {
-    Alert.alert('No matching product', `No product in this provider's catalog has barcode ${barcode}.`);
+    Alert.alert('לא נמצא מוצר תואם', `לא נמצא מוצר עם ברקוד ${barcode} בקטלוג של הספק הזה.`);
     return;
   }
   const currentQuantity = itemsByProductId[match.id]?.quantity ?? 0;
@@ -1401,7 +1447,7 @@ const handleBarcodeScanned = (barcode: string) => {
 };
 // ...in the returned JSX, add a scan button (e.g. near the top of the list) and the modal:
 <Pressable onPress={() => setIsScannerVisible(true)} style={styles.scanButton}>
-  <Text>Scan barcode</Text>
+  <Text>סריקת ברקוד</Text>
 </Pressable>
 <BarcodeScannerModal
   visible={isScannerVisible}
@@ -1530,10 +1576,10 @@ import { Link } from 'expo-router';
 export default function AdminHomeScreen() {
   return (
     <View style={styles.container}>
-      <Link href="/admin/branches/new" style={styles.link}>Add branch</Link>
-      <Link href="/admin/providers/new" style={styles.link}>Add provider</Link>
-      <Link href="/admin/products/new" style={styles.link}>Add product</Link>
-      <Link href="/admin/users" style={styles.link}>Manage users & permissions</Link>
+      <Link href="/admin/branches/new" style={styles.link}>הוספת סניף</Link>
+      <Link href="/admin/providers/new" style={styles.link}>הוספת ספק</Link>
+      <Link href="/admin/products/new" style={styles.link}>הוספת מוצר</Link>
+      <Link href="/admin/users" style={styles.link}>ניהול משתמשים והרשאות</Link>
     </View>
   );
 }
@@ -1564,9 +1610,9 @@ export default function NewBranchScreen() {
 
   return (
     <View style={styles.container}>
-      <TextInput style={styles.input} placeholder="Branch name" value={name} onChangeText={setName} />
-      <TextInput style={styles.input} placeholder="Address (optional)" value={address} onChangeText={setAddress} />
-      <Button title="Create branch" onPress={handleSubmit} disabled={!name} />
+      <TextInput style={styles.input} placeholder="שם הסניף" value={name} onChangeText={setName} />
+      <TextInput style={styles.input} placeholder="כתובת (אופציונלי)" value={address} onChangeText={setAddress} />
+      <Button title="יצירת סניף" onPress={handleSubmit} disabled={!name} />
     </View>
   );
 }
@@ -1602,7 +1648,7 @@ export default function NewProviderScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Branch</Text>
+      <Text style={styles.label}>סניף</Text>
       <FlatList
         horizontal
         data={branches}
@@ -1616,15 +1662,15 @@ export default function NewProviderScreen() {
           </Pressable>
         )}
       />
-      <TextInput style={styles.input} placeholder="Provider name" value={name} onChangeText={setName} />
+      <TextInput style={styles.input} placeholder="שם הספק" value={name} onChangeText={setName} />
       <TextInput
         style={styles.input}
-        placeholder="WhatsApp phone (e.g. +972501234567)"
+        placeholder="טלפון וואטסאפ (לדוגמה: 972501234567+)"
         keyboardType="phone-pad"
         value={phone}
         onChangeText={setPhone}
       />
-      <Button title="Create provider" onPress={handleSubmit} disabled={!branch || !name || !phone} />
+      <Button title="יצירת ספק" onPress={handleSubmit} disabled={!branch || !name || !phone} />
     </View>
   );
 }
@@ -1664,15 +1710,15 @@ export default function NewProductScreen() {
 
   return (
     <View style={styles.container}>
-      <TextInput style={styles.input} placeholder="Provider ID" value={providerId} onChangeText={setProviderId} />
-      <TextInput style={styles.input} placeholder="Product name" value={name} onChangeText={setName} />
-      <TextInput style={styles.input} placeholder="Unit type (e.g. kg, crate)" value={unitType} onChangeText={setUnitType} />
-      <TextInput style={styles.input} placeholder="Barcode (optional)" value={barcode} onChangeText={setBarcode} />
+      <TextInput style={styles.input} placeholder="מזהה ספק" value={providerId} onChangeText={setProviderId} />
+      <TextInput style={styles.input} placeholder="שם המוצר" value={name} onChangeText={setName} />
+      <TextInput style={styles.input} placeholder='סוג יחידה (לדוגמה: ק"ג, ארגז)' value={unitType} onChangeText={setUnitType} />
+      <TextInput style={styles.input} placeholder="ברקוד (אופציונלי)" value={barcode} onChangeText={setBarcode} />
       <Pressable onPress={() => setIsScannerVisible(true)} style={styles.scanButton}>
-        <Text>Scan barcode</Text>
+        <Text>סריקת ברקוד</Text>
       </Pressable>
       <BarcodeScannerModal visible={isScannerVisible} onScanned={setBarcode} onClose={() => setIsScannerVisible(false)} />
-      <Button title="Create product" onPress={handleSubmit} disabled={!providerId || !name || !unitType} />
+      <Button title="יצירת מוצר" onPress={handleSubmit} disabled={!providerId || !name || !unitType} />
     </View>
   );
 }
@@ -1701,14 +1747,14 @@ export default function UsersScreen() {
 
   return (
     <View style={styles.container}>
-      <Link href="/admin/users/new" style={styles.link}>+ Add user</Link>
+      <Link href="/admin/users/new" style={styles.link}>+ הוספת משתמש</Link>
       <FlatList
         data={users}
         keyExtractor={(user) => user.id}
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => router.push(`/admin/users/${item.id}/access`)}>
             <Text style={styles.username}>{item.username}</Text>
-            <Text style={styles.meta}>{item.role} · {item.providerAccess.length} provider(s)</Text>
+            <Text style={styles.meta}>{item.role} · {item.providerAccess.length} ספקים</Text>
           </Pressable>
         )}
       />
@@ -1745,8 +1791,8 @@ export default function NewUserScreen() {
 
   return (
     <View style={styles.container}>
-      <TextInput style={styles.input} placeholder="Username" autoCapitalize="none" value={username} onChangeText={setUsername} />
-      <TextInput style={styles.input} placeholder="Temporary password" secureTextEntry value={password} onChangeText={setPassword} />
+      <TextInput style={styles.input} placeholder="שם משתמש" autoCapitalize="none" value={username} onChangeText={setUsername} />
+      <TextInput style={styles.input} placeholder="סיסמה זמנית" secureTextEntry value={password} onChangeText={setPassword} />
       <View style={styles.roleRow}>
         {(['STAFF', 'ADMIN'] as Role[]).map((option) => (
           <Pressable
@@ -1754,11 +1800,11 @@ export default function NewUserScreen() {
             onPress={() => setRole(option)}
             style={[styles.roleChip, role === option && styles.roleChipSelected]}
           >
-            <Text>{option}</Text>
+            <Text>{option === 'ADMIN' ? 'מנהל' : 'עובד'}</Text>
           </Pressable>
         ))}
       </View>
-      <Button title="Create user" onPress={handleSubmit} disabled={!username || password.length < 8} />
+      <Button title="יצירת משתמש" onPress={handleSubmit} disabled={!username || password.length < 8} />
     </View>
   );
 }
@@ -1857,7 +1903,7 @@ import { useAuth } from '../../src/auth/AuthContext';
 // inside HomeScreen component:
 const { role } = useAuth();
 // in the returned JSX, alongside the "Recent activity" link:
-{role === 'ADMIN' && <Link href="/admin" style={styles.activityLink}>Admin</Link>}
+{role === 'ADMIN' && <Link href="/admin" style={styles.activityLink}>ניהול</Link>}
 ```
 
 - [ ] **Step 9: Fix the import noted in Step 5**
@@ -2053,5 +2099,6 @@ git commit -m "chore: add EAS build config and mobile CI workflow"
 ## Plan Self-Review Notes
 
 - **Spec coverage:** login/branch-switch flow (Tasks 3–4), STAFF sees only accessible providers (Task 5, enforced server-side by the backend's `ProviderAccessGuard`/`BranchAccessGuard`, mobile just renders what the API returns), order builder with quantity stepper and ad-hoc/barcode item entry (Tasks 6, 9), publish → WhatsApp with the order safely persisted first (Task 7), recent activity with draft/sent badges (Task 8), admin screens for branches/providers/products/users/permissions (Task 10), phase-1 photo upload explicitly NOT built (no task adds an image-picker — `Product.imageUrl` stays unused client-side, matching the spec's deferral), EAS internal distribution for iOS + Android (Task 11).
+- **Hebrew/RTL coverage:** RTL is forced at the OS level via `I18nManager` (Task 1, Step 3) rather than left to per-device locale, since this app is Hebrew-only regardless of a given phone's system language. Every screen built in Tasks 3–10 uses Hebrew copy directly (no i18n/translation library — there is only one language in phase 1, so an abstraction layer would be pure overhead). `buildOrderMessage` (Task 7) — the text that actually reaches a real supplier over WhatsApp — is Hebrew and covered by the unit test using Hebrew fixture data, not English placeholder text.
 - **Type consistency check:** `Order`, `Provider`, `Product`, `OrderItem`, `UserWithAccess` types (Task 2) are the single source of truth used identically by every API function and screen in Tasks 3–10 — no ad-hoc inline shapes introduced later.
 - **Known rough edges flagged inline rather than hidden:** Task 6/7's cross-task file reference and Task 10's provider-picker-as-text-field shortcut are called out explicitly in the plan text, not left implicit — a future engineer reading only one task won't be surprised.

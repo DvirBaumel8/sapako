@@ -14,6 +14,12 @@ this specific business can start using immediately, with a data model that
 doesn't need to be reworked when phase 2 features (photo upload, GS1 catalog
 import) get added.
 
+**UI language:** the entire mobile app is in Hebrew, right-to-left, matching the
+reference screenshots. This is not a translation layer over an English app —
+there is no English UI in phase 1. This also applies to the WhatsApp message
+text the app generates when publishing an order, since that's what a real
+Hebrew-speaking supplier receives.
+
 ## 2. High-Level Architecture
 
 ```
@@ -130,9 +136,10 @@ Design notes:
    survives the user leaving the screen.
 4. On "Publish": order flips to `PUBLISHED`, `publishedAt` is set — durably,
    *before* the app attempts to open WhatsApp — then the app opens the `wa.me`
-   deep link with the encoded order text. If opening WhatsApp fails (e.g. not
-   installed), the order is still safely saved; the app surfaces a clear
-   error rather than losing it.
+   deep link with the encoded order text (in Hebrew — this is what the
+   supplier actually reads). If opening WhatsApp fails (e.g. not installed),
+   the order is still safely saved; the app surfaces a clear error rather
+   than losing it.
 5. Branch home screen lists recent orders by provider with a status badge
    (draft vs. sent).
 
