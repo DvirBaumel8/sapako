@@ -123,19 +123,27 @@ export class OrdersService {
   }
 
   async publish(orderId: string): Promise<Order> {
-    const order = await this.orderRepo.findOne({
-      where: { id: orderId },
-      relations: { items: true, provider: true },
-    });
+    const order = await this.orderRepo.findOne({ where: { id: orderId } });
     if (!order) {
       throw new NotFoundException('Order not found');
     }
     if (order.status === OrderStatus.PUBLISHED) {
       throw new ConflictException('Order has already been published');
     }
-    order.status = OrderStatus.PUBLISHED;
-    order.publishedAt = new Date();
-    return this.orderRepo.save(order);
+
+    // Atomic conditional UPDATE: only a row still in DRAFT status matches,
+    // so under concurrent publish() calls (double-tap, retry) at most one
+    // caller's UPDATE affects a row. The loser sees affected === 0 and gets
+    // a clean 409 instead of silently double-publishing.
+    const result = await this.orderRepo.update(
+      { id: orderId, status: OrderStatus.DRAFT },
+      { status: OrderStatus.PUBLISHED, publishedAt: new Date() },
+    );
+    if (result.affected === 0) {
+      throw new ConflictException('Order has already been published');
+    }
+
+    return this.findById(orderId);
   }
 
   private async getDraftOrThrow(orderId: string): Promise<Order> {

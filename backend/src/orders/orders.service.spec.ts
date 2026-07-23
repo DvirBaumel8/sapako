@@ -19,6 +19,7 @@ describe('OrdersService', () => {
     save: jest.fn(),
     findOne: jest.fn(),
     find: jest.fn(),
+    update: jest.fn(),
   };
   const orderItemRepo = {
     create: jest.fn(),
@@ -240,18 +241,27 @@ describe('OrdersService', () => {
   });
 
   describe('publish', () => {
-    it('transitions a DRAFT order to PUBLISHED and sets publishedAt', async () => {
-      const order = {
+    it('transitions a DRAFT order to PUBLISHED and sets publishedAt via an atomic update', async () => {
+      const draftOrder = { id: 'o1', status: OrderStatus.DRAFT };
+      const publishedOrder = {
         id: 'o1',
-        status: OrderStatus.DRAFT,
+        status: OrderStatus.PUBLISHED,
         items: [],
-        publishedAt: undefined,
+        publishedAt: new Date(),
       };
-      orderRepo.findOne.mockResolvedValue(order);
-      orderRepo.save.mockImplementation((data) => Promise.resolve(data));
+      // First findOne: existence/status check. Second findOne (via findById):
+      // re-read after the atomic update to return the fresh state.
+      orderRepo.findOne
+        .mockResolvedValueOnce(draftOrder)
+        .mockResolvedValueOnce(publishedOrder);
+      orderRepo.update.mockResolvedValue({ affected: 1 });
 
       const published = await service.publish('o1');
 
+      expect(orderRepo.update).toHaveBeenCalledWith(
+        { id: 'o1', status: OrderStatus.DRAFT },
+        expect.objectContaining({ status: OrderStatus.PUBLISHED }),
+      );
       expect(published.status).toBe(OrderStatus.PUBLISHED);
       expect(published.publishedAt).toBeInstanceOf(Date);
     });
@@ -263,6 +273,7 @@ describe('OrdersService', () => {
       });
 
       await expect(service.publish('o1')).rejects.toThrow(ConflictException);
+      expect(orderRepo.update).not.toHaveBeenCalled();
     });
 
     it('rejects publishing an order that does not exist', async () => {
@@ -270,6 +281,25 @@ describe('OrdersService', () => {
 
       await expect(service.publish('missing')).rejects.toThrow(
         NotFoundException,
+      );
+      expect(orderRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects with ConflictException when losing a race to a concurrent publish() call', async () => {
+      // The initial read sees DRAFT (so it passes the first check), but by
+      // the time the conditional UPDATE runs, a concurrent publish() has
+      // already flipped the row to PUBLISHED — so this UPDATE matches zero
+      // rows even though status was DRAFT a moment ago.
+      orderRepo.findOne.mockResolvedValueOnce({
+        id: 'o1',
+        status: OrderStatus.DRAFT,
+      });
+      orderRepo.update.mockResolvedValue({ affected: 0 });
+
+      await expect(service.publish('o1')).rejects.toThrow(ConflictException);
+      expect(orderRepo.update).toHaveBeenCalledWith(
+        { id: 'o1', status: OrderStatus.DRAFT },
+        expect.objectContaining({ status: OrderStatus.PUBLISHED }),
       );
     });
   });
