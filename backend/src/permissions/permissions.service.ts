@@ -14,4 +14,17 @@ export class PermissionsService {
     // Until then, STAFF users see no branches — safe default, not a silent bypass.
     return [];
   }
+
+  async hasBranchAccess(
+    user: AuthenticatedUser,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    branchId: string,
+  ): Promise<boolean> {
+    if (user.role === Role.ADMIN) {
+      return true;
+    }
+    // STAFF branch access is implemented in full in Task 6 (UserProviderAccess-derived).
+    // Until then, STAFF has no branch access — safe default, not a silent bypass.
+    return false;
+  }
 }
