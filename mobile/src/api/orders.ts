@@ -31,3 +31,8 @@ export async function publishOrder(orderId: string): Promise<Order> {
   const response = await apiClient.post<Order>(`/orders/${orderId}/publish`);
   return response.data;
 }
+
+export async function fetchOrdersForBranch(branchId: string): Promise<Order[]> {
+  const response = await apiClient.get<Order[]>(`/branches/${branchId}/orders`);
+  return response.data;
+}

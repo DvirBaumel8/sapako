@@ -1,6 +1,6 @@
 import React from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProvidersForBranch } from '../../src/api/providers';
 import { useBranch } from '../../src/branch/BranchContext';
@@ -17,6 +17,7 @@ export default function HomeScreen() {
       <Pressable onPress={() => router.push('/select-branch')}>
         <Text style={styles.branchName}>{selectedBranch!.name} ▾</Text>
       </Pressable>
+      <Link href="/activity" style={styles.activityLink}>פעילות אחרונה</Link>
 
       {isLoading && <Text>טוען ספקים…</Text>}
       {error && <Text>לא ניתן לטעון ספקים. יש למשוך לרענון.</Text>}
@@ -43,6 +44,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12 },
   branchName: { fontSize: 20, fontWeight: '700' },
+  activityLink: { color: '#2563eb', marginBottom: 8 },
   item: { padding: 16, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, marginBottom: 8 },
   itemText: { fontSize: 16, fontWeight: '600' },
 });
