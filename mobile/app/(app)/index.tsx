@@ -4,9 +4,11 @@ import { Link, router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProvidersForBranch } from '../../src/api/providers';
 import { useBranch } from '../../src/branch/BranchContext';
+import { useAuth } from '../../src/auth/AuthContext';
 
 export default function HomeScreen() {
   const { selectedBranch } = useBranch();
+  const { role } = useAuth();
   const { data: providers, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ['providers', selectedBranch!.id],
     queryFn: () => fetchProvidersForBranch(selectedBranch!.id),
@@ -18,6 +20,7 @@ export default function HomeScreen() {
         <Text style={styles.branchName}>{selectedBranch!.name} ▾</Text>
       </Pressable>
       <Link href="/activity" style={styles.activityLink}>פעילות אחרונה</Link>
+      {role === 'ADMIN' && <Link href="/admin" style={styles.activityLink}>ניהול</Link>}
 
       {isLoading && <Text>טוען ספקים…</Text>}
       {error && <Text>לא ניתן לטעון ספקים. יש למשוך לרענון.</Text>}
