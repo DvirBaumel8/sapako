@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProductsForProvider } from '../../../../src/api/products';
@@ -7,12 +7,14 @@ import { createDraftOrder, addOrderItem, updateOrderItemQuantity } from '../../.
 import { useBranch } from '../../../../src/branch/BranchContext';
 import type { Order, OrderItem, Product } from '../../../../src/api/types';
 import { PublishButton } from '../../../../src/order/PublishButton';
+import { BarcodeScannerModal } from '../../../../src/barcode/BarcodeScannerModal';
 
 export default function OrderBuilderScreen() {
   const { providerId } = useLocalSearchParams<{ providerId: string }>();
   const { selectedBranch } = useBranch();
   const [order, setOrder] = useState<Order | null>(null);
   const [itemsByProductId, setItemsByProductId] = useState<Record<string, OrderItem>>({});
+  const [isScannerVisible, setIsScannerVisible] = useState(false);
 
   const { data: products } = useQuery({
     queryKey: ['products', providerId],
@@ -38,8 +40,26 @@ export default function OrderBuilderScreen() {
     }
   };
 
+  const handleBarcodeScanned = (barcode: string) => {
+    const match = products?.find((product) => product.barcode === barcode);
+    if (!match) {
+      Alert.alert('לא נמצא מוצר תואם', `לא נמצא מוצר עם ברקוד ${barcode} בקטלוג של הספק הזה.`);
+      return;
+    }
+    const currentQuantity = itemsByProductId[match.id]?.quantity ?? 0;
+    setQuantity(match, currentQuantity + 1);
+  };
+
   return (
     <View style={styles.container}>
+      <Pressable onPress={() => setIsScannerVisible(true)} style={styles.scanButton}>
+        <Text>סריקת ברקוד</Text>
+      </Pressable>
+      <BarcodeScannerModal
+        visible={isScannerVisible}
+        onScanned={handleBarcodeScanned}
+        onClose={() => setIsScannerVisible(false)}
+      />
       <FlatList
         data={products}
         keyExtractor={(product) => product.id}
@@ -90,4 +110,5 @@ const styles = StyleSheet.create({
   stepperButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 6 },
   quantityInput: { width: 40, textAlign: 'center', borderWidth: 1, borderRadius: 6, padding: 4 },
   unit: { width: 48, fontSize: 12, color: '#666' },
+  scanButton: { margin: 12, padding: 12, borderWidth: 1, borderRadius: 8, alignItems: 'center' },
 });

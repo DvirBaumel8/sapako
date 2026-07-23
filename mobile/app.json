@@ -25,7 +25,13 @@
     "plugins": [
       "expo-router",
       "expo-status-bar",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "sapako משתמש במצלמה כדי לסרוק ברקודים של מוצרים."
+        }
+      ]
     ],
     "extra": {
       "apiBaseUrl": "http://localhost:3000"
