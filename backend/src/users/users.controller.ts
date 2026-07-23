@@ -1,0 +1,55 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { Role } from './role.enum';
+import { UsersService, SafeUser } from './users.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { GrantProviderAccessDto } from './dto/grant-provider-access.dto';
+import { PermissionsService } from '../permissions/permissions.service';
+
+@Controller('users')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN)
+export class UsersController {
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly permissionsService: PermissionsService,
+  ) {}
+
+  @Get()
+  async findAll(): Promise<SafeUser[]> {
+    const users = await this.usersService.findAllWithAccess();
+    return users.map((user) => this.usersService.toSafeUser(user));
+  }
+
+  @Post()
+  async create(@Body() dto: CreateUserDto): Promise<SafeUser> {
+    const user = await this.usersService.create(dto);
+    return this.usersService.toSafeUser(user);
+  }
+
+  @Post(':id/provider-access')
+  grantAccess(
+    @Param('id') userId: string,
+    @Body() dto: GrantProviderAccessDto,
+  ) {
+    return this.permissionsService.grant(userId, dto.providerId);
+  }
+
+  @Delete(':id/provider-access/:providerId')
+  revokeAccess(
+    @Param('id') userId: string,
+    @Param('providerId') providerId: string,
+  ) {
+    return this.permissionsService.revoke(userId, providerId);
+  }
+}

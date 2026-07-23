@@ -3,8 +3,10 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  OneToMany,
 } from 'typeorm';
 import { Role } from './role.enum';
+import { UserProviderAccess } from '../permissions/user-provider-access.entity';
 
 @Entity('users')
 export class User {
@@ -22,4 +24,7 @@ export class User {
 
   @CreateDateColumn()
   createdAt: Date;
+
+  @OneToMany(() => UserProviderAccess, (access) => access.user)
+  providerAccess: UserProviderAccess[];
 }
