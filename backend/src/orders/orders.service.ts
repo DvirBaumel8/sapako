@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, In, Repository } from 'typeorm';
 import { Order } from './order.entity';
 import { OrderItem } from './order-item.entity';
 import { OrderStatus } from './order-status.enum';
@@ -50,9 +50,16 @@ export class OrdersService {
     return order;
   }
 
-  async findByBranch(branchId: string): Promise<Order[]> {
+  async findByBranch(
+    branchId: string,
+    accessibleProviderIds: string[] | 'ALL',
+  ): Promise<Order[]> {
+    const where: FindOptionsWhere<Order> = { branchId };
+    if (accessibleProviderIds !== 'ALL') {
+      where.providerId = In(accessibleProviderIds);
+    }
     return this.orderRepo.find({
-      where: { branchId },
+      where,
       relations: { items: true, provider: true },
       order: { createdAt: 'DESC' },
     });

@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -15,16 +16,28 @@ import { ProvidersService } from './providers.service';
 import { CreateProviderDto } from './dto/create-provider.dto';
 import { UpdateProviderDto } from './dto/update-provider.dto';
 import { BranchAccessGuard } from '../permissions/branch-access.guard';
+import { PermissionsService } from '../permissions/permissions.service';
 import { Provider } from './provider.entity';
 
 @Controller('branches/:branchId/providers')
 @UseGuards(JwtAuthGuard, BranchAccessGuard, RolesGuard)
 export class BranchProvidersController {
-  constructor(private readonly providersService: ProvidersService) {}
+  constructor(
+    private readonly providersService: ProvidersService,
+    private readonly permissionsService: PermissionsService,
+  ) {}
 
   @Get()
-  findForBranch(@Param('branchId') branchId: string): Promise<Provider[]> {
-    return this.providersService.findActiveByBranch(branchId);
+  async findForBranch(
+    @Req() req: any,
+    @Param('branchId') branchId: string,
+  ): Promise<Provider[]> {
+    const accessibleProviderIds =
+      await this.permissionsService.getAccessibleProviderIds(req.user);
+    return this.providersService.findActiveByBranch(
+      branchId,
+      accessibleProviderIds,
+    );
   }
 
   @Post()

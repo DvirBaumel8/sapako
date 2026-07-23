@@ -12,6 +12,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ProviderAccessGuard } from '../permissions/provider-access.guard';
 import { BranchAccessGuard } from '../permissions/branch-access.guard';
+import { PermissionsService } from '../permissions/permissions.service';
 import { OrderAccessGuard } from './order-access.guard';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -69,10 +70,18 @@ export class OrdersController {
 @Controller('branches/:branchId/orders')
 @UseGuards(JwtAuthGuard, BranchAccessGuard)
 export class BranchOrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(
+    private readonly ordersService: OrdersService,
+    private readonly permissionsService: PermissionsService,
+  ) {}
 
   @Get()
-  findForBranch(@Param('branchId') branchId: string): Promise<Order[]> {
-    return this.ordersService.findByBranch(branchId);
+  async findForBranch(
+    @Req() req: any,
+    @Param('branchId') branchId: string,
+  ): Promise<Order[]> {
+    const accessibleProviderIds =
+      await this.permissionsService.getAccessibleProviderIds(req.user);
+    return this.ordersService.findByBranch(branchId, accessibleProviderIds);
   }
 }

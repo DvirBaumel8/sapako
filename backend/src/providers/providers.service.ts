@@ -1,25 +1,38 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, In, Repository } from 'typeorm';
 import { Provider } from './provider.entity';
+import { BranchesService } from '../branches/branches.service';
 
 @Injectable()
 export class ProvidersService {
   constructor(
     @InjectRepository(Provider)
     private readonly providersRepo: Repository<Provider>,
+    private readonly branchesService: BranchesService,
   ) {}
 
-  create(
+  async create(
     branchId: string,
     input: { name: string; phone: string },
   ): Promise<Provider> {
+    // Confirm the branch exists before inserting — otherwise an invalid
+    // branchId escapes as an unhandled FK-violation 500 instead of a clean
+    // 404 (same failure mode already fixed for grantAccess).
+    await this.branchesService.findById(branchId);
     const entity = this.providersRepo.create({ branchId, ...input });
     return this.providersRepo.save(entity);
   }
 
-  findActiveByBranch(branchId: string): Promise<Provider[]> {
-    return this.providersRepo.find({ where: { branchId, isActive: true } });
+  findActiveByBranch(
+    branchId: string,
+    accessibleProviderIds: string[] | 'ALL',
+  ): Promise<Provider[]> {
+    const where: FindOptionsWhere<Provider> = { branchId, isActive: true };
+    if (accessibleProviderIds !== 'ALL') {
+      where.id = In(accessibleProviderIds);
+    }
+    return this.providersRepo.find({ where });
   }
 
   async findById(id: string): Promise<Provider> {

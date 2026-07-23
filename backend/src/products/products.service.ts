@@ -2,18 +2,24 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from './product.entity';
+import { ProvidersService } from '../providers/providers.service';
 
 @Injectable()
 export class ProductsService {
   constructor(
     @InjectRepository(Product)
     private readonly productsRepo: Repository<Product>,
+    private readonly providersService: ProvidersService,
   ) {}
 
-  create(
+  async create(
     providerId: string,
     input: { name: string; unitType: string; barcode?: string },
   ): Promise<Product> {
+    // Confirm the provider exists before inserting — otherwise an invalid
+    // providerId escapes as an unhandled FK-violation 500 instead of a
+    // clean 404 (same failure mode already fixed for grantAccess).
+    await this.providersService.findById(providerId);
     const entity = this.productsRepo.create({ providerId, ...input });
     return this.productsRepo.save(entity);
   }

@@ -50,6 +50,18 @@ export class PermissionsService {
     return Array.from(branchIds);
   }
 
+  async getAccessibleProviderIds(
+    user: AuthenticatedUser,
+  ): Promise<string[] | 'ALL'> {
+    if (user.role === Role.ADMIN) {
+      return 'ALL';
+    }
+    const rows = await this.accessRepo.find({
+      where: { userId: user.userId },
+    });
+    return rows.map((row) => row.providerId);
+  }
+
   grant(userId: string, providerId: string): Promise<UserProviderAccess> {
     const entity = this.accessRepo.create({ userId, providerId });
     return this.accessRepo.save(entity);

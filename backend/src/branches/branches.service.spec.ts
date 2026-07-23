@@ -64,4 +64,23 @@ describe('BranchesService', () => {
 
     expect(branches).toEqual([]);
   });
+
+  describe('findById', () => {
+    it('returns the branch when it exists', async () => {
+      mockRepo.findOneBy.mockResolvedValue({ id: 'b1', name: 'Downtown' });
+
+      const branch = await service.findById('b1');
+
+      expect(mockRepo.findOneBy).toHaveBeenCalledWith({ id: 'b1' });
+      expect(branch).toEqual({ id: 'b1', name: 'Downtown' });
+    });
+
+    it('throws NotFoundException when the branch does not exist', async () => {
+      mockRepo.findOneBy.mockResolvedValue(null);
+
+      await expect(service.findById('missing')).rejects.toThrow(
+        'Branch not found',
+      );
+    });
+  });
 });

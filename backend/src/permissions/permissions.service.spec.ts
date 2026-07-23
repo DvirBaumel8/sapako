@@ -179,6 +179,44 @@ describe('PermissionsService', () => {
     });
   });
 
+  describe('getAccessibleProviderIds', () => {
+    it("returns 'ALL' for ADMIN without a lookup", async () => {
+      const result = await service.getAccessibleProviderIds({
+        userId: 'u1',
+        role: Role.ADMIN,
+      });
+
+      expect(result).toBe('ALL');
+      expect(mockRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('returns the granted provider ids for STAFF', async () => {
+      mockRepo.find.mockResolvedValue([
+        { userId: 'u1', providerId: 'p1' },
+        { userId: 'u1', providerId: 'p2' },
+      ]);
+
+      const result = await service.getAccessibleProviderIds({
+        userId: 'u1',
+        role: Role.STAFF,
+      });
+
+      expect(mockRepo.find).toHaveBeenCalledWith({ where: { userId: 'u1' } });
+      expect(result).toEqual(['p1', 'p2']);
+    });
+
+    it('returns an empty array for STAFF with no granted providers', async () => {
+      mockRepo.find.mockResolvedValue([]);
+
+      const result = await service.getAccessibleProviderIds({
+        userId: 'u1',
+        role: Role.STAFF,
+      });
+
+      expect(result).toEqual([]);
+    });
+  });
+
   describe('grant', () => {
     it('creates and saves a new access row', async () => {
       const created = { userId: 'u1', providerId: 'p1' };

@@ -5,6 +5,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import { In } from 'typeorm';
 import { OrdersService } from './orders.service';
 import { Order } from './order.entity';
 import { OrderItem } from './order-item.entity';
@@ -102,6 +103,36 @@ describe('OrdersService', () => {
       await expect(
         service.createDraft('u1', { branchId: 'b1', providerId: 'p1' }),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('findByBranch', () => {
+    it('lists all orders for a branch when the caller has ALL access', async () => {
+      orderRepo.find.mockResolvedValue([{ id: 'o1', branchId: 'b1' }]);
+
+      const orders = await service.findByBranch('b1', 'ALL');
+
+      expect(orderRepo.find).toHaveBeenCalledWith({
+        where: { branchId: 'b1' },
+        relations: { items: true, provider: true },
+        order: { createdAt: 'DESC' },
+      });
+      expect(orders).toHaveLength(1);
+    });
+
+    it('filters orders by the accessible provider ids when not ALL', async () => {
+      orderRepo.find.mockResolvedValue([
+        { id: 'o1', branchId: 'b1', providerId: 'p1' },
+      ]);
+
+      const orders = await service.findByBranch('b1', ['p1']);
+
+      expect(orderRepo.find).toHaveBeenCalledWith({
+        where: { branchId: 'b1', providerId: In(['p1']) },
+        relations: { items: true, provider: true },
+        order: { createdAt: 'DESC' },
+      });
+      expect(orders).toHaveLength(1);
     });
   });
 

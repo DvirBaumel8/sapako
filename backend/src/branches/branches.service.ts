@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Branch } from './branch.entity';
@@ -20,5 +20,13 @@ export class BranchesService {
 
   findByIds(ids: string[]): Promise<Branch[]> {
     return this.branchesRepo.find({ where: { id: In(ids) } });
+  }
+
+  async findById(id: string): Promise<Branch> {
+    const branch = await this.branchesRepo.findOneBy({ id });
+    if (!branch) {
+      throw new NotFoundException('Branch not found');
+    }
+    return branch;
   }
 }

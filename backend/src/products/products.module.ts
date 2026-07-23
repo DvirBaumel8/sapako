@@ -7,9 +7,14 @@ import {
   ProductAdminController,
 } from './products.controller';
 import { PermissionsModule } from '../permissions/permissions.module';
+import { ProvidersModule } from '../providers/providers.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Product]), PermissionsModule],
+  imports: [
+    TypeOrmModule.forFeature([Product]),
+    PermissionsModule,
+    ProvidersModule,
+  ],
   providers: [ProductsService],
   controllers: [ProviderProductsController, ProductAdminController],
   exports: [ProductsService, TypeOrmModule],
