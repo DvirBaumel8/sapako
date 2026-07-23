@@ -8,6 +8,7 @@ import { BranchesModule } from './branches/branches.module';
 import { ProvidersModule } from './providers/providers.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { ProductsModule } from './products/products.module';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { ProductsModule } from './products/products.module';
     ProvidersModule,
     PermissionsModule,
     ProductsModule,
+    OrdersModule,
   ],
   controllers: [HealthController],
   providers: [],
