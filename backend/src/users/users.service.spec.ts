@@ -1,3 +1,4 @@
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UsersService } from './users.service';
@@ -8,6 +9,7 @@ describe('UsersService', () => {
   let service: UsersService;
   const mockRepo = {
     findOne: jest.fn(),
+    findOneBy: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
     find: jest.fn(),
@@ -26,6 +28,7 @@ describe('UsersService', () => {
   });
 
   it('hashes the password before saving a new user', async () => {
+    mockRepo.findOne.mockResolvedValue(null);
     mockRepo.create.mockImplementation((data) => data);
     mockRepo.save.mockImplementation((data) =>
       Promise.resolve({ id: 'u1', ...data }),
@@ -39,6 +42,23 @@ describe('UsersService', () => {
 
     expect(user.passwordHash).not.toBe('secret123');
     expect(mockRepo.save).toHaveBeenCalled();
+  });
+
+  it('rejects creating a user whose username is already taken', async () => {
+    mockRepo.findOne.mockResolvedValue({ id: 'existing', username: 'danny' });
+
+    await expect(
+      service.create({
+        username: 'danny',
+        password: 'secret123',
+        role: Role.STAFF,
+      }),
+    ).rejects.toThrow(ConflictException);
+
+    expect(mockRepo.findOne).toHaveBeenCalledWith({
+      where: { username: 'danny' },
+    });
+    expect(mockRepo.save).not.toHaveBeenCalled();
   });
 
   it('finds a user by username', async () => {
@@ -58,6 +78,25 @@ describe('UsersService', () => {
     const user = await service.findByUsername('ghost');
 
     expect(user).toBeNull();
+  });
+
+  describe('findById', () => {
+    it('returns the user when found', async () => {
+      mockRepo.findOneBy.mockResolvedValue({ id: 'u1', username: 'danny' });
+
+      const user = await service.findById('u1');
+
+      expect(mockRepo.findOneBy).toHaveBeenCalledWith({ id: 'u1' });
+      expect(user.username).toBe('danny');
+    });
+
+    it('throws NotFoundException when no user matches the id', async () => {
+      mockRepo.findOneBy.mockResolvedValue(null);
+
+      await expect(service.findById('ghost')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
   });
 
   it('returns all users', async () => {

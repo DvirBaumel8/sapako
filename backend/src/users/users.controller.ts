@@ -15,6 +15,7 @@ import { UsersService, SafeUser } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { GrantProviderAccessDto } from './dto/grant-provider-access.dto';
 import { PermissionsService } from '../permissions/permissions.service';
+import { UserProviderAccess } from '../permissions/user-provider-access.entity';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -38,10 +39,14 @@ export class UsersController {
   }
 
   @Post(':id/provider-access')
-  grantAccess(
+  async grantAccess(
     @Param('id') userId: string,
     @Body() dto: GrantProviderAccessDto,
-  ) {
+  ): Promise<UserProviderAccess> {
+    // Confirm the user exists before inserting the access row — otherwise
+    // an invalid userId escapes as an unhandled FK-violation 500 instead of
+    // a clean 404.
+    await this.usersService.findById(userId);
     return this.permissionsService.grant(userId, dto.providerId);
   }
 
@@ -49,7 +54,7 @@ export class UsersController {
   revokeAccess(
     @Param('id') userId: string,
     @Param('providerId') providerId: string,
-  ) {
+  ): Promise<void> {
     return this.permissionsService.revoke(userId, providerId);
   }
 }
