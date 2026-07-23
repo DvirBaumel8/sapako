@@ -14,29 +14,57 @@ import { ProductsService } from '../products/products.service';
 
 describe('OrdersService', () => {
   let service: OrdersService;
+
+  // Fake repository handed out by `manager.getRepository(OrderItem)` inside
+  // a transaction — stands in for the item writes that addItem/
+  // updateItemQuantity/removeItem perform once they hold the order lock.
+  const managerOrderItemRepo = {
+    create: jest.fn(),
+    save: jest.fn(),
+    findOne: jest.fn(),
+  };
+  // Fake transactional EntityManager. `manager.findOne` is how
+  // withDraftOrder reads+locks the order row (with `lock: { mode:
+  // 'pessimistic_write' }`); `manager.delete` backs removeItem.
+  const manager = {
+    findOne: jest.fn(),
+    getRepository: jest.fn(() => managerOrderItemRepo),
+    delete: jest.fn(),
+  };
   const orderRepo = {
     create: jest.fn(),
     save: jest.fn(),
     findOne: jest.fn(),
     find: jest.fn(),
     update: jest.fn(),
-  };
-  const orderItemRepo = {
-    create: jest.fn(),
-    save: jest.fn(),
-    findOne: jest.fn(),
-    delete: jest.fn(),
+    // Real TypeORM's `manager.transaction(work)` opens a transaction and
+    // invokes `work(transactionalEntityManager)`. Our fake just invokes the
+    // callback directly with the fake `manager` above, so service code that
+    // does `this.orderRepo.manager.transaction(async (manager) => ...)`
+    // runs against our mocks without a real database.
+    manager: {
+      transaction: jest.fn((work: (m: typeof manager) => unknown) =>
+        work(manager),
+      ),
+    },
   };
   const providersService = { findById: jest.fn() };
   const productsService = { findById: jest.fn() };
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    // jest.clearAllMocks() clears call history but preserves
+    // mockImplementation, so this is a defensive re-affirmation in case a
+    // test overrides it with mockImplementationOnce.
+    orderRepo.manager.transaction.mockImplementation((work: any) =>
+      work(manager),
+    );
+    manager.getRepository.mockReturnValue(managerOrderItemRepo);
+
     const module = await Test.createTestingModule({
       providers: [
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: orderRepo },
-        { provide: getRepositoryToken(OrderItem), useValue: orderItemRepo },
         { provide: ProvidersService, useValue: providersService },
         { provide: ProductsService, useValue: productsService },
       ],
@@ -79,7 +107,7 @@ describe('OrdersService', () => {
 
   describe('addItem', () => {
     it('rejects adding an item to a PUBLISHED order', async () => {
-      orderRepo.findOne.mockResolvedValue({
+      manager.findOne.mockResolvedValue({
         id: 'o1',
         status: OrderStatus.PUBLISHED,
         providerId: 'p1',
@@ -95,8 +123,8 @@ describe('OrdersService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it('snapshots the product name/unit when adding a catalog product', async () => {
-      orderRepo.findOne.mockResolvedValue({
+    it('snapshots the product name/unit when adding a catalog product, reading the order via a pessimistic lock', async () => {
+      manager.findOne.mockResolvedValue({
         id: 'o1',
         status: OrderStatus.DRAFT,
         providerId: 'p1',
@@ -107,8 +135,8 @@ describe('OrdersService', () => {
         name: 'Tomatoes',
         unitType: 'crate',
       });
-      orderItemRepo.create.mockImplementation((data) => data);
-      orderItemRepo.save.mockImplementation((data) =>
+      managerOrderItemRepo.create.mockImplementation((data) => data);
+      managerOrderItemRepo.save.mockImplementation((data) =>
         Promise.resolve({ id: 'oi1', ...data }),
       );
 
@@ -124,10 +152,22 @@ describe('OrdersService', () => {
         unitType: 'crate',
         quantity: 3,
       });
+      // We can't spin up two real concurrent requests against a mocked
+      // repository, so this is the unit-testable proxy for "this mutation
+      // is race-safe": it asserts the order row is read inside
+      // manager.transaction() with a pessimistic_write lock, which is what
+      // makes Postgres serialize this against a concurrent publish() at the
+      // database level (see withDraftOrder's doc comment in
+      // orders.service.ts).
+      expect(orderRepo.manager.transaction).toHaveBeenCalled();
+      expect(manager.findOne).toHaveBeenCalledWith(Order, {
+        where: { id: 'o1' },
+        lock: { mode: 'pessimistic_write' },
+      });
     });
 
     it('rejects a catalog product that belongs to a different provider than the order', async () => {
-      orderRepo.findOne.mockResolvedValue({
+      manager.findOne.mockResolvedValue({
         id: 'o1',
         status: OrderStatus.DRAFT,
         providerId: 'p1',
@@ -144,7 +184,7 @@ describe('OrdersService', () => {
     });
 
     it('rejects an ad-hoc item missing productNameSnapshot or unitType', async () => {
-      orderRepo.findOne.mockResolvedValue({
+      manager.findOne.mockResolvedValue({
         id: 'o1',
         status: OrderStatus.DRAFT,
         providerId: 'p1',
@@ -156,7 +196,7 @@ describe('OrdersService', () => {
     });
 
     it('rejects adding an item when the order does not exist', async () => {
-      orderRepo.findOne.mockResolvedValue(null);
+      manager.findOne.mockResolvedValue(null);
 
       await expect(
         service.addItem('missing', {
@@ -170,16 +210,18 @@ describe('OrdersService', () => {
 
   describe('updateItemQuantity', () => {
     it('updates the quantity of an item on a DRAFT order', async () => {
-      orderRepo.findOne.mockResolvedValue({
+      manager.findOne.mockResolvedValue({
         id: 'o1',
         status: OrderStatus.DRAFT,
       });
-      orderItemRepo.findOne.mockResolvedValue({
+      managerOrderItemRepo.findOne.mockResolvedValue({
         id: 'oi1',
         orderId: 'o1',
         quantity: 1,
       });
-      orderItemRepo.save.mockImplementation((data) => Promise.resolve(data));
+      managerOrderItemRepo.save.mockImplementation((data) =>
+        Promise.resolve(data),
+      );
 
       const item = await service.updateItemQuantity('o1', 'oi1', 5);
 
@@ -187,7 +229,7 @@ describe('OrdersService', () => {
     });
 
     it('rejects updating an item on a PUBLISHED order', async () => {
-      orderRepo.findOne.mockResolvedValue({
+      manager.findOne.mockResolvedValue({
         id: 'o1',
         status: OrderStatus.PUBLISHED,
       });
@@ -195,15 +237,15 @@ describe('OrdersService', () => {
       await expect(service.updateItemQuantity('o1', 'oi1', 5)).rejects.toThrow(
         ConflictException,
       );
-      expect(orderItemRepo.findOne).not.toHaveBeenCalled();
+      expect(managerOrderItemRepo.findOne).not.toHaveBeenCalled();
     });
 
     it('rejects updating an item that does not exist on the order', async () => {
-      orderRepo.findOne.mockResolvedValue({
+      manager.findOne.mockResolvedValue({
         id: 'o1',
         status: OrderStatus.DRAFT,
       });
-      orderItemRepo.findOne.mockResolvedValue(null);
+      managerOrderItemRepo.findOne.mockResolvedValue(null);
 
       await expect(
         service.updateItemQuantity('o1', 'missing', 5),
@@ -213,22 +255,34 @@ describe('OrdersService', () => {
 
   describe('removeItem', () => {
     it('removes an item from a DRAFT order', async () => {
-      orderRepo.findOne.mockResolvedValue({
+      manager.findOne.mockResolvedValue({
         id: 'o1',
         status: OrderStatus.DRAFT,
       });
-      orderItemRepo.delete.mockResolvedValue({ affected: 1 });
+      manager.delete.mockResolvedValue({ affected: 1 });
 
       await service.removeItem('o1', 'oi1');
 
-      expect(orderItemRepo.delete).toHaveBeenCalledWith({
+      expect(manager.delete).toHaveBeenCalledWith(OrderItem, {
         id: 'oi1',
         orderId: 'o1',
       });
     });
 
+    it('rejects removing an item that does not exist on the order', async () => {
+      manager.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.DRAFT,
+      });
+      manager.delete.mockResolvedValue({ affected: 0 });
+
+      await expect(service.removeItem('o1', 'missing')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
     it('rejects removing an item from a PUBLISHED order', async () => {
-      orderRepo.findOne.mockResolvedValue({
+      manager.findOne.mockResolvedValue({
         id: 'o1',
         status: OrderStatus.PUBLISHED,
       });
@@ -236,7 +290,7 @@ describe('OrdersService', () => {
       await expect(service.removeItem('o1', 'oi1')).rejects.toThrow(
         ConflictException,
       );
-      expect(orderItemRepo.delete).not.toHaveBeenCalled();
+      expect(manager.delete).not.toHaveBeenCalled();
     });
   });
 

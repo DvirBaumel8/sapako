@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { Order } from './order.entity';
 import { OrderItem } from './order-item.entity';
 import { OrderStatus } from './order-status.enum';
@@ -16,8 +16,6 @@ import { ProductsService } from '../products/products.service';
 export class OrdersService {
   constructor(
     @InjectRepository(Order) private readonly orderRepo: Repository<Order>,
-    @InjectRepository(OrderItem)
-    private readonly orderItemRepo: Repository<OrderItem>,
     private readonly providersService: ProvidersService,
     private readonly productsService: ProductsService,
   ) {}
@@ -69,36 +67,39 @@ export class OrdersService {
       quantity: number;
     },
   ): Promise<OrderItem> {
-    const order = await this.getDraftOrThrow(orderId);
+    return this.withDraftOrder(orderId, async (order, manager) => {
+      let productNameSnapshot = input.productNameSnapshot;
+      let unitType = input.unitType;
 
-    let productNameSnapshot = input.productNameSnapshot;
-    let unitType = input.unitType;
+      if (input.productId) {
+        // Not part of the order-row lock: it reads the (unrelated) products
+        // table and doesn't need to participate in the transaction.
+        const product = await this.productsService.findById(input.productId);
+        if (product.providerId !== order.providerId) {
+          throw new BadRequestException(
+            "Product does not belong to this order's provider",
+          );
+        }
+        productNameSnapshot = product.name;
+        unitType = unitType ?? product.unitType;
+      }
 
-    if (input.productId) {
-      const product = await this.productsService.findById(input.productId);
-      if (product.providerId !== order.providerId) {
+      if (!productNameSnapshot || !unitType) {
         throw new BadRequestException(
-          "Product does not belong to this order's provider",
+          'productNameSnapshot and unitType are required for ad-hoc items',
         );
       }
-      productNameSnapshot = product.name;
-      unitType = unitType ?? product.unitType;
-    }
 
-    if (!productNameSnapshot || !unitType) {
-      throw new BadRequestException(
-        'productNameSnapshot and unitType are required for ad-hoc items',
-      );
-    }
-
-    const entity = this.orderItemRepo.create({
-      orderId,
-      productId: input.productId,
-      productNameSnapshot,
-      unitType,
-      quantity: input.quantity,
+      const itemRepo = manager.getRepository(OrderItem);
+      const entity = itemRepo.create({
+        orderId,
+        productId: input.productId,
+        productNameSnapshot,
+        unitType,
+        quantity: input.quantity,
+      });
+      return itemRepo.save(entity);
     });
-    return this.orderItemRepo.save(entity);
   }
 
   async updateItemQuantity(
@@ -106,20 +107,24 @@ export class OrdersService {
     itemId: string,
     quantity: number,
   ): Promise<OrderItem> {
-    await this.getDraftOrThrow(orderId);
-    const item = await this.orderItemRepo.findOne({
-      where: { id: itemId, orderId },
+    return this.withDraftOrder(orderId, async (_order, manager) => {
+      const itemRepo = manager.getRepository(OrderItem);
+      const item = await itemRepo.findOne({ where: { id: itemId, orderId } });
+      if (!item) {
+        throw new NotFoundException('Order item not found');
+      }
+      item.quantity = quantity;
+      return itemRepo.save(item);
     });
-    if (!item) {
-      throw new NotFoundException('Order item not found');
-    }
-    item.quantity = quantity;
-    return this.orderItemRepo.save(item);
   }
 
   async removeItem(orderId: string, itemId: string): Promise<void> {
-    await this.getDraftOrThrow(orderId);
-    await this.orderItemRepo.delete({ id: itemId, orderId });
+    await this.withDraftOrder(orderId, async (_order, manager) => {
+      const result = await manager.delete(OrderItem, { id: itemId, orderId });
+      if (result.affected === 0) {
+        throw new NotFoundException('Order item not found');
+      }
+    });
   }
 
   async publish(orderId: string): Promise<Order> {
@@ -146,14 +151,37 @@ export class OrdersService {
     return this.findById(orderId);
   }
 
-  private async getDraftOrThrow(orderId: string): Promise<Order> {
-    const order = await this.orderRepo.findOne({ where: { id: orderId } });
-    if (!order) {
-      throw new NotFoundException('Order not found');
-    }
-    if (order.status !== OrderStatus.DRAFT) {
-      throw new ConflictException('Order is no longer a draft');
-    }
-    return order;
+  /**
+   * Runs `work` inside a transaction holding a pessimistic write lock on the
+   * order row, after verifying the order exists and is still DRAFT.
+   *
+   * This is what makes item mutations safe against a concurrent publish():
+   * publish() commits its DRAFT->PUBLISHED UPDATE atomically against the
+   * same row, so Postgres serializes the two. Whichever transaction (this
+   * one or publish()'s) commits first wins; the other either blocks until
+   * the first commits and then sees the up-to-date status (and 409s here if
+   * it lost), or — if it truly started first — completes safely before
+   * publish() can flip the status. Without the lock, addItem/updateItem/
+   * removeItem could read DRAFT, have publish() commit PUBLISHED in
+   * between, and then still write, silently mutating an order that's
+   * already been handed off to WhatsApp.
+   */
+  private async withDraftOrder<T>(
+    orderId: string,
+    work: (order: Order, manager: EntityManager) => Promise<T>,
+  ): Promise<T> {
+    return this.orderRepo.manager.transaction(async (manager) => {
+      const order = await manager.findOne(Order, {
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!order) {
+        throw new NotFoundException('Order not found');
+      }
+      if (order.status !== OrderStatus.DRAFT) {
+        throw new ConflictException('Order is no longer a draft');
+      }
+      return work(order, manager);
+    });
   }
 }
