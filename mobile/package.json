@@ -12,6 +12,7 @@
     "expo-secure-store": "~57.0.1",
     "expo-status-bar": "~57.0.1",
     "expo-updates": "~57.0.10",
+    "jwt-decode": "^4.0.0",
     "react": "19.2.3",
     "react-native": "0.86.0",
     "react-native-safe-area-context": "~5.7.0",
