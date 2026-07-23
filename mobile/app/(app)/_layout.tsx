@@ -1,5 +1,14 @@
 import { Redirect, Stack } from 'expo-router';
 import { useAuth } from '../../src/auth/AuthContext';
+import { BranchProvider, useBranch } from '../../src/branch/BranchContext';
+
+function Gate() {
+  const { selectedBranch } = useBranch();
+  if (!selectedBranch) {
+    return <Redirect href="/select-branch" />;
+  }
+  return <Stack />;
+}
 
 export default function AppLayout() {
   const { isLoading, userId } = useAuth();
@@ -10,5 +19,9 @@ export default function AppLayout() {
   if (!userId) {
     return <Redirect href="/login" />;
   }
-  return <Stack />;
+  return (
+    <BranchProvider>
+      <Gate />
+    </BranchProvider>
+  );
 }
