@@ -16,6 +16,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { GrantProviderAccessDto } from './dto/grant-provider-access.dto';
 import { PermissionsService } from '../permissions/permissions.service';
 import { UserProviderAccess } from '../permissions/user-provider-access.entity';
+import { ProvidersService } from '../providers/providers.service';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -24,6 +25,7 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly permissionsService: PermissionsService,
+    private readonly providersService: ProvidersService,
   ) {}
 
   @Get()
@@ -43,10 +45,11 @@ export class UsersController {
     @Param('id') userId: string,
     @Body() dto: GrantProviderAccessDto,
   ): Promise<UserProviderAccess> {
-    // Confirm the user exists before inserting the access row — otherwise
-    // an invalid userId escapes as an unhandled FK-violation 500 instead of
-    // a clean 404.
+    // Confirm both sides of the access row exist before inserting —
+    // otherwise an invalid userId or providerId escapes as an unhandled
+    // FK-violation 500 instead of a clean 404.
     await this.usersService.findById(userId);
+    await this.providersService.findById(dto.providerId);
     return this.permissionsService.grant(userId, dto.providerId);
   }
 
