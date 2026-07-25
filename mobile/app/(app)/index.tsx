@@ -33,7 +33,12 @@ export default function HomeScreen() {
         renderItem={({ item }) => (
           <Pressable
             style={styles.item}
-            onPress={() => router.push(`/providers/${item.id}/order`)}
+            onPress={() =>
+              router.push({
+                pathname: '/providers/[providerId]/order',
+                params: { providerId: item.id, providerName: item.name },
+              })
+            }
           >
             <Text style={styles.itemText}>{item.name}</Text>
           </Pressable>

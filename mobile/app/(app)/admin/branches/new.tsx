@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Button, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { createBranch } from '../../../../src/api/branches';
+import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 
 export default function NewBranchScreen() {
   const [name, setName] = useState('');
@@ -16,7 +17,7 @@ export default function NewBranchScreen() {
     <View style={styles.container}>
       <TextInput style={styles.input} placeholder="שם הסניף" value={name} onChangeText={setName} />
       <TextInput style={styles.input} placeholder="כתובת (אופציונלי)" value={address} onChangeText={setAddress} />
-      <Button title="יצירת סניף" onPress={handleSubmit} disabled={!name} />
+      <PrimaryButton title="יצירת סניף" onPress={handleSubmit} disabled={!name} />
     </View>
   );
 }

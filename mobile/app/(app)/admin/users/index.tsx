@@ -15,8 +15,11 @@ export default function UsersScreen() {
         keyExtractor={(user) => user.id}
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => router.push(`/admin/users/${item.id}/access`)}>
-            <Text style={styles.username}>{item.username}</Text>
-            <Text style={styles.meta}>{item.role} · {item.providerAccess.length} ספקים</Text>
+            <View>
+              <Text style={styles.username}>{item.username}</Text>
+              <Text style={styles.meta}>{item.role} · {item.providerAccess.length} ספקים</Text>
+            </View>
+            <Text style={styles.editLink}>עריכת הרשאות ‹</Text>
           </Pressable>
         )}
       />
@@ -27,7 +30,15 @@ export default function UsersScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12 },
   link: { fontSize: 16, color: '#2563eb', fontWeight: '600' },
-  row: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
   username: { fontSize: 16, fontWeight: '600' },
   meta: { fontSize: 13, color: '#666' },
+  editLink: { fontSize: 14, color: '#2563eb', fontWeight: '600' },
 });

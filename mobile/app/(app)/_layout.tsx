@@ -11,7 +11,15 @@ function Gate() {
   if (!selectedBranch && pathname !== '/select-branch') {
     return <Redirect href="/select-branch" />;
   }
-  return <Stack />;
+  return (
+    <Stack>
+      <Stack.Screen name="index" options={{ title: 'ספקים' }} />
+      <Stack.Screen name="select-branch" options={{ title: 'בחירת סניף' }} />
+      <Stack.Screen name="activity" options={{ title: 'פעילות אחרונה' }} />
+      <Stack.Screen name="providers/[providerId]/order" options={{ title: '' }} />
+      <Stack.Screen name="admin" options={{ headerShown: false }} />
+    </Stack>
+  );
 }
 
 export default function AppLayout() {

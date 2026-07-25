@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Button, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAccessibleBranches } from '../../../../src/api/branches';
 import { createProvider } from '../../../../src/api/providers';
+import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import type { Branch } from '../../../../src/api/types';
 
 export default function NewProviderScreen() {
@@ -23,6 +24,7 @@ export default function NewProviderScreen() {
       <Text style={styles.label}>סניף</Text>
       <FlatList
         horizontal
+        style={styles.branchList}
         data={branches}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
@@ -42,7 +44,7 @@ export default function NewProviderScreen() {
         value={phone}
         onChangeText={setPhone}
       />
-      <Button title="יצירת ספק" onPress={handleSubmit} disabled={!branch || !name || !phone} />
+      <PrimaryButton title="יצירת ספק" onPress={handleSubmit} disabled={!branch || !name || !phone} />
     </View>
   );
 }
@@ -50,7 +52,8 @@ export default function NewProviderScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12 },
   label: { fontWeight: '600' },
-  branchChip: { padding: 8, borderWidth: 1, borderRadius: 8, marginRight: 8 },
+  branchList: { flexGrow: 0 },
+  branchChip: { paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginRight: 8 },
   branchChipSelected: { backgroundColor: '#dbeafe', borderColor: '#2563eb' },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
 });
