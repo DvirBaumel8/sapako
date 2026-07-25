@@ -6,6 +6,7 @@ import { fetchAccessibleBranches } from '../../../../src/api/branches';
 import { createProvider } from '../../../../src/api/providers';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
+import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 
 const ISRAELI_MOBILE_PATTERN = /^05\d{8}$/;
 
@@ -54,7 +55,12 @@ export default function NewProviderScreen() {
           </Pressable>
         )}
       />
-      <TextInput style={styles.input} placeholder="שם הספק" value={name} onChangeText={setName} />
+      <TextInput
+        style={styles.input}
+        placeholder="שם הספק"
+        value={name}
+        onChangeText={(text) => setName(sanitizeHebrewInput(text))}
+      />
       <TextInput
         style={styles.input}
         placeholder="טלפון וואטסאפ (לדוגמה: 0501234567)"

@@ -8,6 +8,7 @@ import { createProduct } from '../../../../src/api/products';
 import { BarcodeScannerModal } from '../../../../src/barcode/BarcodeScannerModal';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
+import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import type { Branch, Provider } from '../../../../src/api/types';
 
 const DEFAULT_BRANCH_NAME = 'הילס';
@@ -25,7 +26,7 @@ export default function NewProductScreen() {
   const [isScannerVisible, setIsScannerVisible] = useState(false);
 
   useEffect(() => {
-    if (!branches || selectedBranchIds.size > 0) return;
+    if (!branches || primaryBranch) return;
     const defaultBranch = branches.find((b) => b.name === DEFAULT_BRANCH_NAME) ?? branches[0];
     if (defaultBranch) {
       setSelectedBranchIds(new Set([defaultBranch.id]));
@@ -39,6 +40,38 @@ export default function NewProductScreen() {
     enabled: !!primaryBranch,
   });
 
+  // Once a provider is chosen, only branches that actually have a
+  // same-named provider are valid additional targets — showing every
+  // branch here would silently promise something that can't happen.
+  const { data: matchingBranchIds } = useQuery({
+    queryKey: ['matching-provider-branches', provider?.name, primaryBranch?.id],
+    queryFn: async () => {
+      const others = (branches ?? []).filter((b) => b.id !== primaryBranch?.id);
+      const results = await Promise.all(
+        others.map(async (b) => {
+          const branchProviders = await fetchProvidersForBranch(b.id);
+          return branchProviders.some((p) => p.name === provider!.name) ? b.id : null;
+        }),
+      );
+      return new Set(results.filter((id): id is string => !!id));
+    },
+    enabled: !!provider && !!branches,
+  });
+
+  useEffect(() => {
+    if (!provider || !matchingBranchIds || !primaryBranch) return;
+    setSelectedBranchIds((prev) => {
+      const next = new Set(Array.from(prev).filter((id) => id === primaryBranch.id || matchingBranchIds.has(id)));
+      return next;
+    });
+  }, [provider, matchingBranchIds, primaryBranch]);
+
+  const selectableBranches = useMemo(() => {
+    if (!branches) return branches;
+    if (!provider) return branches;
+    return branches.filter((b) => b.id === primaryBranch?.id || matchingBranchIds?.has(b.id));
+  }, [branches, provider, primaryBranch, matchingBranchIds]);
+
   const filteredProviders = useMemo(() => {
     if (!providers) return providers;
     const query = providerSearch.trim();
@@ -47,17 +80,21 @@ export default function NewProductScreen() {
   }, [providers, providerSearch]);
 
   const toggleBranch = (branch: Branch) => {
+    const turningOn = !selectedBranchIds.has(branch.id);
     setSelectedBranchIds((prev) => {
       const next = new Set(prev);
-      if (next.has(branch.id)) {
-        next.delete(branch.id);
-      } else {
+      if (turningOn) {
         next.add(branch.id);
+      } else {
+        next.delete(branch.id);
       }
       return next;
     });
-    if (!primaryBranch) {
+    if (turningOn) {
       setPrimaryBranch(branch);
+    } else if (primaryBranch?.id === branch.id) {
+      const fallback = Array.from(selectedBranchIds).find((id) => id !== branch.id);
+      setPrimaryBranch(branches?.find((b) => b.id === fallback) ?? null);
     }
   };
 
@@ -85,7 +122,7 @@ export default function NewProductScreen() {
       <FlatList
         horizontal
         style={styles.branchList}
-        data={branches}
+        data={selectableBranches}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <Pressable
@@ -122,20 +159,28 @@ export default function NewProductScreen() {
 
       {provider && (
         <>
-          <Pressable onPress={() => setProvider(null)} style={styles.selectedProvider}>
-            <Text style={styles.selectedProviderText}>ספק: {provider.name} (החלף)</Text>
-          </Pressable>
+          <View style={styles.selectedProviderRow}>
+            <Text style={styles.selectedProviderText}>ספק: {provider.name}</Text>
+            <Pressable onPress={() => setProvider(null)} style={styles.changeButton}>
+              <Text style={styles.changeButtonText}>‹ בחירת ספק אחר</Text>
+            </Pressable>
+          </View>
           {selectedBranchIds.size > 1 && (
             <Text style={styles.hintText}>
-              המוצר ייווצר גם אצל ספקים בשם "{provider.name}" בסניפים הנוספים שנבחרו, אם קיימים.
+              המוצר ייווצר גם אצל ספקים בשם "{provider.name}" בסניפים הנוספים שנבחרו.
             </Text>
           )}
-          <TextInput style={styles.input} placeholder="שם המוצר" value={name} onChangeText={setName} />
+          <TextInput
+            style={styles.input}
+            placeholder="שם המוצר"
+            value={name}
+            onChangeText={(text) => setName(sanitizeHebrewInput(text))}
+          />
           <TextInput
             style={styles.input}
             placeholder='סוג יחידה (לדוגמה: ק"ג, ארגז)'
             value={unitType}
-            onChangeText={setUnitType}
+            onChangeText={(text) => setUnitType(sanitizeHebrewInput(text))}
           />
           <TextInput style={styles.input} placeholder="ברקוד (אופציונלי)" value={barcode} onChangeText={setBarcode} />
           <Pressable onPress={() => setIsScannerVisible(true)} style={styles.scanButton}>
@@ -161,8 +206,17 @@ const styles = StyleSheet.create({
   providerRow: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
   providerRowText: { fontSize: 15, textAlign: 'right' },
   emptyText: { padding: 12, textAlign: 'center', color: '#666' },
-  selectedProvider: { backgroundColor: '#dbeafe', borderRadius: 8, padding: 12 },
-  selectedProviderText: { color: '#2563eb', fontWeight: '600', textAlign: 'right' },
+  selectedProviderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#dbeafe',
+    borderRadius: 8,
+    padding: 12,
+  },
+  selectedProviderText: { color: '#1a1a1a', fontWeight: '600', textAlign: 'right' },
+  changeButton: { paddingHorizontal: 4 },
+  changeButtonText: { color: '#2563eb', fontWeight: '600', fontSize: 13 },
   hintText: { fontSize: 12, color: '#666', textAlign: 'right' },
   scanButton: { padding: 12, borderWidth: 1, borderRadius: 8, alignItems: 'center' },
 });

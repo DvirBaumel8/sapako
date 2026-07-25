@@ -97,6 +97,6 @@ const styles = StyleSheet.create({
   branchChipSelected: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
   branchChipTextSelected: { color: '#fff', fontWeight: '600' },
   providerList: { padding: 16, gap: 4 },
-  providerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f2f2f2' },
+  providerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f2f2f2' },
   providerName: { fontSize: 15, textAlign: 'right', flex: 1 },
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -20,6 +20,7 @@ export default function OrderBuilderScreen() {
   const [itemsByProductId, setItemsByProductId] = useState<Record<string, OrderItem>>({});
   const [isScannerVisible, setIsScannerVisible] = useState(false);
   const [search, setSearch] = useState('');
+  const orderCreationRef = useRef<Promise<Order> | null>(null);
 
   const { data: products } = useQuery({
     queryKey: ['products', providerId],
@@ -45,9 +46,9 @@ export default function OrderBuilderScreen() {
       return;
     }
 
-    createDraftOrder(selectedBranch!.id, providerId).then(async (created) => {
-      if (parsedSource?.status === 'PUBLISHED') {
-        // "Continue" a sent order: build a fresh draft pre-filled with the same items.
+    if (parsedSource?.status === 'PUBLISHED') {
+      // "Continue" a sent order: build a fresh draft pre-filled with the same items.
+      createDraftOrder(selectedBranch!.id, providerId).then(async (created) => {
         const addedItems = await Promise.all(
           parsedSource.items.map((item) =>
             addOrderItem(created.id, {
@@ -61,16 +62,31 @@ export default function OrderBuilderScreen() {
         setItemsByProductId(
           Object.fromEntries(addedItems.filter((i) => i.productId).map((i) => [i.productId, i])),
         );
-      }
-      setOrder(created);
-    });
+        setOrder(created);
+      });
+    }
+    // Brand new, no source order: don't create anything yet — an empty draft
+    // is meaningless. It's created lazily on the first real quantity change.
   }, [providerId]);
 
+  // Creates the draft order on first use rather than eagerly on screen open,
+  // so browsing without adding anything never leaves a meaningless 0-item
+  // draft behind. Cached in a ref so concurrent calls share one creation.
+  const ensureOrder = (): Promise<Order> => {
+    if (order) return Promise.resolve(order);
+    if (!orderCreationRef.current) {
+      orderCreationRef.current = createDraftOrder(selectedBranch!.id, providerId).then((created) => {
+        setOrder(created);
+        return created;
+      });
+    }
+    return orderCreationRef.current;
+  };
+
   const setQuantity = async (product: Product, quantity: number) => {
-    if (!order) return;
     const existing = itemsByProductId[product.id];
     if (quantity <= 0) {
-      if (existing) {
+      if (existing && order) {
         await removeOrderItem(order.id, existing.id);
         setItemsByProductId((prev) => {
           const next = { ...prev };
@@ -80,11 +96,12 @@ export default function OrderBuilderScreen() {
       }
       return;
     }
+    const currentOrder = await ensureOrder();
     if (existing) {
-      const updated = await updateOrderItemQuantity(order.id, existing.id, quantity);
+      const updated = await updateOrderItemQuantity(currentOrder.id, existing.id, quantity);
       setItemsByProductId((prev) => ({ ...prev, [product.id]: updated }));
     } else {
-      const created = await addOrderItem(order.id, { productId: product.id, quantity });
+      const created = await addOrderItem(currentOrder.id, { productId: product.id, quantity });
       setItemsByProductId((prev) => ({ ...prev, [product.id]: created }));
     }
   };

@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { createUser } from '../../../../src/api/users';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
+import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 
 export default function NewUserScreen() {
   useRequireAdmin();
@@ -17,7 +18,13 @@ export default function NewUserScreen() {
 
   return (
     <View style={styles.container}>
-      <TextInput style={styles.input} placeholder="שם משתמש" autoCapitalize="none" value={username} onChangeText={setUsername} />
+      <TextInput
+        style={styles.input}
+        placeholder="שם משתמש"
+        autoCapitalize="none"
+        value={username}
+        onChangeText={(text) => setUsername(sanitizeHebrewInput(text))}
+      />
       <TextInput style={styles.input} placeholder="סיסמה זמנית" secureTextEntry value={password} onChangeText={setPassword} />
       <PrimaryButton title="יצירת משתמש" onPress={handleSubmit} disabled={!username || password.length < 8} />
     </View>

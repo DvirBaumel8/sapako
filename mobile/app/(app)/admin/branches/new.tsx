@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { createBranch } from '../../../../src/api/branches';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
+import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 
 export default function NewBranchScreen() {
   useRequireAdmin();
@@ -16,7 +17,12 @@ export default function NewBranchScreen() {
 
   return (
     <View style={styles.container}>
-      <TextInput style={styles.input} placeholder="שם הסניף" value={name} onChangeText={setName} />
+      <TextInput
+        style={styles.input}
+        placeholder="שם הסניף"
+        value={name}
+        onChangeText={(text) => setName(sanitizeHebrewInput(text))}
+      />
       <PrimaryButton title="יצירת סניף" onPress={handleSubmit} disabled={!name} />
     </View>
   );

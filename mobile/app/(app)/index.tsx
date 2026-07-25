@@ -59,7 +59,11 @@ export default function HomeScreen() {
           </Pressable>
         )}
         ListEmptyComponent={
-          !isLoading ? <Text style={styles.statusText}>אין עדיין ספקים לסניף זה.</Text> : null
+          !isLoading ? (
+            <Text style={styles.statusText}>
+              {search.trim() ? 'לא נמצאו ספקים תואמים לחיפוש.' : 'אין עדיין ספקים לסניף זה.'}
+            </Text>
+          ) : null
         }
       />
     </View>
