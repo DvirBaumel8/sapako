@@ -1,29 +1,39 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Link, router, Stack } from 'expo-router';
+import { router } from 'expo-router';
+import { useRequireAdmin } from '../../../src/auth/useRequireAdmin';
+
+const LINKS = [
+  { href: '/admin/branches/new', label: 'הוספת סניף' },
+  { href: '/admin/providers/new', label: 'הוספת ספק' },
+  { href: '/admin/products/new', label: 'הוספת מוצר' },
+  { href: '/admin/users', label: 'ניהול משתמשים והרשאות' },
+] as const;
 
 export default function AdminHomeScreen() {
+  useRequireAdmin();
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerLeft: () => (
-            <Pressable onPress={() => router.replace('/')} hitSlop={8}>
-              <Text style={styles.backText}>‹ חזרה</Text>
-            </Pressable>
-          ),
-        }}
-      />
-      <Link href="/admin/branches/new" style={styles.link}>הוספת סניף</Link>
-      <Link href="/admin/providers/new" style={styles.link}>הוספת ספק</Link>
-      <Link href="/admin/products/new" style={styles.link}>הוספת מוצר</Link>
-      <Link href="/admin/users" style={styles.link}>ניהול משתמשים והרשאות</Link>
+      {LINKS.map((item) => (
+        <Pressable key={item.href} style={styles.card} onPress={() => router.push(item.href)}>
+          <Text style={styles.cardText}>{item.label}</Text>
+        </Pressable>
+      ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 16 },
-  link: { fontSize: 16, color: '#2563eb', fontWeight: '600' },
-  backText: { fontSize: 16, color: '#2563eb' },
+  container: { flex: 1, padding: 16, gap: 12, backgroundColor: '#f5f5f5' },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  cardText: { fontSize: 16, fontWeight: '600', color: '#1a1a1a', textAlign: 'right' },
 });

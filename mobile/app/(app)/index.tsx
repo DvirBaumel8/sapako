@@ -1,38 +1,53 @@
-import React from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Link, router } from 'expo-router';
+import React, { useMemo, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProvidersForBranch } from '../../src/api/providers';
 import { useBranch } from '../../src/branch/BranchContext';
-import { useAuth } from '../../src/auth/AuthContext';
 
 export default function HomeScreen() {
   const { selectedBranch } = useBranch();
-  const { role } = useAuth();
+  const [search, setSearch] = useState('');
   const { data: providers, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ['providers', selectedBranch!.id],
     queryFn: () => fetchProvidersForBranch(selectedBranch!.id),
   });
 
+  const filteredProviders = useMemo(() => {
+    if (!providers) return providers;
+    const query = search.trim();
+    if (!query) return providers;
+    return providers.filter((provider) => provider.name.includes(query));
+  }, [providers, search]);
+
   return (
     <View style={styles.container}>
-      <Pressable onPress={() => router.push('/select-branch')}>
+      <Pressable onPress={() => router.push('/select-branch')} style={styles.branchRow}>
         <Text style={styles.branchName}>{selectedBranch!.name} ▾</Text>
       </Pressable>
-      <Link href="/activity" style={styles.activityLink}>פעילות אחרונה</Link>
-      {role === 'ADMIN' && <Link href="/admin" style={styles.activityLink}>ניהול</Link>}
+      <Pressable onPress={() => router.push('/activity')} style={styles.secondaryButton}>
+        <Text style={styles.secondaryButtonText}>פעילות אחרונה</Text>
+      </Pressable>
 
-      {isLoading && <Text>טוען ספקים…</Text>}
-      {error && <Text>לא ניתן לטעון ספקים. יש למשוך לרענון.</Text>}
+      <TextInput
+        style={styles.search}
+        placeholder="חפש ספק…"
+        value={search}
+        onChangeText={setSearch}
+      />
+
+      {isLoading && <Text style={styles.statusText}>טוען ספקים…</Text>}
+      {error && <Text style={styles.statusText}>לא ניתן לטעון ספקים. יש למשוך לרענון.</Text>}
 
       <FlatList
         refreshing={isRefetching}
         onRefresh={refetch}
-        data={providers}
+        data={filteredProviders}
         keyExtractor={(provider) => provider.id}
+        contentContainerStyle={styles.list}
         renderItem={({ item }) => (
           <Pressable
-            style={styles.item}
+            style={styles.card}
             onPress={() =>
               router.push({
                 pathname: '/providers/[providerId]/order',
@@ -40,19 +55,54 @@ export default function HomeScreen() {
               })
             }
           >
-            <Text style={styles.itemText}>{item.name}</Text>
+            <Text style={styles.cardText}>{item.name}</Text>
           </Pressable>
         )}
-        ListEmptyComponent={!isLoading ? <Text>אין עדיין ספקים לסניף זה.</Text> : null}
+        ListEmptyComponent={
+          !isLoading ? <Text style={styles.statusText}>אין עדיין ספקים לסניף זה.</Text> : null
+        }
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
+  container: { flex: 1, backgroundColor: '#f5f5f5', paddingTop: 16 },
+  branchRow: { paddingHorizontal: 16, marginBottom: 8 },
   branchName: { fontSize: 20, fontWeight: '700' },
-  activityLink: { color: '#2563eb', marginBottom: 8 },
-  item: { padding: 16, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, marginBottom: 8 },
-  itemText: { fontSize: 16, fontWeight: '600' },
+  secondaryButton: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: '#eef2ff',
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+  },
+  secondaryButtonText: { color: '#2563eb', fontWeight: '600', fontSize: 14 },
+  search: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    textAlign: 'right',
+    fontSize: 15,
+  },
+  statusText: { textAlign: 'center', marginTop: 12, color: '#666' },
+  list: { paddingHorizontal: 16, paddingBottom: 16, gap: 8 },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  cardText: { fontSize: 16, fontWeight: '600', textAlign: 'right', color: '#1a1a1a' },
 });

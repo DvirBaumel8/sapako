@@ -5,9 +5,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchUsers, grantProviderAccess, revokeProviderAccess } from '../../../../../src/api/users';
 import { fetchAccessibleBranches } from '../../../../../src/api/branches';
 import { fetchProvidersForBranch } from '../../../../../src/api/providers';
+import { useRequireAdmin } from '../../../../../src/auth/useRequireAdmin';
 import type { Branch } from '../../../../../src/api/types';
 
 export default function UserAccessScreen() {
+  useRequireAdmin();
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const queryClient = useQueryClient();
   const { data: users } = useQuery({ queryKey: ['users'], queryFn: fetchUsers });

@@ -8,7 +8,9 @@ function Gate() {
   // Gate wraps every route in this group, including /select-branch itself —
   // without this exception it redirects to /select-branch even while already
   // there, looping forever instead of letting that screen render.
-  if (!selectedBranch && pathname !== '/select-branch') {
+  // Admin is reachable without a selected branch — management is a
+  // branch-independent concern, not something scoped to "inside" one branch.
+  if (!selectedBranch && pathname !== '/select-branch' && !pathname.startsWith('/admin')) {
     return <Redirect href="/select-branch" />;
   }
   return (
@@ -17,7 +19,13 @@ function Gate() {
       <Stack.Screen name="select-branch" options={{ title: 'בחירת סניף' }} />
       <Stack.Screen name="activity" options={{ title: 'פעילות אחרונה' }} />
       <Stack.Screen name="providers/[providerId]/order" options={{ title: '' }} />
-      <Stack.Screen name="admin" options={{ headerShown: false }} />
+      <Stack.Screen name="admin/index" options={{ title: 'ניהול' }} />
+      <Stack.Screen name="admin/branches/new" options={{ title: 'הוספת סניף' }} />
+      <Stack.Screen name="admin/providers/new" options={{ title: 'הוספת ספק' }} />
+      <Stack.Screen name="admin/products/new" options={{ title: 'הוספת מוצר' }} />
+      <Stack.Screen name="admin/users/index" options={{ title: 'משתמשים' }} />
+      <Stack.Screen name="admin/users/new" options={{ title: 'הוספת משתמש' }} />
+      <Stack.Screen name="admin/users/[userId]/access" options={{ title: 'הרשאות ספקים' }} />
     </Stack>
   );
 }

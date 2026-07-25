@@ -3,8 +3,10 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { createUser } from '../../../../src/api/users';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
+import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 
 export default function NewUserScreen() {
+  useRequireAdmin();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 

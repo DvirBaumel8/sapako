@@ -3,20 +3,20 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { createBranch } from '../../../../src/api/branches';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
+import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 
 export default function NewBranchScreen() {
+  useRequireAdmin();
   const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
 
   const handleSubmit = async () => {
-    await createBranch({ name, address: address || undefined });
+    await createBranch({ name });
     router.back();
   };
 
   return (
     <View style={styles.container}>
       <TextInput style={styles.input} placeholder="שם הסניף" value={name} onChangeText={setName} />
-      <TextInput style={styles.input} placeholder="כתובת (אופציונלי)" value={address} onChangeText={setAddress} />
       <PrimaryButton title="יצירת סניף" onPress={handleSubmit} disabled={!name} />
     </View>
   );

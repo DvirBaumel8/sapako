@@ -3,14 +3,18 @@ import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'r
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProductsForProvider } from '../../../../src/api/products';
-import { createDraftOrder, addOrderItem, updateOrderItemQuantity } from '../../../../src/api/orders';
+import { createDraftOrder, addOrderItem, updateOrderItemQuantity, removeOrderItem } from '../../../../src/api/orders';
 import { useBranch } from '../../../../src/branch/BranchContext';
 import type { Order, OrderItem, Product } from '../../../../src/api/types';
 import { PublishButton } from '../../../../src/order/PublishButton';
 import { BarcodeScannerModal } from '../../../../src/barcode/BarcodeScannerModal';
 
 export default function OrderBuilderScreen() {
-  const { providerId, providerName } = useLocalSearchParams<{ providerId: string; providerName?: string }>();
+  const { providerId, providerName, sourceOrder } = useLocalSearchParams<{
+    providerId: string;
+    providerName?: string;
+    sourceOrder?: string;
+  }>();
   const { selectedBranch } = useBranch();
   const [order, setOrder] = useState<Order | null>(null);
   const [itemsByProductId, setItemsByProductId] = useState<Record<string, OrderItem>>({});
@@ -30,14 +34,51 @@ export default function OrderBuilderScreen() {
   }, [products, search]);
 
   useEffect(() => {
-    createDraftOrder(selectedBranch!.id, providerId).then(setOrder);
+    const parsedSource: Order | null = sourceOrder ? JSON.parse(sourceOrder) : null;
+
+    if (parsedSource?.status === 'DRAFT') {
+      // Resume the existing draft as-is — no new order, reuse its items directly.
+      setOrder(parsedSource);
+      setItemsByProductId(
+        Object.fromEntries(parsedSource.items.map((item) => [item.productId, item])),
+      );
+      return;
+    }
+
+    createDraftOrder(selectedBranch!.id, providerId).then(async (created) => {
+      if (parsedSource?.status === 'PUBLISHED') {
+        // "Continue" a sent order: build a fresh draft pre-filled with the same items.
+        const addedItems = await Promise.all(
+          parsedSource.items.map((item) =>
+            addOrderItem(created.id, {
+              productId: item.productId,
+              productNameSnapshot: item.productNameSnapshot,
+              unitType: item.unitType,
+              quantity: item.quantity,
+            }),
+          ),
+        );
+        setItemsByProductId(
+          Object.fromEntries(addedItems.filter((i) => i.productId).map((i) => [i.productId, i])),
+        );
+      }
+      setOrder(created);
+    });
   }, [providerId]);
 
   const setQuantity = async (product: Product, quantity: number) => {
     if (!order) return;
     const existing = itemsByProductId[product.id];
     if (quantity <= 0) {
-      return; // removing items is handled by a dedicated "remove" affordance, not covered by the stepper reaching 0 in this pass
+      if (existing) {
+        await removeOrderItem(order.id, existing.id);
+        setItemsByProductId((prev) => {
+          const next = { ...prev };
+          delete next[product.id];
+          return next;
+        });
+      }
+      return;
     }
     if (existing) {
       const updated = await updateOrderItemQuantity(order.id, existing.id, quantity);
