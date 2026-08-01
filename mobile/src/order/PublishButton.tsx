@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, StyleSheet, Text } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { publishOrder } from '../api/orders';
 import { buildOrderMessage } from './buildOrderMessage';
+import { toWhatsAppPhoneNumber } from '../utils/whatsappPhone';
 import type { Order, OrderItem } from '../api/types';
 
 interface PublishButtonProps {
@@ -12,6 +14,12 @@ interface PublishButtonProps {
 
 export function PublishButton({ order, items }: PublishButtonProps) {
   const [isPublishing, setIsPublishing] = useState(false);
+  // The root layout's SafeAreaView only reserves the top edge, so nothing
+  // pads content away from Android's gesture/nav bar at the bottom — this
+  // button ends up rendered mostly underneath it. iOS's home indicator area
+  // doesn't have this problem, so only add the inset on Android.
+  const insets = useSafeAreaInsets();
+  const androidBottomInset = Platform.OS === 'android' ? insets.bottom : 0;
 
   const handlePublish = async () => {
     if (items.length === 0) {
@@ -22,7 +30,7 @@ export function PublishButton({ order, items }: PublishButtonProps) {
     try {
       const publishedOrder = await publishOrder(order.id);
       const message = buildOrderMessage(publishedOrder);
-      const phoneDigitsOnly = publishedOrder.provider.phone.replace(/[^\d]/g, '');
+      const phoneDigitsOnly = toWhatsAppPhoneNumber(publishedOrder.provider.phone);
       const url = `https://wa.me/${phoneDigitsOnly}?text=${encodeURIComponent(message)}`;
       const canOpen = await Linking.canOpenURL(url);
       if (!canOpen) {
@@ -44,7 +52,12 @@ export function PublishButton({ order, items }: PublishButtonProps) {
 
   return (
     <Pressable
-      style={({ pressed }) => [styles.button, pressed && styles.buttonPressed, isPublishing && styles.buttonDisabled]}
+      style={({ pressed }) => [
+        styles.button,
+        { marginBottom: 12 + androidBottomInset },
+        pressed && styles.buttonPressed,
+        isPublishing && styles.buttonDisabled,
+      ]}
       onPress={handlePublish}
       disabled={isPublishing}
     >
