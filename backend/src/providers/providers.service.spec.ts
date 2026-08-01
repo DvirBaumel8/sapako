@@ -1,3 +1,4 @@
+// backend/src/providers/providers.service.spec.ts
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
@@ -5,6 +6,7 @@ import { In } from 'typeorm';
 import { ProvidersService } from './providers.service';
 import { Provider } from './provider.entity';
 import { BranchesService } from '../branches/branches.service';
+import { DepartmentsService } from '../departments/departments.service';
 
 describe('ProvidersService', () => {
   let service: ProvidersService;
@@ -12,10 +14,13 @@ describe('ProvidersService', () => {
     create: jest.fn(),
     save: jest.fn(),
     find: jest.fn(),
-    findOneBy: jest.fn(),
+    findOne: jest.fn(),
   };
   const mockBranchesService = {
     findById: jest.fn(),
+  };
+  const mockDepartmentsService = {
+    findByIds: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -25,13 +30,18 @@ describe('ProvidersService', () => {
         ProvidersService,
         { provide: getRepositoryToken(Provider), useValue: mockRepo },
         { provide: BranchesService, useValue: mockBranchesService },
+        { provide: DepartmentsService, useValue: mockDepartmentsService },
       ],
     }).compile();
     service = module.get(ProvidersService);
   });
 
-  it('creates a provider under a branch that exists', async () => {
+  it('creates a provider under a branch that exists, attached to its departments', async () => {
     mockBranchesService.findById.mockResolvedValue({ id: 'b1' });
+    mockDepartmentsService.findByIds.mockResolvedValue([
+      { id: 'd1', branchId: 'b1', name: 'מוצרי חלב' },
+      { id: 'd2', branchId: 'b1', name: 'קפואים' },
+    ]);
     mockRepo.create.mockImplementation((data) => data);
     mockRepo.save.mockImplementation((data) =>
       Promise.resolve({ id: 'p1', ...data }),
@@ -40,14 +50,22 @@ describe('ProvidersService', () => {
     const provider = await service.create('b1', {
       name: 'Meat Co',
       phone: '+972501234567',
+      departmentIds: ['d1', 'd2'],
     });
 
     expect(mockBranchesService.findById).toHaveBeenCalledWith('b1');
+    expect(mockDepartmentsService.findByIds).toHaveBeenCalledWith([
+      'd1',
+      'd2',
+    ]);
     expect(provider).toMatchObject({
       id: 'p1',
       branchId: 'b1',
       name: 'Meat Co',
-      phone: '+972501234567',
+      departments: [
+        { id: 'd1', branchId: 'b1', name: 'מוצרי חלב' },
+        { id: 'd2', branchId: 'b1', name: 'קפואים' },
+      ],
     });
   });
 
@@ -57,7 +75,45 @@ describe('ProvidersService', () => {
     );
 
     await expect(
-      service.create('missing', { name: 'Meat Co', phone: '+972501234567' }),
+      service.create('missing', {
+        name: 'Meat Co',
+        phone: '+972501234567',
+        departmentIds: ['d1'],
+      }),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(mockRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects with NotFoundException when a departmentId does not exist, without saving', async () => {
+    mockBranchesService.findById.mockResolvedValue({ id: 'b1' });
+    mockDepartmentsService.findByIds.mockResolvedValue([
+      { id: 'd1', branchId: 'b1', name: 'מוצרי חלב' },
+    ]);
+
+    await expect(
+      service.create('b1', {
+        name: 'Meat Co',
+        phone: '+972501234567',
+        departmentIds: ['d1', 'missing'],
+      }),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(mockRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects with NotFoundException when a departmentId belongs to a different branch, without saving', async () => {
+    mockBranchesService.findById.mockResolvedValue({ id: 'b1' });
+    mockDepartmentsService.findByIds.mockResolvedValue([
+      { id: 'd1', branchId: 'OTHER_BRANCH', name: 'מוצרי חלב' },
+    ]);
+
+    await expect(
+      service.create('b1', {
+        name: 'Meat Co',
+        phone: '+972501234567',
+        departmentIds: ['d1'],
+      }),
     ).rejects.toThrow(NotFoundException);
 
     expect(mockRepo.save).not.toHaveBeenCalled();
@@ -72,6 +128,7 @@ describe('ProvidersService', () => {
 
     expect(mockRepo.find).toHaveBeenCalledWith({
       where: { branchId: 'b1', isActive: true },
+      relations: { departments: true },
     });
     expect(providers).toHaveLength(1);
   });
@@ -85,25 +142,27 @@ describe('ProvidersService', () => {
 
     expect(mockRepo.find).toHaveBeenCalledWith({
       where: { branchId: 'b1', isActive: true, id: In(['p1']) },
+      relations: { departments: true },
     });
     expect(providers).toHaveLength(1);
   });
 
   it('throws NotFoundException when finding a provider by an unknown id', async () => {
-    mockRepo.findOneBy.mockResolvedValue(null);
+    mockRepo.findOne.mockResolvedValue(null);
 
     await expect(service.findById('missing')).rejects.toThrow(
       'Provider not found',
     );
   });
 
-  it('updates a provider and persists the merged fields', async () => {
-    mockRepo.findOneBy.mockResolvedValue({
+  it('updates a provider and persists the merged fields, without touching departments when omitted', async () => {
+    mockRepo.findOne.mockResolvedValue({
       id: 'p1',
       branchId: 'b1',
       name: 'Meat Co',
       phone: '+972501234567',
       isActive: true,
+      departments: [{ id: 'd1', branchId: 'b1', name: 'מוצרי חלב' }],
     });
     mockRepo.save.mockImplementation((data) => Promise.resolve(data));
 
@@ -112,13 +171,49 @@ describe('ProvidersService', () => {
       isActive: false,
     });
 
+    expect(mockDepartmentsService.findByIds).not.toHaveBeenCalled();
     expect(updated).toMatchObject({
       id: 'p1',
       name: 'Meat Co Ltd',
       isActive: false,
+      departments: [{ id: 'd1', branchId: 'b1', name: 'מוצרי חלב' }],
     });
-    expect(mockRepo.save).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Meat Co Ltd', isActive: false }),
-    );
+  });
+
+  it('replaces the department set on update when departmentIds is provided', async () => {
+    mockRepo.findOne.mockResolvedValue({
+      id: 'p1',
+      branchId: 'b1',
+      name: 'Meat Co',
+      departments: [{ id: 'd1', branchId: 'b1', name: 'מוצרי חלב' }],
+    });
+    mockDepartmentsService.findByIds.mockResolvedValue([
+      { id: 'd2', branchId: 'b1', name: 'קפואים' },
+    ]);
+    mockRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+    const updated = await service.update('p1', { departmentIds: ['d2'] });
+
+    expect(updated.departments).toEqual([
+      { id: 'd2', branchId: 'b1', name: 'קפואים' },
+    ]);
+  });
+
+  it('rejects update with NotFoundException when a departmentId belongs to a different branch, without saving', async () => {
+    mockRepo.findOne.mockResolvedValue({
+      id: 'p1',
+      branchId: 'b1',
+      name: 'Meat Co',
+      departments: [],
+    });
+    mockDepartmentsService.findByIds.mockResolvedValue([
+      { id: 'd2', branchId: 'OTHER_BRANCH', name: 'קפואים' },
+    ]);
+
+    await expect(
+      service.update('p1', { departmentIds: ['d2'] }),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(mockRepo.save).not.toHaveBeenCalled();
   });
 });
