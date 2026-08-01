@@ -7,6 +7,7 @@ import { CreateProviders1700000000003 } from './migrations/1700000000003-CreateP
 import { CreateUserProviderAccess1700000000004 } from './migrations/1700000000004-CreateUserProviderAccess';
 import { CreateProducts1700000000005 } from './migrations/1700000000005-CreateProducts';
 import { CreateOrders1700000000006 } from './migrations/1700000000006-CreateOrders';
+import { CreateDepartments1700000000007 } from './migrations/1700000000007-CreateDepartments';
 
 // NOTE: the installed TypeORM CLI rejects a module that exports the same
 // DataSource instance under more than one export name (it iterates every
@@ -29,6 +30,7 @@ const dataSource = new DataSource({
     CreateUserProviderAccess1700000000004,
     CreateProducts1700000000005,
     CreateOrders1700000000006,
+    CreateDepartments1700000000007,
   ],
   synchronize: false,
 });
