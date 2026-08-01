@@ -80,7 +80,7 @@ export default function OrderBuilderScreen() {
   }, [providerId]);
 
   useEffect(() => {
-    if (sourceOrder || !branchOrders || !userId || hasPromptedResumeRef.current) return;
+    if (sourceOrder || !branchOrders || !userId || hasPromptedResumeRef.current || order) return;
     const resumable = findResumableDraft(branchOrders, providerId, userId);
     if (!resumable) return;
 
@@ -101,7 +101,7 @@ export default function OrderBuilderScreen() {
         },
       ],
     );
-  }, [sourceOrder, branchOrders, userId, providerId]);
+  }, [sourceOrder, branchOrders, userId, providerId, order]);
 
   // Creates the draft order on first use rather than eagerly on screen open,
   // so browsing without adding anything never leaves a meaningless 0-item
