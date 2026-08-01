@@ -19,6 +19,11 @@ function Gate() {
       <Stack.Screen name="select-branch" options={{ title: 'בחירת סניף' }} />
       <Stack.Screen name="activity" options={{ title: 'פעילות אחרונה' }} />
       <Stack.Screen name="providers/[providerId]/order" options={{ title: '' }} />
+      <Stack.Screen name="providers/[providerId]/edit" options={{ title: 'עריכת ספק' }} />
+      <Stack.Screen name="departments/index" options={{ title: 'מחלקות' }} />
+      <Stack.Screen name="departments/new" options={{ title: 'הוספת מחלקה' }} />
+      <Stack.Screen name="departments/[departmentId]/edit" options={{ title: 'עריכת מחלקה' }} />
+      <Stack.Screen name="departments/[departmentId]/providers" options={{ title: '' }} />
       <Stack.Screen name="admin/index" options={{ title: 'ניהול' }} />
       <Stack.Screen name="admin/branches/new" options={{ title: 'הוספת סניף' }} />
       <Stack.Screen name="admin/providers/new" options={{ title: 'הוספת ספק' }} />
