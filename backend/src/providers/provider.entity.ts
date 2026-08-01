@@ -4,9 +4,12 @@ import {
   Column,
   CreateDateColumn,
   ManyToOne,
+  ManyToMany,
   JoinColumn,
+  JoinTable,
 } from 'typeorm';
 import { Branch } from '../branches/branch.entity';
+import { Department } from '../departments/department.entity';
 
 @Entity('providers')
 export class Provider {
@@ -28,6 +31,14 @@ export class Provider {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @ManyToMany(() => Department)
+  @JoinTable({
+    name: 'provider_departments',
+    joinColumn: { name: 'providerId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'departmentId', referencedColumnName: 'id' },
+  })
+  departments: Department[];
 
   @CreateDateColumn()
   createdAt: Date;

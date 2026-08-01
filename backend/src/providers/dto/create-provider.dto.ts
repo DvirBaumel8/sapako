@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsNotEmpty, IsString } from 'class-validator';
 
 export class CreateProviderDto {
   @IsString()
@@ -8,4 +8,9 @@ export class CreateProviderDto {
   @IsString()
   @IsNotEmpty()
   phone: string;
+
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  departmentIds: string[];
 }

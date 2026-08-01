@@ -1,4 +1,10 @@
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  IsArray,
+  IsBoolean,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class UpdateProviderDto {
   @IsString()
@@ -12,4 +18,10 @@ export class UpdateProviderDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  @IsOptional()
+  departmentIds?: string[];
 }
