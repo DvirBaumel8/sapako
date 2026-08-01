@@ -6,6 +6,11 @@ export async function fetchProvidersForBranch(branchId: string): Promise<Provide
   return response.data;
 }
 
+export async function fetchAllProvidersForBranch(branchId: string): Promise<Provider[]> {
+  const response = await apiClient.get<Provider[]>(`/branches/${branchId}/providers/all`);
+  return response.data;
+}
+
 export async function createProvider(
   branchId: string,
   input: { name: string; phone: string; departmentIds: string[] },

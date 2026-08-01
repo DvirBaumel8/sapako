@@ -2,8 +2,9 @@ import React from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { fetchProvidersForBranch } from '../../../../src/api/providers';
+import { fetchAllProvidersForBranch, fetchProvidersForBranch } from '../../../../src/api/providers';
 import { useBranch } from '../../../../src/branch/BranchContext';
+import { useAuth } from '../../../../src/auth/AuthContext';
 
 export default function DepartmentProvidersScreen() {
   const { departmentId, departmentName } = useLocalSearchParams<{
@@ -11,9 +12,14 @@ export default function DepartmentProvidersScreen() {
     departmentName?: string;
   }>();
   const { selectedBranch } = useBranch();
+  const { role } = useAuth();
+  const isAdmin = role === 'ADMIN';
   const { data: providers, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['providers', selectedBranch!.id],
-    queryFn: () => fetchProvidersForBranch(selectedBranch!.id),
+    queryFn: () =>
+      isAdmin
+        ? fetchAllProvidersForBranch(selectedBranch!.id)
+        : fetchProvidersForBranch(selectedBranch!.id),
   });
 
   const departmentProviders = providers?.filter((provider) =>
@@ -32,7 +38,7 @@ export default function DepartmentProvidersScreen() {
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
           <Pressable
-            style={styles.card}
+            style={[styles.card, !item.isActive && styles.cardInactive]}
             onPress={() =>
               router.push({
                 pathname: '/providers/[providerId]/order',
@@ -41,6 +47,7 @@ export default function DepartmentProvidersScreen() {
             }
           >
             <Text style={styles.cardText}>{item.name}</Text>
+            {!item.isActive && <Text style={styles.inactiveLabel}>לא פעיל</Text>}
           </Pressable>
         )}
         ListEmptyComponent={
@@ -66,4 +73,6 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   cardText: { fontSize: 16, fontWeight: '600', textAlign: 'right', color: '#1a1a1a' },
+  cardInactive: { opacity: 0.5 },
+  inactiveLabel: { fontSize: 12, color: '#c0392b', textAlign: 'right', marginTop: 2 },
 });

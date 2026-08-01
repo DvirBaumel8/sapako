@@ -147,6 +147,21 @@ describe('ProvidersService', () => {
     expect(providers).toHaveLength(1);
   });
 
+  it('lists all providers (active and inactive) for a branch', async () => {
+    mockRepo.find.mockResolvedValue([
+      { id: 'p1', name: 'Meat Co', isActive: true },
+      { id: 'p2', name: 'Old Co', isActive: false },
+    ]);
+
+    const providers = await service.findAllForBranch('b1');
+
+    expect(mockRepo.find).toHaveBeenCalledWith({
+      where: { branchId: 'b1' },
+      relations: { departments: true },
+    });
+    expect(providers).toHaveLength(2);
+  });
+
   it('throws NotFoundException when finding a provider by an unknown id', async () => {
     mockRepo.findOne.mockResolvedValue(null);
 

@@ -40,6 +40,12 @@ export class BranchProvidersController {
     );
   }
 
+  @Get('all')
+  @Roles(Role.ADMIN)
+  findAllForBranch(@Param('branchId') branchId: string): Promise<Provider[]> {
+    return this.providersService.findAllForBranch(branchId);
+  }
+
   @Post()
   @Roles(Role.ADMIN)
   create(

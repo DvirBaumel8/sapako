@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { fetchProvidersForBranch, updateProvider } from '../../../../src/api/providers';
+import { fetchAllProvidersForBranch, updateProvider } from '../../../../src/api/providers';
 import { fetchDepartments } from '../../../../src/api/departments';
 import { useBranch } from '../../../../src/branch/BranchContext';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
@@ -17,7 +17,7 @@ export default function EditProviderScreen() {
   const { selectedBranch } = useBranch();
   const { data: providers } = useQuery({
     queryKey: ['providers', selectedBranch!.id],
-    queryFn: () => fetchProvidersForBranch(selectedBranch!.id),
+    queryFn: () => fetchAllProvidersForBranch(selectedBranch!.id),
   });
   const { data: departments } = useQuery({
     queryKey: ['departments', selectedBranch!.id],

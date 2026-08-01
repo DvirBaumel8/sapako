@@ -51,6 +51,13 @@ export class ProvidersService {
     });
   }
 
+  findAllForBranch(branchId: string): Promise<Provider[]> {
+    return this.providersRepo.find({
+      where: { branchId },
+      relations: { departments: true },
+    });
+  }
+
   async findById(id: string): Promise<Provider> {
     const provider = await this.providersRepo.findOne({
       where: { id },
