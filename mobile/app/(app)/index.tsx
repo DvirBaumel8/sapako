@@ -7,6 +7,7 @@ import { fetchProductsForBranch } from '../../src/api/products';
 import { useBranch } from '../../src/branch/BranchContext';
 import { BarcodeScannerModal } from '../../src/barcode/BarcodeScannerModal';
 import { resolveBarcodeMatches, type BarcodeMatch } from '../../src/providers/resolveBarcodeMatches';
+import { buildProviderSearchResults } from '../../src/providers/buildProviderSearchResults';
 
 export default function HomeScreen() {
   const { selectedBranch } = useBranch();
@@ -21,12 +22,10 @@ export default function HomeScreen() {
     queryFn: () => fetchProductsForBranch(selectedBranch!.id),
   });
 
-  const filteredProviders = useMemo(() => {
-    if (!providers) return providers;
-    const query = search.trim();
-    if (!query) return providers;
-    return providers.filter((provider) => provider.name.includes(query));
-  }, [providers, search]);
+  const searchResults = useMemo(
+    () => buildProviderSearchResults(providers ?? [], branchProducts ?? [], search),
+    [providers, branchProducts, search],
+  );
 
   const navigateToMatch = (match: BarcodeMatch) => {
     router.push({
@@ -94,7 +93,7 @@ export default function HomeScreen() {
 
       <TextInput
         style={styles.search}
-        placeholder="חפש ספק…"
+        placeholder="חפש ספק או מוצר…"
         value={search}
         onChangeText={setSearch}
       />
@@ -105,26 +104,52 @@ export default function HomeScreen() {
       <FlatList
         refreshing={isRefetching}
         onRefresh={refetch}
-        data={filteredProviders}
-        keyExtractor={(provider) => provider.id}
+        data={searchResults}
+        keyExtractor={(result) => result.provider.id}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
-          <Pressable
-            style={styles.card}
-            onPress={() =>
-              router.push({
-                pathname: '/providers/[providerId]/order',
-                params: { providerId: item.id, providerName: item.name },
-              })
-            }
-          >
-            <Text style={styles.cardText}>{item.name}</Text>
-          </Pressable>
+          <View style={styles.card}>
+            <Pressable
+              style={styles.providerRow}
+              onPress={() =>
+                router.push({
+                  pathname: '/providers/[providerId]/order',
+                  params: { providerId: item.provider.id, providerName: item.provider.name },
+                })
+              }
+            >
+              <Text style={styles.cardText}>{item.provider.name}</Text>
+            </Pressable>
+            {item.matchingProducts.map((product, index) => (
+              <Pressable
+                key={product.id}
+                style={[
+                  styles.productRow,
+                  index === 0 ? styles.firstProductRow : styles.subsequentProductRow,
+                  index === item.matchingProducts.length - 1 && styles.lastProductRow,
+                ]}
+                onPress={() =>
+                  router.push({
+                    pathname: '/providers/[providerId]/order',
+                    params: {
+                      providerId: item.provider.id,
+                      providerName: item.provider.name,
+                      highlightProductId: product.id,
+                    },
+                  })
+                }
+              >
+                <Text style={styles.productRowText}>{product.name}</Text>
+              </Pressable>
+            ))}
+          </View>
         )}
         ListEmptyComponent={
           !isLoading ? (
             <Text style={styles.statusText}>
-              {search.trim() ? 'לא נמצאו ספקים תואמים לחיפוש.' : 'אין עדיין ספקים לסניף זה.'}
+              {search.trim()
+                ? 'לא נמצאו ספקים או מוצרים תואמים לחיפוש.'
+                : 'אין עדיין ספקים לסניף זה.'}
             </Text>
           ) : null
         }
@@ -168,7 +193,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
+    paddingHorizontal: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -176,4 +201,14 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   cardText: { fontSize: 16, fontWeight: '600', textAlign: 'right', color: '#1a1a1a' },
+  providerRow: { width: '100%', paddingVertical: 16 },
+  productRow: {
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  firstProductRow: { paddingTop: 0 },
+  subsequentProductRow: { marginTop: 8 },
+  lastProductRow: { paddingBottom: 16 },
+  productRowText: { fontSize: 14, textAlign: 'right', color: '#2563eb' },
 });
