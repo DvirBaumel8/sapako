@@ -1,16 +1,24 @@
 import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProvidersForBranch } from '../../src/api/providers';
+import { fetchProductsForBranch } from '../../src/api/products';
 import { useBranch } from '../../src/branch/BranchContext';
+import { BarcodeScannerModal } from '../../src/barcode/BarcodeScannerModal';
+import { resolveBarcodeMatches, type BarcodeMatch } from '../../src/providers/resolveBarcodeMatches';
 
 export default function HomeScreen() {
   const { selectedBranch } = useBranch();
   const [search, setSearch] = useState('');
+  const [isScannerVisible, setIsScannerVisible] = useState(false);
   const { data: providers, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ['providers', selectedBranch!.id],
     queryFn: () => fetchProvidersForBranch(selectedBranch!.id),
+  });
+  const { data: branchProducts } = useQuery({
+    queryKey: ['branch-products', selectedBranch!.id],
+    queryFn: () => fetchProductsForBranch(selectedBranch!.id),
   });
 
   const filteredProviders = useMemo(() => {
@@ -19,6 +27,36 @@ export default function HomeScreen() {
     if (!query) return providers;
     return providers.filter((provider) => provider.name.includes(query));
   }, [providers, search]);
+
+  const navigateToMatch = (match: BarcodeMatch) => {
+    router.push({
+      pathname: '/providers/[providerId]/order',
+      params: {
+        providerId: match.providerId,
+        providerName: match.providerName,
+        highlightProductId: match.productId,
+      },
+    });
+  };
+
+  const handleBarcodeScanned = (barcode: string) => {
+    const matches = resolveBarcodeMatches(providers ?? [], branchProducts ?? [], barcode);
+    if (matches.length === 0) {
+      Alert.alert('לא נמצא מוצר תואם', 'לא נמצא מוצר עם ברקוד זה אצל אף ספק בסניף.');
+      return;
+    }
+    if (matches.length === 1) {
+      navigateToMatch(matches[0]);
+      return;
+    }
+    Alert.alert('המוצר נמצא אצל כמה ספקים', 'לאיזה ספק לפתוח את ההזמנה?', [
+      ...matches.map((match) => ({
+        text: match.providerName,
+        onPress: () => navigateToMatch(match),
+      })),
+      { text: 'ביטול', style: 'cancel' as const },
+    ]);
+  };
 
   return (
     <View style={styles.container}>
@@ -32,7 +70,15 @@ export default function HomeScreen() {
         <Pressable onPress={() => router.push('/departments')} style={styles.secondaryButton}>
           <Text style={styles.secondaryButtonText}>מחלקות</Text>
         </Pressable>
+        <Pressable onPress={() => setIsScannerVisible(true)} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>סריקת ברקוד</Text>
+        </Pressable>
       </View>
+      <BarcodeScannerModal
+        visible={isScannerVisible}
+        onScanned={handleBarcodeScanned}
+        onClose={() => setIsScannerVisible(false)}
+      />
 
       <TextInput
         style={styles.search}
