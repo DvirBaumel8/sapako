@@ -16,7 +16,7 @@ export default function EditProviderScreen() {
   const { providerId } = useLocalSearchParams<{ providerId: string }>();
   const { selectedBranch } = useBranch();
   const { data: providers } = useQuery({
-    queryKey: ['providers', selectedBranch!.id],
+    queryKey: ['providers', selectedBranch!.id, 'all'],
     queryFn: () => fetchAllProvidersForBranch(selectedBranch!.id),
   });
   const { data: departments } = useQuery({

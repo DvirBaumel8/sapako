@@ -15,7 +15,9 @@ export default function DepartmentProvidersScreen() {
   const { role } = useAuth();
   const isAdmin = role === 'ADMIN';
   const { data: providers, isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ['providers', selectedBranch!.id],
+    queryKey: isAdmin
+      ? ['providers', selectedBranch!.id, 'all']
+      : ['providers', selectedBranch!.id],
     queryFn: () =>
       isAdmin
         ? fetchAllProvidersForBranch(selectedBranch!.id)
