@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
+import { In } from 'typeorm';
 import { ProductsService } from './products.service';
 import { Product } from './product.entity';
 import { ProvidersService } from '../providers/providers.service';
@@ -106,5 +107,51 @@ describe('ProductsService', () => {
     expect(mockRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Cherry Tomatoes', isActive: false }),
     );
+  });
+
+  it('lists active branch products across accessible providers when ALL', async () => {
+    mockRepo.find.mockResolvedValue([
+      { id: 'pr1', providerId: 'p1', name: 'Tomatoes', barcode: '111' },
+    ]);
+
+    const products = await service.findActiveByBranch('b1', 'ALL');
+
+    expect(mockRepo.find).toHaveBeenCalledWith({
+      where: { isActive: true, provider: { branchId: 'b1', isActive: true } },
+      select: { id: true, providerId: true, name: true, barcode: true },
+    });
+    expect(products).toHaveLength(1);
+  });
+
+  it('filters branch products by the accessible-ids list when not ALL', async () => {
+    mockRepo.find.mockResolvedValue([
+      { id: 'pr1', providerId: 'p1', name: 'Tomatoes', barcode: '111' },
+    ]);
+
+    const products = await service.findActiveByBranch('b1', ['p1']);
+
+    expect(mockRepo.find).toHaveBeenCalledWith({
+      where: {
+        isActive: true,
+        provider: { branchId: 'b1', isActive: true, id: In(['p1']) },
+      },
+      select: { id: true, providerId: true, name: true, barcode: true },
+    });
+    expect(products).toHaveLength(1);
+  });
+
+  it('queries with an empty In() when the accessible-ids list is empty', async () => {
+    mockRepo.find.mockResolvedValue([]);
+
+    const products = await service.findActiveByBranch('b1', []);
+
+    expect(mockRepo.find).toHaveBeenCalledWith({
+      where: {
+        isActive: true,
+        provider: { branchId: 'b1', isActive: true, id: In([]) },
+      },
+      select: { id: true, providerId: true, name: true, barcode: true },
+    });
+    expect(products).toEqual([]);
   });
 });
