@@ -4,15 +4,14 @@ import {
   Column,
   CreateDateColumn,
   ManyToOne,
-  ManyToMany,
   JoinColumn,
-  JoinTable,
+  Unique,
 } from 'typeorm';
 import { Branch } from '../branches/branch.entity';
-import { Department } from '../departments/department.entity';
 
-@Entity('providers')
-export class Provider {
+@Entity('departments')
+@Unique(['branchId', 'name'])
+export class Department {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -26,19 +25,8 @@ export class Provider {
   @Column()
   name: string;
 
-  @Column()
-  phone: string;
-
   @Column({ default: true })
   isActive: boolean;
-
-  @ManyToMany(() => Department)
-  @JoinTable({
-    name: 'provider_departments',
-    joinColumn: { name: 'providerId', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'departmentId', referencedColumnName: 'id' },
-  })
-  departments: Department[];
 
   @CreateDateColumn()
   createdAt: Date;

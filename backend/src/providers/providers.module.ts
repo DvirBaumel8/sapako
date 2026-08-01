@@ -8,12 +8,14 @@ import {
 } from './providers.controller';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { BranchesModule } from '../branches/branches.module';
+import { DepartmentsModule } from '../departments/departments.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Provider]),
     PermissionsModule,
     BranchesModule,
+    DepartmentsModule,
   ],
   providers: [ProvidersService],
   controllers: [BranchProvidersController, ProviderAdminController],

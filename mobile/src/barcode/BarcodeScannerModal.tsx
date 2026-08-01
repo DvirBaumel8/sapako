@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 
@@ -10,6 +10,18 @@ interface BarcodeScannerModalProps {
 
 export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScannerModalProps) {
   const [permission, requestPermission] = useCameraPermissions();
+  // onBarcodeScanned fires once per detected frame, not once per scan — with a
+  // barcode held in view it can fire many times before this modal finishes
+  // closing. A ref (not state) guard is required here: state updates are
+  // async, so a state-based guard would still let several frames through
+  // before it takes effect, which is exactly the bug this prevents.
+  const hasScannedRef = useRef(false);
+
+  useEffect(() => {
+    if (visible) {
+      hasScannedRef.current = false;
+    }
+  }, [visible]);
 
   if (!visible) {
     return null;
@@ -37,6 +49,10 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
         style={styles.camera}
         barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'] }}
         onBarcodeScanned={(result) => {
+          if (hasScannedRef.current) {
+            return;
+          }
+          hasScannedRef.current = true;
           onScanned(result.data);
           onClose();
         }}

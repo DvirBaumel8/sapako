@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Product } from './product.entity';
 import { ProductsService } from './products.service';
 import {
+  BranchProductsController,
   ProviderProductsController,
   ProductAdminController,
 } from './products.controller';
@@ -16,7 +17,11 @@ import { ProvidersModule } from '../providers/providers.module';
     ProvidersModule,
   ],
   providers: [ProductsService],
-  controllers: [ProviderProductsController, ProductAdminController],
+  controllers: [
+    BranchProductsController,
+    ProviderProductsController,
+    ProductAdminController,
+  ],
   exports: [ProductsService, TypeOrmModule],
 })
 export class ProductsModule {}

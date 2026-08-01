@@ -7,12 +7,21 @@ export interface Branch {
   createdAt: string;
 }
 
+export interface Department {
+  id: string;
+  branchId: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
 export interface Provider {
   id: string;
   branchId: string;
   name: string;
   phone: string;
   isActive: boolean;
+  departments: Pick<Department, 'id' | 'name'>[];
   createdAt: string;
 }
 
@@ -26,6 +35,8 @@ export interface Product {
   isActive: boolean;
   createdAt: string;
 }
+
+export type ProviderProductSummary = Pick<Product, 'id' | 'name' | 'providerId' | 'barcode'>;
 
 export type OrderStatus = 'DRAFT' | 'PUBLISHED';
 

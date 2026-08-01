@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAccessibleBranches } from '../../../../src/api/branches';
+import { fetchDepartments } from '../../../../src/api/departments';
 import { createProvider } from '../../../../src/api/providers';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
+import { intersectDepartmentNames } from '../../../../src/utils/departmentIntersection';
 
 const ISRAELI_MOBILE_PATTERN = /^05\d{8}$/;
 
@@ -16,6 +18,25 @@ export default function NewProviderScreen() {
   const [selectedBranchIds, setSelectedBranchIds] = useState<Set<string>>(new Set());
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [selectedDepartmentNames, setSelectedDepartmentNames] = useState<Set<string>>(new Set());
+
+  const branchIdsList = Array.from(selectedBranchIds);
+  const { data: departmentsByBranch } = useQuery({
+    queryKey: ['departments-for-branches', branchIdsList.slice().sort().join(',')],
+    queryFn: () =>
+      Promise.all(
+        branchIdsList.map(async (branchId) => ({
+          branchId,
+          departments: await fetchDepartments(branchId),
+        })),
+      ),
+    enabled: branchIdsList.length > 0,
+  });
+
+  const departmentNameOptions = useMemo(
+    () => intersectDepartmentNames((departmentsByBranch ?? []).map((entry) => entry.departments)),
+    [departmentsByBranch],
+  );
 
   const isPhoneValid = ISRAELI_MOBILE_PATTERN.test(phone);
 
@@ -29,11 +50,30 @@ export default function NewProviderScreen() {
       }
       return next;
     });
+    setSelectedDepartmentNames(new Set());
+  };
+
+  const toggleDepartmentName = (name: string) => {
+    setSelectedDepartmentNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
   };
 
   const handleSubmit = async () => {
+    if (!departmentsByBranch) return;
     await Promise.all(
-      Array.from(selectedBranchIds).map((branchId) => createProvider(branchId, { name, phone })),
+      departmentsByBranch.map(({ branchId, departments }) => {
+        const departmentIds = departments
+          .filter((department) => selectedDepartmentNames.has(department.name))
+          .map((department) => department.id);
+        return createProvider(branchId, { name, phone, departmentIds });
+      }),
     );
     router.back();
   };
@@ -71,10 +111,43 @@ export default function NewProviderScreen() {
       {phone.length > 0 && !isPhoneValid && (
         <Text style={styles.errorText}>מספר טלפון לא תקין. הפורמט הנדרש: 05XXXXXXXX</Text>
       )}
+      {selectedBranchIds.size > 0 && (
+        <>
+          <Text style={styles.label}>מחלקות</Text>
+          {departmentsByBranch && departmentNameOptions.length === 0 && (
+            <Text style={styles.errorText}>
+              אין מחלקה משותפת לכל הסניפים שנבחרו. יש להוסיף מחלקה תואמת לפני יצירת הספק.
+            </Text>
+          )}
+          <FlatList
+            horizontal
+            style={styles.branchList}
+            data={departmentNameOptions}
+            keyExtractor={(item) => item}
+            renderItem={({ item }) => (
+              <Pressable
+                onPress={() => toggleDepartmentName(item)}
+                style={[
+                  styles.branchChip,
+                  selectedDepartmentNames.has(item) && styles.branchChipSelected,
+                ]}
+              >
+                <Text>{item}</Text>
+              </Pressable>
+            )}
+          />
+        </>
+      )}
       <PrimaryButton
         title="יצירת ספק"
         onPress={handleSubmit}
-        disabled={selectedBranchIds.size === 0 || !name || !isPhoneValid}
+        disabled={
+          selectedBranchIds.size === 0 ||
+          !name ||
+          !isPhoneValid ||
+          !departmentsByBranch ||
+          selectedDepartmentNames.size === 0
+        }
       />
     </View>
   );
@@ -84,7 +157,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12 },
   label: { fontWeight: '600' },
   branchList: { flexGrow: 0 },
-  branchChip: { paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginRight: 8 },
+  branchChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    marginRight: 8,
+  },
   branchChipSelected: { backgroundColor: '#dbeafe', borderColor: '#2563eb' },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
   errorText: { color: '#c0392b', fontSize: 13, textAlign: 'right' },

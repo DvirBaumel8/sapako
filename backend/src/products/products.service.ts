@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, In, Repository } from 'typeorm';
 import { Product } from './product.entity';
+import { Provider } from '../providers/provider.entity';
 import { ProvidersService } from '../providers/providers.service';
 
 @Injectable()
@@ -26,6 +27,23 @@ export class ProductsService {
 
   findActiveByProvider(providerId: string): Promise<Product[]> {
     return this.productsRepo.find({ where: { providerId, isActive: true } });
+  }
+
+  findActiveByBranch(
+    branchId: string,
+    accessibleProviderIds: string[] | 'ALL',
+  ): Promise<Product[]> {
+    const providerWhere: FindOptionsWhere<Provider> = {
+      branchId,
+      isActive: true,
+    };
+    if (accessibleProviderIds !== 'ALL') {
+      providerWhere.id = In(accessibleProviderIds);
+    }
+    return this.productsRepo.find({
+      where: { isActive: true, provider: providerWhere },
+      select: { id: true, providerId: true, name: true, barcode: true },
+    });
   }
 
   async findById(id: string): Promise<Product> {
