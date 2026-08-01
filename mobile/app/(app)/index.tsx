@@ -40,8 +40,8 @@ export default function HomeScreen() {
   };
 
   const handleBarcodeScanned = (barcode: string) => {
-    if (branchProductsError) {
-      Alert.alert('שגיאה', 'לא ניתן לטעון את קטלוג המוצרים של הסניף כרגע. יש לנסות שוב.');
+    if (error || branchProductsError) {
+      Alert.alert('שגיאה', 'לא ניתן לטעון את נתוני הספקים והמוצרים כרגע. יש לנסות שוב.');
       return;
     }
     const matches = resolveBarcodeMatches(providers ?? [], branchProducts ?? [], barcode);
@@ -53,13 +53,21 @@ export default function HomeScreen() {
       navigateToMatch(matches[0]);
       return;
     }
-    Alert.alert('המוצר נמצא אצל כמה ספקים', 'לאיזה ספק לפתוח את ההזמנה?', [
-      { text: 'ביטול', style: 'cancel' as const },
-      ...matches.map((match) => ({
-        text: match.providerName,
-        onPress: () => navigateToMatch(match),
-      })),
-    ]);
+    const visibleMatches = matches.slice(0, 2);
+    const isTruncated = matches.length > visibleMatches.length;
+    Alert.alert(
+      'המוצר נמצא אצל כמה ספקים',
+      isTruncated
+        ? `לאיזה ספק לפתוח את ההזמנה? (מוצגים 2 מתוך ${matches.length} ספקים)`
+        : 'לאיזה ספק לפתוח את ההזמנה?',
+      [
+        { text: 'ביטול', style: 'cancel' as const },
+        ...visibleMatches.map((match) => ({
+          text: match.providerName,
+          onPress: () => navigateToMatch(match),
+        })),
+      ],
+    );
   };
 
   return (
