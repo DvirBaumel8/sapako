@@ -41,6 +41,7 @@ export interface Order {
   id: string;
   branchId: string;
   providerId: string;
+  createdByUserId: string;
   status: OrderStatus;
   createdAt: string;
   publishedAt?: string;
