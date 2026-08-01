@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProductsForProvider } from '../../../../src/api/products';
 import { createDraftOrder, addOrderItem, updateOrderItemQuantity, removeOrderItem } from '../../../../src/api/orders';
@@ -8,6 +8,7 @@ import { useBranch } from '../../../../src/branch/BranchContext';
 import type { Order, OrderItem, Product } from '../../../../src/api/types';
 import { PublishButton } from '../../../../src/order/PublishButton';
 import { BarcodeScannerModal } from '../../../../src/barcode/BarcodeScannerModal';
+import { useAuth } from '../../../../src/auth/AuthContext';
 
 export default function OrderBuilderScreen() {
   const { providerId, providerName, sourceOrder } = useLocalSearchParams<{
@@ -16,6 +17,7 @@ export default function OrderBuilderScreen() {
     sourceOrder?: string;
   }>();
   const { selectedBranch } = useBranch();
+  const { role } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [itemsByProductId, setItemsByProductId] = useState<Record<string, OrderItem>>({});
   const [isScannerVisible, setIsScannerVisible] = useState(false);
@@ -118,7 +120,22 @@ export default function OrderBuilderScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: providerName ?? '' }} />
+      <Stack.Screen
+        options={{
+          title: providerName ?? '',
+          headerRight:
+            role === 'ADMIN'
+              ? () => (
+                  <Pressable
+                    onPress={() => router.push(`/providers/${providerId}/edit`)}
+                    style={styles.editButton}
+                  >
+                    <Text style={styles.editButtonText}>✎</Text>
+                  </Pressable>
+                )
+              : undefined,
+        }}
+      />
       <View style={styles.toolbar}>
         <TextInput
           style={styles.search}
@@ -243,4 +260,6 @@ const styles = StyleSheet.create({
   stepperButtonText: { fontSize: 18, fontWeight: '700', color: '#333' },
   quantityInput: { width: 36, textAlign: 'center', fontSize: 15, fontWeight: '600' },
   emptyText: { textAlign: 'center', marginTop: 24, color: '#666' },
+  editButton: { paddingHorizontal: 12 },
+  editButtonText: { fontSize: 20, color: '#2563eb' },
 });
