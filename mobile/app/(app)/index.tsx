@@ -25,9 +25,14 @@ export default function HomeScreen() {
       <Pressable onPress={() => router.push('/select-branch')} style={styles.branchRow}>
         <Text style={styles.branchName}>{selectedBranch!.name} ▾</Text>
       </Pressable>
-      <Pressable onPress={() => router.push('/activity')} style={styles.secondaryButton}>
-        <Text style={styles.secondaryButtonText}>פעילות אחרונה</Text>
-      </Pressable>
+      <View style={styles.secondaryButtonRow}>
+        <Pressable onPress={() => router.push('/activity')} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>פעילות אחרונה</Text>
+        </Pressable>
+        <Pressable onPress={() => router.push('/departments')} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>מחלקות</Text>
+        </Pressable>
+      </View>
 
       <TextInput
         style={styles.search}
@@ -74,9 +79,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5', paddingTop: 16 },
   branchRow: { paddingHorizontal: 16, marginBottom: 8 },
   branchName: { fontSize: 20, fontWeight: '700' },
-  secondaryButton: {
+  secondaryButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
     marginHorizontal: 16,
     marginBottom: 12,
+  },
+  secondaryButton: {
     paddingVertical: 10,
     paddingHorizontal: 14,
     backgroundColor: '#eef2ff',
