@@ -3,12 +3,13 @@ import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'r
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProductsForProvider } from '../../../../src/api/products';
-import { createDraftOrder, addOrderItem, updateOrderItemQuantity, removeOrderItem } from '../../../../src/api/orders';
+import { createDraftOrder, addOrderItem, updateOrderItemQuantity, removeOrderItem, fetchOrdersForBranch } from '../../../../src/api/orders';
 import { useBranch } from '../../../../src/branch/BranchContext';
+import { useAuth } from '../../../../src/auth/AuthContext';
 import type { Order, OrderItem, Product } from '../../../../src/api/types';
 import { PublishButton } from '../../../../src/order/PublishButton';
 import { BarcodeScannerModal } from '../../../../src/barcode/BarcodeScannerModal';
-import { useAuth } from '../../../../src/auth/AuthContext';
+import { findResumableDraft } from '../../../../src/order/findResumableDraft';
 
 export default function OrderBuilderScreen() {
   const { providerId, providerName, sourceOrder, highlightProductId } = useLocalSearchParams<{
@@ -18,7 +19,7 @@ export default function OrderBuilderScreen() {
     highlightProductId?: string;
   }>();
   const { selectedBranch } = useBranch();
-  const { role } = useAuth();
+  const { role, userId } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [itemsByProductId, setItemsByProductId] = useState<Record<string, OrderItem>>({});
   const [isScannerVisible, setIsScannerVisible] = useState(false);
@@ -26,10 +27,17 @@ export default function OrderBuilderScreen() {
   const orderCreationRef = useRef<Promise<Order> | null>(null);
   const listRef = useRef<FlatList<Product>>(null);
   const hasScrolledRef = useRef(false);
+  const hasPromptedResumeRef = useRef(false);
 
   const { data: products } = useQuery({
     queryKey: ['products', providerId],
     queryFn: () => fetchProductsForProvider(providerId),
+  });
+
+  const { data: branchOrders } = useQuery({
+    queryKey: ['orders', selectedBranch?.id],
+    queryFn: () => fetchOrdersForBranch(selectedBranch!.id),
+    enabled: !sourceOrder && !!selectedBranch,
   });
 
   const filteredProducts = useMemo(() => {
@@ -81,6 +89,30 @@ export default function OrderBuilderScreen() {
     // Brand new, no source order: don't create anything yet — an empty draft
     // is meaningless. It's created lazily on the first real quantity change.
   }, [providerId]);
+
+  useEffect(() => {
+    if (sourceOrder || !branchOrders || !userId || hasPromptedResumeRef.current || order) return;
+    const resumable = findResumableDraft(branchOrders, providerId, userId);
+    if (!resumable) return;
+
+    hasPromptedResumeRef.current = true;
+    Alert.alert(
+      'יש הזמנה פתוחה לספק זה',
+      'יש לך הזמנה שטרם הושלמה לספק הזה. להמשיך אותה?',
+      [
+        { text: 'לא, התחל חדש', style: 'cancel' },
+        {
+          text: 'כן, המשך',
+          onPress: () => {
+            setOrder(resumable);
+            setItemsByProductId(
+              Object.fromEntries(resumable.items.map((item) => [item.productId, item])),
+            );
+          },
+        },
+      ],
+    );
+  }, [sourceOrder, branchOrders, userId, providerId, order]);
 
   // Creates the draft order on first use rather than eagerly on screen open,
   // so browsing without adding anything never leaves a meaningless 0-item
