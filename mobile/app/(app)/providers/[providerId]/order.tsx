@@ -11,10 +11,11 @@ import { BarcodeScannerModal } from '../../../../src/barcode/BarcodeScannerModal
 import { useAuth } from '../../../../src/auth/AuthContext';
 
 export default function OrderBuilderScreen() {
-  const { providerId, providerName, sourceOrder } = useLocalSearchParams<{
+  const { providerId, providerName, sourceOrder, highlightProductId } = useLocalSearchParams<{
     providerId: string;
     providerName?: string;
     sourceOrder?: string;
+    highlightProductId?: string;
   }>();
   const { selectedBranch } = useBranch();
   const { role } = useAuth();
@@ -23,6 +24,8 @@ export default function OrderBuilderScreen() {
   const [isScannerVisible, setIsScannerVisible] = useState(false);
   const [search, setSearch] = useState('');
   const orderCreationRef = useRef<Promise<Order> | null>(null);
+  const listRef = useRef<FlatList<Product>>(null);
+  const hasScrolledRef = useRef(false);
 
   const { data: products } = useQuery({
     queryKey: ['products', providerId],
@@ -35,6 +38,14 @@ export default function OrderBuilderScreen() {
     if (!query) return products;
     return products.filter((product) => product.name.includes(query));
   }, [products, search]);
+
+  useEffect(() => {
+    if (!highlightProductId || !filteredProducts || hasScrolledRef.current) return;
+    const index = filteredProducts.findIndex((product) => product.id === highlightProductId);
+    if (index === -1) return;
+    listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+    hasScrolledRef.current = true;
+  }, [filteredProducts, highlightProductId]);
 
   useEffect(() => {
     const parsedSource: Order | null = sourceOrder ? JSON.parse(sourceOrder) : null;
@@ -153,13 +164,23 @@ export default function OrderBuilderScreen() {
         onClose={() => setIsScannerVisible(false)}
       />
       <FlatList
+        ref={listRef}
         data={filteredProducts}
         keyExtractor={(product) => product.id}
         contentContainerStyle={styles.list}
+        onScrollToIndexFailed={(info) => {
+          setTimeout(() => {
+            listRef.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: true,
+            });
+          }, 50);
+        }}
         renderItem={({ item: product }) => {
           const currentQuantity = itemsByProductId[product.id]?.quantity ?? 0;
+          const isHighlighted = product.id === highlightProductId;
           return (
-            <View style={styles.card}>
+            <View style={[styles.card, isHighlighted && styles.cardHighlighted]}>
               <Text style={styles.productName}>{product.name}</Text>
               <View style={styles.rowBottom}>
                 <View style={styles.unitBadge}>
@@ -231,6 +252,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 1,
+  },
+  cardHighlighted: {
+    borderWidth: 2,
+    borderColor: '#2563eb',
   },
   productName: { fontSize: 15, fontWeight: '600', textAlign: 'right', color: '#1a1a1a' },
   rowBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
