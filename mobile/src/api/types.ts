@@ -36,6 +36,8 @@ export interface Product {
   createdAt: string;
 }
 
+export type ProviderProductSummary = Pick<Product, 'id' | 'name' | 'providerId' | 'barcode'>;
+
 export type OrderStatus = 'DRAFT' | 'PUBLISHED';
 
 export interface OrderItem {

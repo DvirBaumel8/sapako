@@ -1,8 +1,13 @@
 import { apiClient } from './client';
-import type { Product } from './types';
+import type { Product, ProviderProductSummary } from './types';
 
 export async function fetchProductsForProvider(providerId: string): Promise<Product[]> {
   const response = await apiClient.get<Product[]>(`/providers/${providerId}/products`);
+  return response.data;
+}
+
+export async function fetchProductsForBranch(branchId: string): Promise<ProviderProductSummary[]> {
+  const response = await apiClient.get<ProviderProductSummary[]>(`/branches/${branchId}/products`);
   return response.data;
 }
 
