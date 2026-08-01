@@ -23,12 +23,18 @@ export default function NewProviderScreen() {
   const branchIdsList = Array.from(selectedBranchIds);
   const { data: departmentsByBranch } = useQuery({
     queryKey: ['departments-for-branches', branchIdsList.slice().sort().join(',')],
-    queryFn: () => Promise.all(branchIdsList.map((branchId) => fetchDepartments(branchId))),
+    queryFn: () =>
+      Promise.all(
+        branchIdsList.map(async (branchId) => ({
+          branchId,
+          departments: await fetchDepartments(branchId),
+        })),
+      ),
     enabled: branchIdsList.length > 0,
   });
 
   const departmentNameOptions = useMemo(
-    () => intersectDepartmentNames(departmentsByBranch ?? []),
+    () => intersectDepartmentNames((departmentsByBranch ?? []).map((entry) => entry.departments)),
     [departmentsByBranch],
   );
 
@@ -62,9 +68,8 @@ export default function NewProviderScreen() {
   const handleSubmit = async () => {
     if (!departmentsByBranch) return;
     await Promise.all(
-      branchIdsList.map((branchId, index) => {
-        const branchDepartments = departmentsByBranch[index];
-        const departmentIds = branchDepartments
+      departmentsByBranch.map(({ branchId, departments }) => {
+        const departmentIds = departments
           .filter((department) => selectedDepartmentNames.has(department.name))
           .map((department) => department.id);
         return createProvider(branchId, { name, phone, departmentIds });
