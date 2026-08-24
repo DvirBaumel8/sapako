@@ -9,6 +9,7 @@ import { BarcodeScannerModal } from '../../../../src/barcode/BarcodeScannerModal
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
+import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 import type { Branch, Provider } from '../../../../src/api/types';
 
 const DEFAULT_BRANCH_NAME = 'הילס';
@@ -74,9 +75,7 @@ export default function NewProductScreen() {
 
   const filteredProviders = useMemo(() => {
     if (!providers) return providers;
-    const query = providerSearch.trim();
-    if (!query) return providers;
-    return providers.filter((p) => p.name.includes(query));
+    return fuzzySearch(providers, providerSearch, (p) => p.name);
   }, [providers, providerSearch]);
 
   const toggleBranch = (branch: Branch) => {
@@ -136,7 +135,16 @@ export default function NewProductScreen() {
 
       {primaryBranch && !provider && (
         <View style={styles.providerSection}>
-          <Text style={styles.label}>ספק (מתוך {primaryBranch.name})</Text>
+          <Text style={styles.label}>
+            ספק (רשימה מתוך {primaryBranch.name}
+            {selectedBranchIds.size > 1
+              ? ` — נבחרו גם: ${(branches ?? [])
+                  .filter((b) => selectedBranchIds.has(b.id) && b.id !== primaryBranch.id)
+                  .map((b) => b.name)
+                  .join(', ')}`
+              : ''}
+            )
+          </Text>
           <TextInput
             style={styles.input}
             placeholder="חפש ספק…"

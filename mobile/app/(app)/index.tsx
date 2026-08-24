@@ -13,6 +13,7 @@ export default function HomeScreen() {
   const { selectedBranch } = useBranch();
   const [search, setSearch] = useState('');
   const [isScannerVisible, setIsScannerVisible] = useState(false);
+  const [collapsedProviderIds, setCollapsedProviderIds] = useState<Set<string>>(new Set());
   const { data: providers, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ['providers', selectedBranch!.id],
     queryFn: () => fetchProvidersForBranch(selectedBranch!.id),
@@ -26,6 +27,18 @@ export default function HomeScreen() {
     () => buildProviderSearchResults(providers ?? [], branchProducts ?? [], search),
     [providers, branchProducts, search],
   );
+
+  const toggleCollapsed = (providerId: string) => {
+    setCollapsedProviderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(providerId)) {
+        next.delete(providerId);
+      } else {
+        next.add(providerId);
+      }
+      return next;
+    });
+  };
 
   const navigateToMatch = (match: BarcodeMatch) => {
     router.push({
@@ -107,43 +120,59 @@ export default function HomeScreen() {
         data={searchResults}
         keyExtractor={(result) => result.provider.id}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Pressable
-              style={styles.providerRow}
-              onPress={() =>
-                router.push({
-                  pathname: '/providers/[providerId]/order',
-                  params: { providerId: item.provider.id, providerName: item.provider.name },
-                })
-              }
-            >
-              <Text style={styles.cardText}>{item.provider.name}</Text>
-            </Pressable>
-            {item.matchingProducts.map((product, index) => (
-              <Pressable
-                key={product.id}
-                style={[
-                  styles.productRow,
-                  index === 0 ? styles.firstProductRow : styles.subsequentProductRow,
-                  index === item.matchingProducts.length - 1 && styles.lastProductRow,
-                ]}
-                onPress={() =>
-                  router.push({
-                    pathname: '/providers/[providerId]/order',
-                    params: {
-                      providerId: item.provider.id,
-                      providerName: item.provider.name,
-                      highlightProductId: product.id,
-                    },
-                  })
-                }
-              >
-                <Text style={styles.productRowText}>{product.name}</Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const isCollapsed = collapsedProviderIds.has(item.provider.id);
+          const hasProducts = item.matchingProducts.length > 0;
+          return (
+            <View style={styles.card}>
+              <View style={styles.providerRow}>
+                <Pressable
+                  style={styles.providerNamePressable}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/providers/[providerId]/order',
+                      params: { providerId: item.provider.id, providerName: item.provider.name },
+                    })
+                  }
+                >
+                  <Text style={styles.cardText}>{item.provider.name}</Text>
+                </Pressable>
+                {hasProducts && (
+                  <Pressable
+                    style={styles.collapseToggle}
+                    onPress={() => toggleCollapsed(item.provider.id)}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.collapseToggleText}>{isCollapsed ? '▸' : '▾'}</Text>
+                  </Pressable>
+                )}
+              </View>
+              {!isCollapsed &&
+                item.matchingProducts.map((product, index) => (
+                  <Pressable
+                    key={product.id}
+                    style={[
+                      styles.productRow,
+                      index === 0 ? styles.firstProductRow : styles.subsequentProductRow,
+                      index === item.matchingProducts.length - 1 && styles.lastProductRow,
+                    ]}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/providers/[providerId]/order',
+                        params: {
+                          providerId: item.provider.id,
+                          providerName: item.provider.name,
+                          highlightProductId: product.id,
+                        },
+                      })
+                    }
+                  >
+                    <Text style={styles.productRowText}>{product.name}</Text>
+                  </Pressable>
+                ))}
+            </View>
+          );
+        }}
         ListEmptyComponent={
           !isLoading ? (
             <Text style={styles.statusText}>
@@ -201,7 +230,16 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   cardText: { fontSize: 16, fontWeight: '600', textAlign: 'right', color: '#1a1a1a' },
-  providerRow: { width: '100%', paddingVertical: 16 },
+  providerRow: {
+    width: '100%',
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  providerNamePressable: { flex: 1 },
+  collapseToggle: { paddingHorizontal: 8, paddingVertical: 4 },
+  collapseToggleText: { fontSize: 16, color: '#666' },
   productRow: {
     paddingTop: 8,
     borderTopWidth: 1,

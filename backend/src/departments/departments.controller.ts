@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -41,5 +41,11 @@ export class DepartmentAdminController {
     @Body() dto: UpdateDepartmentDto,
   ): Promise<Department> {
     return this.departmentsService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(Role.ADMIN)
+  remove(@Param('id') id: string): Promise<void> {
+    return this.departmentsService.remove(id);
   }
 }

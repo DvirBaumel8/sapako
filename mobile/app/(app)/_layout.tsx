@@ -24,6 +24,8 @@ function Gate() {
       <Stack.Screen name="departments/new" options={{ title: 'הוספת מחלקה' }} />
       <Stack.Screen name="departments/[departmentId]/edit" options={{ title: 'עריכת מחלקה' }} />
       <Stack.Screen name="departments/[departmentId]/providers" options={{ title: '' }} />
+      <Stack.Screen name="departments/[departmentId]/add-provider" options={{ title: '' }} />
+      <Stack.Screen name="products/[productId]/edit" options={{ title: 'עריכת מוצר' }} />
       <Stack.Screen name="admin/index" options={{ title: 'ניהול' }} />
       <Stack.Screen name="admin/branches/new" options={{ title: 'הוספת סניף' }} />
       <Stack.Screen name="admin/providers/new" options={{ title: 'הוספת ספק' }} />

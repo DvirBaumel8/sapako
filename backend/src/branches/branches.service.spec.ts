@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { ConflictException } from '@nestjs/common';
 import { BranchesService } from './branches.service';
 import { Branch } from './branch.entity';
 
@@ -14,6 +15,7 @@ describe('BranchesService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockRepo.findOneBy.mockResolvedValue(null);
     const module = await Test.createTestingModule({
       providers: [
         BranchesService,
@@ -32,6 +34,16 @@ describe('BranchesService', () => {
     const branch = await service.create({ name: 'Downtown' });
 
     expect(branch).toEqual({ id: 'b1', name: 'Downtown' });
+  });
+
+  it('rejects with ConflictException when a branch with the same name already exists', async () => {
+    mockRepo.findOneBy.mockResolvedValue({ id: 'existing', name: 'Downtown' });
+
+    await expect(service.create({ name: 'Downtown' })).rejects.toThrow(
+      ConflictException,
+    );
+
+    expect(mockRepo.save).not.toHaveBeenCalled();
   });
 
   it('lists branches by a given set of ids', async () => {

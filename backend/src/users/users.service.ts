@@ -76,6 +76,22 @@ export class UsersService {
     return this.usersRepo.count();
   }
 
+  async remove(id: string): Promise<void> {
+    const user = await this.findById(id);
+    if (user.role === Role.ADMIN) {
+      // Losing the last admin bricks the app — nothing left with the role
+      // required to manage users, providers, or anything else admin-gated.
+      const adminCount = await this.usersRepo.count({
+        where: { role: Role.ADMIN },
+      });
+      if (adminCount <= 1) {
+        throw new ConflictException('Cannot delete the last remaining admin');
+      }
+    }
+    // user_provider_access and orders both cascade on this user's id.
+    await this.usersRepo.delete({ id });
+  }
+
   /**
    * Strips `passwordHash` before a `User` is sent out over HTTP. This is
    * the only place allowed to produce a `SafeUser` — the cast below is the

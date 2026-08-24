@@ -31,3 +31,7 @@ export async function updateProvider(
   const response = await apiClient.patch<Provider>(`/providers/${id}`, input);
   return response.data;
 }
+
+export async function deleteProvider(id: string): Promise<void> {
+  await apiClient.delete(`/providers/${id}`);
+}

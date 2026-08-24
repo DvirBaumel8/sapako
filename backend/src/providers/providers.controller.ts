@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -68,5 +69,11 @@ export class ProviderAdminController {
     @Body() dto: UpdateProviderDto,
   ): Promise<Provider> {
     return this.providersService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(Role.ADMIN)
+  remove(@Param('id') id: string): Promise<void> {
+    return this.providersService.remove(id);
   }
 }

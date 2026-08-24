@@ -14,6 +14,7 @@ describe('UsersService', () => {
     save: jest.fn(),
     find: jest.fn(),
     count: jest.fn(),
+    delete: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -115,6 +116,46 @@ describe('UsersService', () => {
 
     expect(mockRepo.count).toHaveBeenCalled();
     expect(count).toBe(3);
+  });
+
+  describe('remove', () => {
+    it('deletes a STAFF user', async () => {
+      mockRepo.findOneBy.mockResolvedValue({ id: 'u1', role: Role.STAFF });
+      mockRepo.delete.mockResolvedValue({ affected: 1 });
+
+      await service.remove('u1');
+
+      expect(mockRepo.delete).toHaveBeenCalledWith({ id: 'u1' });
+      expect(mockRepo.count).not.toHaveBeenCalled();
+    });
+
+    it('deletes an admin when other admins remain', async () => {
+      mockRepo.findOneBy.mockResolvedValue({ id: 'u1', role: Role.ADMIN });
+      mockRepo.count.mockResolvedValue(2);
+      mockRepo.delete.mockResolvedValue({ affected: 1 });
+
+      await service.remove('u1');
+
+      expect(mockRepo.count).toHaveBeenCalledWith({ where: { role: Role.ADMIN } });
+      expect(mockRepo.delete).toHaveBeenCalledWith({ id: 'u1' });
+    });
+
+    it('rejects deleting the last remaining admin', async () => {
+      mockRepo.findOneBy.mockResolvedValue({ id: 'u1', role: Role.ADMIN });
+      mockRepo.count.mockResolvedValue(1);
+
+      await expect(service.remove('u1')).rejects.toThrow(ConflictException);
+      expect(mockRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('rejects deleting a user that does not exist', async () => {
+      mockRepo.findOneBy.mockResolvedValue(null);
+
+      await expect(service.remove('missing')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockRepo.delete).not.toHaveBeenCalled();
+    });
   });
 
   describe('findAllWithAccess', () => {

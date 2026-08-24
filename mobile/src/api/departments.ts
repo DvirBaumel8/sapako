@@ -21,3 +21,7 @@ export async function updateDepartment(
   const response = await apiClient.patch<Department>(`/departments/${id}`, input);
   return response.data;
 }
+
+export async function deleteDepartment(id: string): Promise<void> {
+  await apiClient.delete(`/departments/${id}`);
+}

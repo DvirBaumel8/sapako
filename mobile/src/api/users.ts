@@ -18,3 +18,7 @@ export async function grantProviderAccess(userId: string, providerId: string): P
 export async function revokeProviderAccess(userId: string, providerId: string): Promise<void> {
   await apiClient.delete(`/users/${userId}/provider-access/${providerId}`);
 }
+
+export async function deleteUser(userId: string): Promise<void> {
+  await apiClient.delete(`/users/${userId}`);
+}

@@ -1,24 +1,64 @@
 import React, { useState } from 'react';
-import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { updateDepartment } from '../../../../src/api/departments';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { deleteDepartment, updateDepartment } from '../../../../src/api/departments';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
-import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
+import { useBranch } from '../../../../src/branch/BranchContext';
+import { hasLetter, sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
+import { isConflictError } from '../../../../src/api/errors';
 
 export default function EditDepartmentScreen() {
   useRequireAdmin();
-  const { departmentId, departmentName, departmentIsActive } = useLocalSearchParams<{
+  const { departmentId, departmentName } = useLocalSearchParams<{
     departmentId: string;
     departmentName?: string;
-    departmentIsActive?: string;
   }>();
+  const { selectedBranch } = useBranch();
+  const queryClient = useQueryClient();
   const [name, setName] = useState(departmentName ?? '');
-  const [isActive, setIsActive] = useState(departmentIsActive !== 'false');
+  const [nameError, setNameError] = useState('');
+  const isNameValid = hasLetter(name);
+
+  const invalidateDepartments = () =>
+    queryClient.invalidateQueries({ queryKey: ['departments', selectedBranch!.id] });
 
   const handleSubmit = async () => {
-    await updateDepartment(departmentId, { name, isActive });
-    router.back();
+    setNameError('');
+    try {
+      await updateDepartment(departmentId, { name });
+      await invalidateDepartments();
+      router.back();
+    } catch (err) {
+      if (isConflictError(err)) {
+        setNameError('כבר קיימת מחלקה בשם זה בסניף. יש לבחור שם אחר.');
+      } else {
+        Alert.alert('שגיאה', 'שמירת המחלקה נכשלה. יש לנסות שוב.');
+      }
+    }
+  };
+
+  const removeDepartment = useMutation({
+    mutationFn: () => deleteDepartment(departmentId),
+    onSuccess: async () => {
+      await invalidateDepartments();
+      router.back();
+    },
+    onError: () => {
+      Alert.alert('שגיאה', 'מחיקת המחלקה נכשלה. יש לנסות שוב.');
+    },
+  });
+
+  const confirmDelete = () => {
+    Alert.alert(
+      'מחיקת מחלקה',
+      `למחוק את המחלקה "${departmentName ?? name}"? הספקים המשויכים אליה לא יימחקו, רק השיוך למחלקה זו יוסר. לא ניתן לשחזר פעולה זו.`,
+      [
+        { text: 'ביטול', style: 'cancel' },
+        { text: 'מחיקה', style: 'destructive', onPress: () => removeDepartment.mutate() },
+      ],
+    );
   };
 
   return (
@@ -27,13 +67,23 @@ export default function EditDepartmentScreen() {
         style={styles.input}
         placeholder="שם המחלקה"
         value={name}
-        onChangeText={(text) => setName(sanitizeHebrewInput(text))}
+        onChangeText={(text) => {
+          setName(sanitizeHebrewInput(text));
+          setNameError('');
+        }}
       />
-      <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>פעיל</Text>
-        <Switch value={isActive} onValueChange={setIsActive} />
-      </View>
-      <PrimaryButton title="שמירה" onPress={handleSubmit} disabled={!name} />
+      {name.length > 0 && !isNameValid && (
+        <Text style={styles.errorText}>שם המחלקה חייב לכלול אותיות, לא רק מספרים.</Text>
+      )}
+      {nameError.length > 0 && <Text style={styles.errorText}>{nameError}</Text>}
+      <PrimaryButton title="שמירה" onPress={handleSubmit} disabled={!name || !isNameValid} />
+      <Pressable
+        style={styles.deleteButton}
+        onPress={confirmDelete}
+        disabled={removeDepartment.isPending}
+      >
+        <Text style={styles.deleteButtonText}>מחיקת מחלקה</Text>
+      </Pressable>
     </View>
   );
 }
@@ -41,6 +91,7 @@ export default function EditDepartmentScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12 },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
-  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  switchLabel: { fontSize: 16, fontWeight: '600' },
+  errorText: { color: '#c0392b', fontSize: 13, textAlign: 'right' },
+  deleteButton: { paddingVertical: 12, alignItems: 'center' },
+  deleteButtonText: { color: '#c0392b', fontWeight: '600', fontSize: 15 },
 });

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAccessibleBranches } from '../../../../src/api/branches';
@@ -7,10 +7,10 @@ import { fetchDepartments } from '../../../../src/api/departments';
 import { createProvider } from '../../../../src/api/providers';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
-import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
+import { hasLetter, sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import { intersectDepartmentNames } from '../../../../src/utils/departmentIntersection';
-
-const ISRAELI_MOBILE_PATTERN = /^05\d{8}$/;
+import { isValidIsraeliPhone, PHONE_VALIDATION_ERROR } from '../../../../src/utils/phoneValidation';
+import { isConflictError } from '../../../../src/api/errors';
 
 export default function NewProviderScreen() {
   useRequireAdmin();
@@ -19,6 +19,7 @@ export default function NewProviderScreen() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [selectedDepartmentNames, setSelectedDepartmentNames] = useState<Set<string>>(new Set());
+  const [nameError, setNameError] = useState('');
 
   const branchIdsList = Array.from(selectedBranchIds);
   const { data: departmentsByBranch } = useQuery({
@@ -38,7 +39,8 @@ export default function NewProviderScreen() {
     [departmentsByBranch],
   );
 
-  const isPhoneValid = ISRAELI_MOBILE_PATTERN.test(phone);
+  const isPhoneValid = isValidIsraeliPhone(phone);
+  const isNameValid = hasLetter(name);
 
   const toggleBranch = (branchId: string) => {
     setSelectedBranchIds((prev) => {
@@ -67,15 +69,24 @@ export default function NewProviderScreen() {
 
   const handleSubmit = async () => {
     if (!departmentsByBranch) return;
-    await Promise.all(
-      departmentsByBranch.map(({ branchId, departments }) => {
-        const departmentIds = departments
-          .filter((department) => selectedDepartmentNames.has(department.name))
-          .map((department) => department.id);
-        return createProvider(branchId, { name, phone, departmentIds });
-      }),
-    );
-    router.back();
+    setNameError('');
+    try {
+      await Promise.all(
+        departmentsByBranch.map(({ branchId, departments }) => {
+          const departmentIds = departments
+            .filter((department) => selectedDepartmentNames.has(department.name))
+            .map((department) => department.id);
+          return createProvider(branchId, { name, phone, departmentIds });
+        }),
+      );
+      router.back();
+    } catch (err) {
+      if (isConflictError(err)) {
+        setNameError('כבר קיים ספק בשם זה באחד הסניפים שנבחרו. יש לבחור שם אחר.');
+      } else {
+        Alert.alert('שגיאה', 'יצירת הספק נכשלה. יש לנסות שוב.');
+      }
+    }
   };
 
   return (
@@ -99,8 +110,15 @@ export default function NewProviderScreen() {
         style={styles.input}
         placeholder="שם הספק"
         value={name}
-        onChangeText={(text) => setName(sanitizeHebrewInput(text))}
+        onChangeText={(text) => {
+          setName(sanitizeHebrewInput(text));
+          setNameError('');
+        }}
       />
+      {name.length > 0 && !isNameValid && (
+        <Text style={styles.errorText}>שם הספק חייב לכלול אותיות, לא רק מספרים.</Text>
+      )}
+      {nameError.length > 0 && <Text style={styles.errorText}>{nameError}</Text>}
       <TextInput
         style={styles.input}
         placeholder="טלפון וואטסאפ (לדוגמה: 0501234567)"
@@ -109,7 +127,7 @@ export default function NewProviderScreen() {
         onChangeText={setPhone}
       />
       {phone.length > 0 && !isPhoneValid && (
-        <Text style={styles.errorText}>מספר טלפון לא תקין. הפורמט הנדרש: 05XXXXXXXX</Text>
+        <Text style={styles.errorText}>{PHONE_VALIDATION_ERROR}</Text>
       )}
       {selectedBranchIds.size > 0 && (
         <>
@@ -144,6 +162,7 @@ export default function NewProviderScreen() {
         disabled={
           selectedBranchIds.size === 0 ||
           !name ||
+          !isNameValid ||
           !isPhoneValid ||
           !departmentsByBranch ||
           selectedDepartmentNames.size === 0

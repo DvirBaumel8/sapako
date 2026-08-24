@@ -134,6 +134,17 @@ export class OrdersService {
     });
   }
 
+  async remove(orderId: string): Promise<void> {
+    // Deletion is allowed regardless of status (unlike item mutations, which
+    // are DRAFT-only to protect an already-published order's contents) —
+    // this just clears an unwanted history entry. order_items cascades via
+    // its FK, so no explicit item cleanup is needed here.
+    const result = await this.orderRepo.delete({ id: orderId });
+    if (result.affected === 0) {
+      throw new NotFoundException('Order not found');
+    }
+  }
+
   async publish(orderId: string): Promise<Order> {
     const order = await this.orderRepo.findOne({ where: { id: orderId } });
     if (!order) {

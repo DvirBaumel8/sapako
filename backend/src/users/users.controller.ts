@@ -40,6 +40,11 @@ export class UsersController {
     return this.usersService.toSafeUser(user);
   }
 
+  @Delete(':id')
+  remove(@Param('id') id: string): Promise<void> {
+    return this.usersService.remove(id);
+  }
+
   @Post(':id/provider-access')
   async grantAccess(
     @Param('id') userId: string,

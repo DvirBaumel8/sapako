@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { In } from 'typeorm';
 import { DepartmentsService } from './departments.service';
 import { Department } from './department.entity';
@@ -13,6 +13,7 @@ describe('DepartmentsService', () => {
     save: jest.fn(),
     find: jest.fn(),
     findOneBy: jest.fn(),
+    delete: jest.fn(),
   };
   const mockBranchesService = {
     findById: jest.fn(),
@@ -59,6 +60,21 @@ describe('DepartmentsService', () => {
     expect(mockRepo.save).not.toHaveBeenCalled();
   });
 
+  it('rejects with ConflictException when a department with the same name already exists in the branch', async () => {
+    mockBranchesService.findById.mockResolvedValue({ id: 'b1' });
+    mockRepo.findOneBy.mockResolvedValue({
+      id: 'existing',
+      branchId: 'b1',
+      name: 'מוצרי חלב',
+    });
+
+    await expect(
+      service.create('b1', { name: 'מוצרי חלב' }),
+    ).rejects.toThrow(ConflictException);
+
+    expect(mockRepo.save).not.toHaveBeenCalled();
+  });
+
   it('lists all departments (active and inactive) for a branch', async () => {
     mockRepo.find.mockResolvedValue([
       { id: 'd1', name: 'מוצרי חלב', isActive: true },
@@ -98,12 +114,13 @@ describe('DepartmentsService', () => {
   });
 
   it('updates a department and persists the merged fields', async () => {
-    mockRepo.findOneBy.mockResolvedValue({
-      id: 'd1',
-      branchId: 'b1',
-      name: 'מוצרי חלב',
-      isActive: true,
-    });
+    mockRepo.findOneBy.mockImplementation((where) =>
+      Promise.resolve(
+        'id' in where
+          ? { id: 'd1', branchId: 'b1', name: 'מוצרי חלב', isActive: true }
+          : null,
+      ),
+    );
     mockRepo.save.mockImplementation((data) => Promise.resolve(data));
 
     const updated = await service.update('d1', {
@@ -119,5 +136,54 @@ describe('DepartmentsService', () => {
     expect(mockRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'מוצרי חלב ומעדנים', isActive: false }),
     );
+  });
+
+  it('allows updating a department without changing its name (no self-conflict)', async () => {
+    mockRepo.findOneBy.mockResolvedValue({
+      id: 'd1',
+      branchId: 'b1',
+      name: 'מוצרי חלב',
+      isActive: true,
+    });
+    mockRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+    await service.update('d1', { name: 'מוצרי חלב', isActive: false });
+
+    expect(mockRepo.findOneBy).toHaveBeenCalledTimes(1); // only the findById lookup
+    expect(mockRepo.save).toHaveBeenCalled();
+  });
+
+  it('rejects update with ConflictException when renaming to a name already used in the branch', async () => {
+    mockRepo.findOneBy.mockImplementation((where) =>
+      Promise.resolve(
+        'id' in where
+          ? { id: 'd1', branchId: 'b1', name: 'מוצרי חלב', isActive: true }
+          : { id: 'd2', branchId: 'b1', name: 'קפואים' },
+      ),
+    );
+
+    await expect(
+      service.update('d1', { name: 'קפואים' }),
+    ).rejects.toThrow(ConflictException);
+
+    expect(mockRepo.save).not.toHaveBeenCalled();
+  });
+
+  describe('remove', () => {
+    it('deletes a department by id', async () => {
+      mockRepo.delete.mockResolvedValue({ affected: 1 });
+
+      await service.remove('d1');
+
+      expect(mockRepo.delete).toHaveBeenCalledWith({ id: 'd1' });
+    });
+
+    it('rejects removing a department that does not exist', async () => {
+      mockRepo.delete.mockResolvedValue({ affected: 0 });
+
+      await expect(service.remove('missing')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
   });
 });

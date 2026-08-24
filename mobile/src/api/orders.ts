@@ -36,3 +36,7 @@ export async function fetchOrdersForBranch(branchId: string): Promise<Order[]> {
   const response = await apiClient.get<Order[]>(`/branches/${branchId}/orders`);
   return response.data;
 }
+
+export async function deleteOrder(orderId: string): Promise<void> {
+  await apiClient.delete(`/orders/${orderId}`);
+}

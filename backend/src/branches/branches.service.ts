@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Branch } from './branch.entity';
@@ -9,7 +13,11 @@ export class BranchesService {
     @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
   ) {}
 
-  create(input: { name: string; address?: string }): Promise<Branch> {
+  async create(input: { name: string; address?: string }): Promise<Branch> {
+    const existing = await this.branchesRepo.findOneBy({ name: input.name });
+    if (existing) {
+      throw new ConflictException('A branch with this name already exists');
+    }
     const entity = this.branchesRepo.create(input);
     return this.branchesRepo.save(entity);
   }

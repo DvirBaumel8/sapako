@@ -7,11 +7,13 @@ import {
   ManyToMany,
   JoinColumn,
   JoinTable,
+  Unique,
 } from 'typeorm';
 import { Branch } from '../branches/branch.entity';
 import { Department } from '../departments/department.entity';
 
 @Entity('providers')
+@Unique(['branchId', 'name'])
 export class Provider {
   @PrimaryGeneratedColumn('uuid')
   id: string;

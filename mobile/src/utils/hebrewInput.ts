@@ -7,3 +7,11 @@ export function sanitizeHebrewInput(text: string): string {
     .filter((char) => ALLOWED_CHAR.test(char))
     .join('');
 }
+
+const LETTER = /[א-תa-zA-Z]/;
+
+// A name made up of only digits/punctuation (e.g. a phone number pasted into
+// the wrong field) isn't a real name.
+export function hasLetter(text: string): boolean {
+  return LETTER.test(text);
+}

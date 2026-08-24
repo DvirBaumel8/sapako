@@ -13,6 +13,7 @@ describe('ProductsService', () => {
     save: jest.fn(),
     find: jest.fn(),
     findOneBy: jest.fn(),
+    delete: jest.fn(),
   };
   const mockProvidersService = {
     findById: jest.fn(),
@@ -107,6 +108,24 @@ describe('ProductsService', () => {
     expect(mockRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Cherry Tomatoes', isActive: false }),
     );
+  });
+
+  describe('remove', () => {
+    it('deletes a product by id', async () => {
+      mockRepo.delete.mockResolvedValue({ affected: 1 });
+
+      await service.remove('pr1');
+
+      expect(mockRepo.delete).toHaveBeenCalledWith({ id: 'pr1' });
+    });
+
+    it('rejects removing a product that does not exist', async () => {
+      mockRepo.delete.mockResolvedValue({ affected: 0 });
+
+      await expect(service.remove('missing')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
   });
 
   it('lists active branch products across accessible providers when ALL', async () => {

@@ -21,6 +21,28 @@ function readCsv<T>(path: string): T[] {
   }) as T[];
 }
 
+const PHONE_PATTERN = /05\d{8}|07[2-9]\d{7}/;
+
+/**
+ * The source column mixes an agent name with the phone number in no fixed
+ * order (e.g. "גל 0502290989", "0543319864 - רוני"). Extract just the phone
+ * number and drop the name. Returns null when no unambiguous match is found
+ * (e.g. a stray digit touching the match suggests a typo in the source data)
+ * so callers can flag the row for manual review instead of writing bad data.
+ */
+export function extractPhoneNumber(raw: string): string | null {
+  const match = raw.match(PHONE_PATTERN);
+  if (!match || match.index === undefined) return null;
+
+  const before = raw[match.index - 1];
+  const after = raw[match.index + match[0].length];
+  if ((before && /\d/.test(before)) || (after && /\d/.test(after))) {
+    return null;
+  }
+
+  return match[0];
+}
+
 async function main() {
   const rows = readCsv<SupplierPhoneRow>(SUPPLIERS_CSV).filter(
     (row) => row['שם הסוכן + טלפון']?.trim(),
@@ -35,10 +57,18 @@ async function main() {
 
     let updated = 0;
     let notFound = 0;
+    let skipped = 0;
     for (const row of rows) {
       const name = row['שם ספק']?.trim();
-      const phone = row['שם הסוכן + טלפון']?.trim();
-      if (!name || !phone) continue;
+      const rawPhone = row['שם הסוכן + טלפון']?.trim();
+      if (!name || !rawPhone) continue;
+
+      const phone = extractPhoneNumber(rawPhone);
+      if (!phone) {
+        skipped++;
+        console.log(`Could not extract a phone number for "${name}" from "${rawPhone}"`);
+        continue;
+      }
 
       const result = await client.query('UPDATE providers SET phone = $1 WHERE name = $2', [
         phone,
@@ -52,7 +82,9 @@ async function main() {
       }
     }
 
-    console.log(`Updated ${updated} providers, ${notFound} names had no match.`);
+    console.log(
+      `Updated ${updated} providers, ${notFound} names had no match, ${skipped} skipped (unparseable phone).`,
+    );
     await client.query('COMMIT');
     console.log('Update committed successfully.');
   } catch (err) {
@@ -64,7 +96,9 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

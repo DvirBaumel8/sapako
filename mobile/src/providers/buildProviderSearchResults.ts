@@ -1,4 +1,5 @@
 import type { Provider, ProviderProductSummary } from '../api/types';
+import { matchScore, tokenize } from '../utils/fuzzySearch';
 
 export interface ProviderSearchResult {
   provider: Provider;
@@ -10,20 +11,31 @@ export function buildProviderSearchResults(
   products: ProviderProductSummary[],
   query: string,
 ): ProviderSearchResult[] {
-  const trimmedQuery = query.trim();
-  if (!trimmedQuery) {
+  const queryTokens = tokenize(query);
+  if (queryTokens.length === 0) {
     return providers.map((provider) => ({ provider, matchingProducts: [] }));
   }
 
-  const results: ProviderSearchResult[] = [];
+  const scored: (ProviderSearchResult & { score: number })[] = [];
   for (const provider of providers) {
-    const matchingProducts = products.filter(
-      (product) => product.providerId === provider.id && product.name.includes(trimmedQuery),
-    );
-    const providerNameMatches = provider.name.includes(trimmedQuery);
-    if (providerNameMatches || matchingProducts.length > 0) {
-      results.push({ provider, matchingProducts });
-    }
+    const scoredProducts = products
+      .filter((product) => product.providerId === provider.id)
+      .map((product) => ({ product, score: matchScore(product.name, queryTokens) }))
+      .filter((entry): entry is { product: ProviderProductSummary; score: number } => entry.score !== null)
+      .sort((a, b) => b.score - a.score);
+
+    const providerScore = matchScore(provider.name, queryTokens);
+    const bestProductScore = scoredProducts[0]?.score;
+    if (providerScore === null && bestProductScore === undefined) continue;
+
+    scored.push({
+      provider,
+      matchingProducts: scoredProducts.map((entry) => entry.product),
+      score: Math.max(providerScore ?? -Infinity, bestProductScore ?? -Infinity),
+    });
   }
-  return results;
+
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .map(({ provider, matchingProducts }) => ({ provider, matchingProducts }));
 }

@@ -67,4 +67,14 @@ export class ProductsService {
     Object.assign(product, input);
     return this.productsRepo.save(product);
   }
+
+  async remove(id: string): Promise<void> {
+    // order_items.productId is SET NULL on delete, so past orders keep
+    // their productNameSnapshot/unitType and just lose the live product
+    // link — order history is unaffected.
+    const result = await this.productsRepo.delete({ id });
+    if (result.affected === 0) {
+      throw new NotFoundException('Product not found');
+    }
+  }
 }

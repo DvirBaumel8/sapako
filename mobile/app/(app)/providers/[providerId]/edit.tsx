@@ -1,20 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { fetchAllProvidersForBranch, updateProvider } from '../../../../src/api/providers';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { deleteProvider, fetchAllProvidersForBranch, updateProvider } from '../../../../src/api/providers';
 import { fetchDepartments } from '../../../../src/api/departments';
 import { useBranch } from '../../../../src/branch/BranchContext';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
-import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
-
-const ISRAELI_MOBILE_PATTERN = /^05\d{8}$/;
+import { hasLetter, sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
+import { isValidIsraeliPhone, PHONE_VALIDATION_ERROR } from '../../../../src/utils/phoneValidation';
+import { isConflictError } from '../../../../src/api/errors';
 
 export default function EditProviderScreen() {
   useRequireAdmin();
   const { providerId } = useLocalSearchParams<{ providerId: string }>();
   const { selectedBranch } = useBranch();
+  const queryClient = useQueryClient();
   const { data: providers } = useQuery({
     queryKey: ['providers', selectedBranch!.id, 'all'],
     queryFn: () => fetchAllProvidersForBranch(selectedBranch!.id),
@@ -27,21 +29,21 @@ export default function EditProviderScreen() {
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [isActive, setIsActive] = useState(true);
   const [selectedDepartmentIds, setSelectedDepartmentIds] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
+  const [nameError, setNameError] = useState('');
 
   useEffect(() => {
     if (provider && !isInitialized) {
       setName(provider.name);
       setPhone(provider.phone);
-      setIsActive(provider.isActive);
       setSelectedDepartmentIds(new Set(provider.departments.map((department) => department.id)));
       setIsInitialized(true);
     }
   }, [provider, isInitialized]);
 
-  const isPhoneValid = ISRAELI_MOBILE_PATTERN.test(phone);
+  const isPhoneValid = isValidIsraeliPhone(phone);
+  const isNameValid = hasLetter(name);
   const activeDepartments = departments?.filter((department) => department.isActive);
 
   const toggleDepartment = (departmentId: string) => {
@@ -57,13 +59,47 @@ export default function EditProviderScreen() {
   };
 
   const handleSubmit = async () => {
-    await updateProvider(providerId, {
-      name,
-      phone,
-      isActive,
-      departmentIds: Array.from(selectedDepartmentIds),
-    });
-    router.back();
+    setNameError('');
+    try {
+      await updateProvider(providerId, {
+        name,
+        phone,
+        departmentIds: Array.from(selectedDepartmentIds),
+      });
+      // Without this, react-query keeps serving the pre-edit cached provider
+      // list, so re-opening this screen right after saving shows the old
+      // department selection instead of what was just saved.
+      await queryClient.invalidateQueries({ queryKey: ['providers', selectedBranch!.id] });
+      router.back();
+    } catch (err) {
+      if (isConflictError(err)) {
+        setNameError('כבר קיים ספק בשם זה בסניף. יש לבחור שם אחר.');
+      } else {
+        Alert.alert('שגיאה', 'שמירת הספק נכשלה. יש לנסות שוב.');
+      }
+    }
+  };
+
+  const removeProvider = useMutation({
+    mutationFn: () => deleteProvider(providerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['providers', selectedBranch!.id] });
+      router.back();
+    },
+    onError: () => {
+      Alert.alert('שגיאה', 'מחיקת הספק נכשלה. יש לנסות שוב.');
+    },
+  });
+
+  const confirmDelete = () => {
+    Alert.alert(
+      'מחיקת ספק',
+      `למחוק לצמיתות את "${provider?.name}"? פעולה זו תמחק גם את כל המוצרים וההיסטוריה של ההזמנות שלו. לא ניתן לשחזר פעולה זו.`,
+      [
+        { text: 'ביטול', style: 'cancel' },
+        { text: 'מחיקה לצמיתות', style: 'destructive', onPress: () => removeProvider.mutate() },
+      ],
+    );
   };
 
   if (!isInitialized) {
@@ -80,8 +116,15 @@ export default function EditProviderScreen() {
         style={styles.input}
         placeholder="שם הספק"
         value={name}
-        onChangeText={(text) => setName(sanitizeHebrewInput(text))}
+        onChangeText={(text) => {
+          setName(sanitizeHebrewInput(text));
+          setNameError('');
+        }}
       />
+      {name.length > 0 && !isNameValid && (
+        <Text style={styles.errorText}>שם הספק חייב לכלול אותיות, לא רק מספרים.</Text>
+      )}
+      {nameError.length > 0 && <Text style={styles.errorText}>{nameError}</Text>}
       <TextInput
         style={styles.input}
         placeholder="טלפון וואטסאפ (לדוגמה: 0501234567)"
@@ -90,12 +133,8 @@ export default function EditProviderScreen() {
         onChangeText={setPhone}
       />
       {phone.length > 0 && !isPhoneValid && (
-        <Text style={styles.errorText}>מספר טלפון לא תקין. הפורמט הנדרש: 05XXXXXXXX</Text>
+        <Text style={styles.errorText}>{PHONE_VALIDATION_ERROR}</Text>
       )}
-      <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>פעיל</Text>
-        <Switch value={isActive} onValueChange={setIsActive} />
-      </View>
       <Text style={styles.label}>מחלקות</Text>
       <FlatList
         horizontal
@@ -117,8 +156,11 @@ export default function EditProviderScreen() {
       <PrimaryButton
         title="שמירה"
         onPress={handleSubmit}
-        disabled={!name || !isPhoneValid || selectedDepartmentIds.size === 0}
+        disabled={!name || !isNameValid || !isPhoneValid || selectedDepartmentIds.size === 0}
       />
+      <Pressable style={styles.deleteButton} onPress={confirmDelete} disabled={removeProvider.isPending}>
+        <Text style={styles.deleteButtonText}>מחיקת ספק לצמיתות</Text>
+      </Pressable>
     </View>
   );
 }
@@ -128,8 +170,6 @@ const styles = StyleSheet.create({
   statusText: { textAlign: 'center', marginTop: 12, color: '#666' },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
   errorText: { color: '#c0392b', fontSize: 13, textAlign: 'right' },
-  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  switchLabel: { fontSize: 16, fontWeight: '600' },
   label: { fontWeight: '600' },
   departmentList: { flexGrow: 0 },
   departmentChip: {
@@ -141,4 +181,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   departmentChipSelected: { backgroundColor: '#dbeafe', borderColor: '#2563eb' },
+  deleteButton: { paddingVertical: 12, alignItems: 'center' },
+  deleteButtonText: { color: '#c0392b', fontWeight: '600', fontSize: 15 },
 });

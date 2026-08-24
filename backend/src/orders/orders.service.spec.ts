@@ -38,6 +38,7 @@ describe('OrdersService', () => {
     findOne: jest.fn(),
     find: jest.fn(),
     update: jest.fn(),
+    delete: jest.fn(),
     // Real TypeORM's `manager.transaction(work)` opens a transaction and
     // invokes `work(transactionalEntityManager)`. Our fake just invokes the
     // callback directly with the fake `manager` above, so service code that
@@ -322,6 +323,24 @@ describe('OrdersService', () => {
         ConflictException,
       );
       expect(manager.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('remove', () => {
+    it('deletes an order regardless of status', async () => {
+      orderRepo.delete.mockResolvedValue({ affected: 1 });
+
+      await service.remove('o1');
+
+      expect(orderRepo.delete).toHaveBeenCalledWith({ id: 'o1' });
+    });
+
+    it('rejects removing an order that does not exist', async () => {
+      orderRepo.delete.mockResolvedValue({ affected: 0 });
+
+      await expect(service.remove('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

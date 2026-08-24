@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -74,5 +75,11 @@ export class ProductAdminController {
     @Body() dto: UpdateProductDto,
   ): Promise<Product> {
     return this.productsService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(Role.ADMIN)
+  remove(@Param('id') id: string): Promise<void> {
+    return this.productsService.remove(id);
   }
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAccessibleBranches } from '../../../src/api/branches';
@@ -7,7 +7,8 @@ import { createDepartment } from '../../../src/api/departments';
 import { PrimaryButton } from '../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../src/auth/useRequireAdmin';
 import { useBranch } from '../../../src/branch/BranchContext';
-import { sanitizeHebrewInput } from '../../../src/utils/hebrewInput';
+import { hasLetter, sanitizeHebrewInput } from '../../../src/utils/hebrewInput';
+import { isConflictError } from '../../../src/api/errors';
 
 export default function NewDepartmentScreen() {
   useRequireAdmin();
@@ -17,6 +18,8 @@ export default function NewDepartmentScreen() {
     new Set(selectedBranch ? [selectedBranch.id] : []),
   );
   const [name, setName] = useState('');
+  const [nameError, setNameError] = useState('');
+  const isNameValid = hasLetter(name);
 
   const toggleBranch = (branchId: string) => {
     setSelectedBranchIds((prev) => {
@@ -31,10 +34,19 @@ export default function NewDepartmentScreen() {
   };
 
   const handleSubmit = async () => {
-    await Promise.all(
-      Array.from(selectedBranchIds).map((branchId) => createDepartment(branchId, { name })),
-    );
-    router.back();
+    setNameError('');
+    try {
+      await Promise.all(
+        Array.from(selectedBranchIds).map((branchId) => createDepartment(branchId, { name })),
+      );
+      router.back();
+    } catch (err) {
+      if (isConflictError(err)) {
+        setNameError('כבר קיימת מחלקה בשם זה באחד הסניפים שנבחרו. יש לבחור שם אחר.');
+      } else {
+        Alert.alert('שגיאה', 'יצירת המחלקה נכשלה. יש לנסות שוב.');
+      }
+    }
   };
 
   return (
@@ -58,12 +70,19 @@ export default function NewDepartmentScreen() {
         style={styles.input}
         placeholder="שם המחלקה"
         value={name}
-        onChangeText={(text) => setName(sanitizeHebrewInput(text))}
+        onChangeText={(text) => {
+          setName(sanitizeHebrewInput(text));
+          setNameError('');
+        }}
       />
+      {name.length > 0 && !isNameValid && (
+        <Text style={styles.errorText}>שם המחלקה חייב לכלול אותיות, לא רק מספרים.</Text>
+      )}
+      {nameError.length > 0 && <Text style={styles.errorText}>{nameError}</Text>}
       <PrimaryButton
         title="יצירת מחלקה"
         onPress={handleSubmit}
-        disabled={selectedBranchIds.size === 0 || !name}
+        disabled={selectedBranchIds.size === 0 || !name || !isNameValid}
       />
     </View>
   );
@@ -83,4 +102,5 @@ const styles = StyleSheet.create({
   },
   branchChipSelected: { backgroundColor: '#dbeafe', borderColor: '#2563eb' },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
+  errorText: { color: '#c0392b', fontSize: 13, textAlign: 'right' },
 });

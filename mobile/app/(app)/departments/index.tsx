@@ -55,7 +55,6 @@ export default function DepartmentsScreen() {
                     params: {
                       departmentId: item.id,
                       departmentName: item.name,
-                      departmentIsActive: String(item.isActive),
                     },
                   })
                 }

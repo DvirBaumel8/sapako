@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchProductsForProvider } from '../../../../src/api/products';
 import { createDraftOrder, addOrderItem, updateOrderItemQuantity, removeOrderItem, fetchOrdersForBranch } from '../../../../src/api/orders';
 import { useBranch } from '../../../../src/branch/BranchContext';
@@ -9,7 +9,9 @@ import { useAuth } from '../../../../src/auth/AuthContext';
 import type { Order, OrderItem, Product } from '../../../../src/api/types';
 import { PublishButton } from '../../../../src/order/PublishButton';
 import { BarcodeScannerModal } from '../../../../src/barcode/BarcodeScannerModal';
+import { AddUnknownProductModal } from '../../../../src/order/AddUnknownProductModal';
 import { findResumableDraft } from '../../../../src/order/findResumableDraft';
+import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 
 export default function OrderBuilderScreen() {
   const { providerId, providerName, sourceOrder, highlightProductId } = useLocalSearchParams<{
@@ -20,9 +22,11 @@ export default function OrderBuilderScreen() {
   }>();
   const { selectedBranch } = useBranch();
   const { role, userId } = useAuth();
+  const queryClient = useQueryClient();
   const [order, setOrder] = useState<Order | null>(null);
   const [itemsByProductId, setItemsByProductId] = useState<Record<string, OrderItem>>({});
   const [isScannerVisible, setIsScannerVisible] = useState(false);
+  const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const orderCreationRef = useRef<Promise<Order> | null>(null);
   const listRef = useRef<FlatList<Product>>(null);
@@ -42,9 +46,7 @@ export default function OrderBuilderScreen() {
 
   const filteredProducts = useMemo(() => {
     if (!products) return products;
-    const query = search.trim();
-    if (!query) return products;
-    return products.filter((product) => product.name.includes(query));
+    return fuzzySearch(products, search, (product) => product.name);
   }, [products, search]);
 
   useEffect(() => {
@@ -154,11 +156,28 @@ export default function OrderBuilderScreen() {
   const handleBarcodeScanned = (barcode: string) => {
     const match = products?.find((product) => product.barcode === barcode);
     if (!match) {
-      Alert.alert('לא נמצא מוצר תואם', `לא נמצא מוצר עם ברקוד ${barcode} בקטלוג של הספק הזה.`);
+      if (role !== 'ADMIN') {
+        Alert.alert('לא נמצא מוצר תואם', `לא נמצא מוצר עם ברקוד ${barcode} בקטלוג של הספק הזה.`);
+        return;
+      }
+      Alert.alert(
+        'לא נמצא מוצר תואם',
+        `לא נמצא מוצר עם ברקוד ${barcode} בקטלוג של הספק הזה.`,
+        [
+          { text: 'ביטול', style: 'cancel' },
+          { text: 'הוספת מוצר חדש', onPress: () => setUnknownBarcode(barcode) },
+        ],
+      );
       return;
     }
     const currentQuantity = itemsByProductId[match.id]?.quantity ?? 0;
     setQuantity(match, currentQuantity + 1);
+  };
+
+  const handleUnknownProductCreated = (product: Product) => {
+    setUnknownBarcode(null);
+    queryClient.invalidateQueries({ queryKey: ['products', providerId] });
+    setQuantity(product, 1);
   };
 
   return (
@@ -195,6 +214,15 @@ export default function OrderBuilderScreen() {
         onScanned={handleBarcodeScanned}
         onClose={() => setIsScannerVisible(false)}
       />
+      {unknownBarcode && (
+        <AddUnknownProductModal
+          visible
+          providerId={providerId}
+          barcode={unknownBarcode}
+          onClose={() => setUnknownBarcode(null)}
+          onCreated={handleUnknownProductCreated}
+        />
+      )}
       <FlatList
         ref={listRef}
         data={filteredProducts}
@@ -213,7 +241,28 @@ export default function OrderBuilderScreen() {
           const isHighlighted = product.id === highlightProductId;
           return (
             <View style={[styles.card, isHighlighted && styles.cardHighlighted]}>
-              <Text style={styles.productName}>{product.name}</Text>
+              <View style={styles.productNameRow}>
+                <Text style={styles.productName}>{product.name}</Text>
+                {role === 'ADMIN' && (
+                  <Pressable
+                    hitSlop={8}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/products/[productId]/edit',
+                        params: {
+                          productId: product.id,
+                          productName: product.name,
+                          unitType: product.unitType,
+                          barcode: product.barcode ?? '',
+                          providerId,
+                        },
+                      })
+                    }
+                  >
+                    <Text style={styles.productEditIcon}>✎</Text>
+                  </Pressable>
+                )}
+              </View>
               <View style={styles.rowBottom}>
                 <View style={styles.unitBadge}>
                   <Text style={styles.unitBadgeText}>{product.unitType}</Text>
@@ -290,6 +339,8 @@ const styles = StyleSheet.create({
     borderColor: '#2563eb',
   },
   productName: { fontSize: 15, fontWeight: '600', textAlign: 'right', color: '#1a1a1a' },
+  productNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  productEditIcon: { fontSize: 16, color: '#2563eb', paddingHorizontal: 4 },
   rowBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   unitBadge: {
     backgroundColor: '#2563eb',

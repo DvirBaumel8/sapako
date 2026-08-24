@@ -65,6 +65,12 @@ export class OrdersController {
   publish(@Param('id') orderId: string): Promise<Order> {
     return this.ordersService.publish(orderId);
   }
+
+  @Delete(':id')
+  @UseGuards(OrderAccessGuard)
+  remove(@Param('id') orderId: string): Promise<void> {
+    return this.ordersService.remove(orderId);
+  }
 }
 
 @Controller('branches/:branchId/orders')

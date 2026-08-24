@@ -1,5 +1,9 @@
 // backend/src/providers/providers.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, In, Repository } from 'typeorm';
 import { Provider } from './provider.entity';
@@ -24,6 +28,13 @@ export class ProvidersService {
     // branchId escapes as an unhandled FK-violation 500 instead of a clean
     // 404 (same failure mode already fixed for grantAccess).
     await this.branchesService.findById(branchId);
+    const existing = await this.providersRepo.findOneBy({
+      branchId,
+      name: input.name,
+    });
+    if (existing) {
+      throw new ConflictException('A provider with this name already exists in this branch');
+    }
     const { departmentIds, ...rest } = input;
     const departments = await this.resolveDepartments(branchId, departmentIds);
     const entity = this.providersRepo.create({
@@ -79,6 +90,15 @@ export class ProvidersService {
     },
   ): Promise<Provider> {
     const provider = await this.findById(id);
+    if (input.name && input.name !== provider.name) {
+      const existing = await this.providersRepo.findOneBy({
+        branchId: provider.branchId,
+        name: input.name,
+      });
+      if (existing) {
+        throw new ConflictException('A provider with this name already exists in this branch');
+      }
+    }
     const { departmentIds, ...rest } = input;
     Object.assign(provider, rest);
     if (departmentIds) {
@@ -88,6 +108,17 @@ export class ProvidersService {
       );
     }
     return this.providersRepo.save(provider);
+  }
+
+  async remove(id: string): Promise<void> {
+    // products, orders, and user_provider_access all cascade on providerId —
+    // this is a genuine hard delete of the provider's full history, not the
+    // soft `isActive` deactivation. Callers should steer admins toward
+    // deactivating instead unless they specifically want that history gone.
+    const result = await this.providersRepo.delete({ id });
+    if (result.affected === 0) {
+      throw new NotFoundException('Provider not found');
+    }
   }
 
   // Loads the requested departments and verifies every one exists and
