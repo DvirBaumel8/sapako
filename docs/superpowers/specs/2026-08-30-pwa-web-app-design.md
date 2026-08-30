@@ -270,7 +270,10 @@ alert stays, because it is still reachable.
   `react-native-web`'s smaller default) and `quantityInput` in
   `order.tsx` is explicitly 15px — so today every text field tap would zoom.
   Fix is a 16px floor on all text inputs. **Not** a `maximum-scale=1`
-  viewport lock, which would break pinch-zoom accessibility app-wide.
+  viewport lock, which would break pinch-zoom accessibility app-wide. The
+  floor must out-specify `react-native-web`, which styles every `TextInput`
+  through a generated class at 14px: a bare `input` selector loses on
+  specificity and the field still zooms.
 - **Overscroll.** `overscroll-behavior: none` on the root, to remove the
   rubber-band and pull-to-refresh gestures that read as broken in a
   standalone app.

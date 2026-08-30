@@ -42,8 +42,15 @@ const head = `${MARKER}
       /* Mobile Safari zooms the viewport whenever a focused input renders
          below 16px, and never zooms back out. A font-size floor is the fix;
          a maximum-scale viewport lock would also work but would disable
-         pinch-zoom for everyone, which is an accessibility regression. */
-      input, textarea, select { font-size: 16px; }
+         pinch-zoom for everyone, which is an accessibility regression.
+         The :not() is load-bearing, not decoration: react-native-web styles
+         every TextInput through a generated class (specificity 0,1,0) that
+         sets 14px, so a bare element selector (0,0,1) loses and the field
+         still zooms. Matching an attribute inside :not() lifts this to
+         (0,1,1) so it wins on specificity rather than on source order. */
+      input:not([type='hidden']),
+      textarea:not([disabled='__never']),
+      select:not([disabled='__never']) { font-size: 16px; }
     </style>
     <script>
       if ('serviceWorker' in navigator) {
