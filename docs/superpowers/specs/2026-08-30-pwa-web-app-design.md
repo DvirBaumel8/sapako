@@ -293,6 +293,27 @@ eviction, but a plain Safari tab is not. A user who bookmarks the URL
 instead of installing it will be silently logged out after a week of
 inactivity. "Install it, don't bookmark it" is functional advice.
 
+### 4.7 Persisting the selected branch
+
+`BranchContext` held the selected branch in `useState` with no persistence.
+On native that was nearly invisible: the app stays resident between uses, so
+the branch is chosen once per launch and launches are rare. An installed web
+app is a fresh page load *every* time it is opened, which turned this into a
+mandatory tap on every launch, made any refresh lose the user's place, and
+made deep links unusable — a cold link to an order screen always bounced to
+branch selection.
+
+Two changes, both driven by the web target:
+
+- `src/branch/branchStorage.ts` persists the selection, mirroring
+  `tokenStorage`'s platform split so no second storage dependency is
+  introduced. A corrupt or stale stored value resolves to `null` rather than
+  throwing, since storage survives deploys and must never brick a launch.
+  The gate in `app/(app)/_layout.tsx` waits for the restore before deciding,
+  or the app would flash branch selection and discard the opened route.
+- `app/(app)/select-branch.tsx` selects the branch automatically when the
+  user has exactly one. Presenting a list of one is a tap that asks nothing.
+
 ## 5. Backend Changes
 
 Only one, in `backend/src/main.ts`:

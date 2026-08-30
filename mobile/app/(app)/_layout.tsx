@@ -3,8 +3,15 @@ import { useAuth } from '../../src/auth/AuthContext';
 import { BranchProvider, useBranch } from '../../src/branch/BranchContext';
 
 function Gate() {
-  const { selectedBranch } = useBranch();
+  const { selectedBranch, isRestoring } = useBranch();
   const pathname = usePathname();
+  // Wait for the persisted branch to be read back before deciding anything.
+  // Without this the app redirects to /select-branch on every launch and only
+  // restores the branch a tick later — a visible flash, and it discards the
+  // route the user actually opened.
+  if (isRestoring) {
+    return null;
+  }
   // Gate wraps every route in this group, including /select-branch itself —
   // without this exception it redirects to /select-branch even while already
   // there, looping forever instead of letting that screen render.
