@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAccessibleBranches } from '../../../src/api/branches';
@@ -9,9 +9,11 @@ import { useRequireAdmin } from '../../../src/auth/useRequireAdmin';
 import { useBranch } from '../../../src/branch/BranchContext';
 import { hasLetter, sanitizeHebrewInput } from '../../../src/utils/hebrewInput';
 import { isConflictError } from '../../../src/api/errors';
+import { useAlert } from '../../../src/ui/AlertProvider';
 
 export default function NewDepartmentScreen() {
   useRequireAdmin();
+  const showAlert = useAlert();
   const { selectedBranch } = useBranch();
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: fetchAccessibleBranches });
   const [selectedBranchIds, setSelectedBranchIds] = useState<Set<string>>(
@@ -44,7 +46,7 @@ export default function NewDepartmentScreen() {
       if (isConflictError(err)) {
         setNameError('כבר קיימת מחלקה בשם זה באחד הסניפים שנבחרו. יש לבחור שם אחר.');
       } else {
-        Alert.alert('שגיאה', 'יצירת המחלקה נכשלה. יש לנסות שוב.');
+        showAlert({ title: 'שגיאה', message: 'יצירת המחלקה נכשלה. יש לנסות שוב.' });
       }
     }
   };

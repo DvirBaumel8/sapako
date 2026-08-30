@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Platform, Pressable, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, Text } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { publishOrder } from '../api/orders';
 import { buildOrderMessage } from './buildOrderMessage';
 import { toWhatsAppPhoneNumber } from '../utils/whatsappPhone';
+import { useAlert } from '../ui/AlertProvider';
 import type { Order, OrderItem } from '../api/types';
 
 interface PublishButtonProps {
@@ -13,6 +14,7 @@ interface PublishButtonProps {
 }
 
 export function PublishButton({ order, items }: PublishButtonProps) {
+  const showAlert = useAlert();
   const [isPublishing, setIsPublishing] = useState(false);
   // The root layout's SafeAreaView only reserves the top edge, so nothing
   // pads content away from Android's gesture/nav bar at the bottom — this
@@ -36,24 +38,24 @@ export function PublishButton({ order, items }: PublishButtonProps) {
       const url = `https://wa.me/${phoneDigitsOnly}?text=${encodeURIComponent(message)}`;
       const canOpen = await Linking.canOpenURL(url);
       if (!canOpen) {
-        Alert.alert(
-          'לא ניתן לפתוח את WhatsApp',
-          'ודאו ש-WhatsApp מותקן במכשיר ונסו שוב. ההזמנה נשמרה כטיוטה.',
-        );
+        showAlert({
+          title: 'לא ניתן לפתוח את WhatsApp',
+          message: 'ודאו ש-WhatsApp מותקן במכשיר ונסו שוב. ההזמנה נשמרה כטיוטה.',
+        });
         return;
       }
       await Linking.openURL(url);
       try {
         await publishOrder(order.id);
       } catch {
-        Alert.alert(
-          'ההודעה נשלחה, אך סימון ההזמנה נכשל',
-          'ההודעה כבר נפתחה ב-WhatsApp. אם ההזמנה עדיין מופיעה כטיוטה, אין צורך לשלוח שוב — יש לפנות לתמיכה אם הבעיה חוזרת.',
-        );
+        showAlert({
+          title: 'ההודעה נשלחה, אך סימון ההזמנה נכשל',
+          message: 'ההודעה כבר נפתחה ב-WhatsApp. אם ההזמנה עדיין מופיעה כטיוטה, אין צורך לשלוח שוב — יש לפנות לתמיכה אם הבעיה חוזרת.',
+        });
       }
       router.replace('/');
     } catch {
-      Alert.alert('לא ניתן היה לפתוח את WhatsApp', 'ההזמנה נשמרה כטיוטה. ניתן לנסות שוב.');
+      showAlert({ title: 'לא ניתן היה לפתוח את WhatsApp', message: 'ההזמנה נשמרה כטיוטה. ניתן לנסות שוב.' });
     } finally {
       setIsPublishing(false);
     }

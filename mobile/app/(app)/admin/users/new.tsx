@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { createUser } from '../../../../src/api/users';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import { isConflictError } from '../../../../src/api/errors';
+import { useAlert } from '../../../../src/ui/AlertProvider';
 
 export default function NewUserScreen() {
   useRequireAdmin();
+  const showAlert = useAlert();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [usernameError, setUsernameError] = useState('');
@@ -22,7 +24,7 @@ export default function NewUserScreen() {
       if (isConflictError(err)) {
         setUsernameError('שם המשתמש כבר תפוס. יש לבחור שם אחר.');
       } else {
-        Alert.alert('שגיאה', 'יצירת המשתמש נכשלה. יש לנסות שוב.');
+        showAlert({ title: 'שגיאה', message: 'יצירת המשתמש נכשלה. יש לנסות שוב.' });
       }
     }
   };
