@@ -24,6 +24,10 @@ function readCsv<T>(path: string): T[] {
 }
 
 const PHONE_PATTERN = /05\d{8}|07[2-9]\d{7}/;
+// The same numbers as they appear when a spreadsheet stored the cell as a
+// number and ate the leading zero. Anchored against neighbouring digits so a
+// run that merely contains nine digits is not padded into a phone number.
+const MISSING_LEADING_ZERO_PATTERN = /(?<!\d)(5\d{8}|7[2-9]\d{7})(?!\d)/;
 
 /**
  * The source column mixes an agent name with the phone number in no fixed
@@ -34,15 +38,20 @@ const PHONE_PATTERN = /05\d{8}|07[2-9]\d{7}/;
  */
 export function extractPhoneNumber(raw: string): string | null {
   const match = raw.match(PHONE_PATTERN);
-  if (!match || match.index === undefined) return null;
-
-  const before = raw[match.index - 1];
-  const after = raw[match.index + match[0].length];
-  if ((before && /\d/.test(before)) || (after && /\d/.test(after))) {
-    return null;
+  if (match && match.index !== undefined) {
+    const before = raw[match.index - 1];
+    const after = raw[match.index + match[0].length];
+    if ((before && /\d/.test(before)) || (after && /\d/.test(after))) {
+      // A stray digit touching the match means the source is malformed and
+      // there is more than one way to read it. Do not fall through to the
+      // recovery below — guessing here sends someone's order to a stranger.
+      return null;
+    }
+    return match[0];
   }
 
-  return match[0];
+  const missingZero = raw.match(MISSING_LEADING_ZERO_PATTERN);
+  return missingZero ? `0${missingZero[1]}` : null;
 }
 
 async function main() {
