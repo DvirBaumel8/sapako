@@ -1341,13 +1341,27 @@ The existing messages are, respectively: `'יצירת המשתמש נכשלה. �
 
 Note `app/(app)/products/[productId]/edit.tsx` and `app/(app)/providers/[providerId]/edit.tsx` also each have two single-button error alerts alongside the destructive one already migrated in Task 10 — migrate those here if Task 10 did not already cover them.
 
+**The per-task file lists above are not exhaustive; the 32-call-site total is.** These were found during implementation and are not called out in any task's worked examples:
+
+- `src/order/PublishButton.tsx` — three single-button calls. Not listed in Task 10, 11, or 12 (Task 16 Step 3 mentions it only as a fallback). Migrate it here.
+- `app/(app)/admin/users/index.tsx:21` and `:23` — two single-button alerts colocated with the destructive one Task 10 lists.
+- `app/(app)/providers/[providerId]/order.tsx:160` — a single-button variant of the unknown-barcode alert, for non-admins.
+
+Reconcile against the total: if your migrated count is under 32, keep looking.
+
 - [ ] **Step 2: Verify `Alert` is gone from the app entirely**
 
 ```bash
-cd mobile && grep -rn "\bAlert\b" app src | grep -v "showAlert\|useAlert\|AlertProvider\|alertTypes\|AlertButton\|AlertOptions\|AlertContext"
+cd mobile && grep -rn "Alert\.alert" app src; grep -rln "Alert" app src | xargs grep -l "from 'react-native'" | xargs grep -n "Alert" | grep "from 'react-native'"
 ```
 
-Expected: no output. This is the check that the migration is actually complete, rather than complete-looking.
+Expected: no output from either command — no `Alert.alert` call survives, and
+no file still imports `Alert` from `react-native`. This is the check that the
+migration is actually complete rather than complete-looking.
+
+Do not grep for a bare `\bAlert\b`: `src/ui/findCancelHandler.ts` legitimately
+mentions "native Alert behaviour" in a comment, so that pattern reports a
+false positive forever.
 
 - [ ] **Step 3: Verify**
 
