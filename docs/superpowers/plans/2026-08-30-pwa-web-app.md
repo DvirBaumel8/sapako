@@ -4,7 +4,7 @@
 
 **Goal:** Ship Sapako as an installable web app (PWA) that replaces the native Android/iOS clients, so every change can be verified on an iPhone via a preview URL before it reaches production.
 
-**Architecture:** The existing Expo/expo-router codebase gains a web target via `expo export --platform web` in SPA mode. A document shell supplies RTL direction and PWA install metadata; a conservative service worker caches only content-hashed assets. Three code changes make the app correct in a mobile browser: a real dialog component replacing `Alert`, a JS barcode decoder replacing `expo-camera`, and safe-area/input fixes for iOS. Hosting is Cloudflare Pages with per-branch preview URLs.
+**Architecture:** The existing Expo/expo-router codebase gains a web target via `expo export --platform web` in SPA mode, wrapped as `npm run build:web` because the emitted `index.html` needs a post-build patch (Expo does not apply `+html.tsx` under `output: 'single'`). That patch supplies RTL direction and PWA install metadata; a conservative service worker caches only content-hashed assets. Three code changes make the app correct in a mobile browser: a real dialog component replacing `Alert`, a JS barcode decoder replacing `expo-camera`, and safe-area/input fixes for iOS. Hosting is Cloudflare Pages with per-branch preview URLs.
 
 **Tech Stack:** Expo SDK 57, expo-router, react-native-web, TypeScript, Jest (jest-expo), `@zxing/browser` + `@zxing/library`, NestJS backend (unchanged apart from CORS), Cloudflare Pages.
 
@@ -20,7 +20,7 @@
 
 | File | Responsibility |
 |---|---|
-| `mobile/app/+html.tsx` | The HTML document wrapper: `dir="rtl"`, viewport, PWA meta/link tags, global CSS, service worker registration |
+| `mobile/scripts/patch-html.mjs` | The document shell, applied to `dist/index.html` after export: `dir="rtl"`, viewport, PWA meta/link tags, global CSS, service worker registration |
 | `mobile/public/manifest.webmanifest` | PWA manifest (name, standalone display, icons, RTL/Hebrew locale) |
 | `mobile/public/sw.js` | Service worker: cache-first for hashed assets, network-first for the shell, pass-through for API |
 | `mobile/public/icon-192.png`, `icon-512.png`, `apple-touch-icon.png` | Install icons |
@@ -84,7 +84,7 @@ genuinely does set `isRTL` to `true` and the loop terminates.
 cd mobile && rm src/i18n/rtl.ts && rmdir src/i18n
 ```
 
-Direction will come from `dir="rtl"` in `+html.tsx` (Task 2) instead. The
+Direction will come from `dir="rtl"` injected by Task 2's patch script. The
 module has no test, so no coverage is lost.
 
 - [ ] **Step 2: Remove its use from the root layout**
@@ -188,134 +188,67 @@ git commit -m "feat(mobile): enable SPA web export"
 
 ---
 
-### Task 2: Document shell with RTL and PWA metadata
+### Task 2: Document shell via a post-build patch
 
-`app/+html.tsx` is Expo Router's hook for customising the HTML document. **Its support under `output: 'single'` must be verified empirically in Step 3** — if the emitted `index.html` does not pick it up, use the fallback in Step 4 rather than guessing.
+**Establishing fact, verified on this project:** Expo SDK 57 does **not**
+apply `app/+html.tsx` under `web.output: 'single'`. The emitted
+`dist/index.html` is Expo's bare default template. An earlier attempt created
+`app/+html.tsx` and confirmed by grep that none of its content reached the
+build.
+
+That makes a post-build patch of `dist/index.html` the only mechanism that
+actually works here, and therefore the **single source of truth** for the
+document shell. `app/+html.tsx` must be deleted rather than kept alongside it:
+an inert file full of authoritative-looking meta tags is a trap for whoever
+reads this next.
+
+The template already emits `<title>Sapako</title>` (from `app.config.ts`'s
+`name`), so the title needs no injection.
 
 **Files:**
-- Create: `mobile/app/+html.tsx`
+- Delete: `mobile/app/+html.tsx`
+- Create/replace: `mobile/scripts/patch-html.mjs`
+- Modify: `mobile/package.json`
 
-- [ ] **Step 1: Write the document shell**
-
-Create `mobile/app/+html.tsx`:
-
-```tsx
-import type { PropsWithChildren } from 'react';
-import { ScrollViewStyleReset } from 'expo-router/html';
-
-// Applied to the document, not to any React Native view, so it covers the
-// browser chrome behaviours that make a web page feel like a web page.
-const globalCss = `
-  html, body, #root {
-    height: 100%;
-    background-color: #ffffff;
-  }
-  body {
-    /* Removes the rubber-band scroll and pull-to-refresh gestures, which
-       read as broken inside a standalone home-screen app. */
-    overscroll-behavior: none;
-  }
-  * {
-    -webkit-tap-highlight-color: transparent;
-    -webkit-touch-callout: none;
-  }
-  /* Mobile Safari zooms the viewport whenever a focused input renders below
-     16px, and never zooms back out. A font-size floor is the fix; a
-     maximum-scale viewport lock would also work but would disable pinch-zoom
-     for everyone, which is an accessibility regression. */
-  input, textarea, select {
-    font-size: 16px;
-  }
-`;
-
-export default function Root({ children }: PropsWithChildren) {
-  return (
-    <html lang="he" dir="rtl">
-      <head>
-        <meta charSet="utf-8" />
-        <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-        {/* viewport-fit=cover is what makes env(safe-area-inset-*) resolve to
-            non-zero values on a notched iPhone. Without it the app cannot
-            know where the home indicator is. */}
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover"
-        />
-        <title>Sapako</title>
-
-        <link rel="manifest" href="/manifest.webmanifest" />
-        <meta name="theme-color" content="#ffffff" />
-
-        {/* iOS ignores the manifest for home-screen installation and reads
-            these instead. Without apple-mobile-web-app-capable, "Add to Home
-            Screen" produces a bookmark that opens with Safari chrome
-            visible, not a standalone app. */}
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Sapako" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-
-        <ScrollViewStyleReset />
-        <style dangerouslySetInnerHTML={{ __html: globalCss }} />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function () {
-                  navigator.serviceWorker.register('/sw.js').catch(function () {
-                    // A failed registration must never block the app: the
-                    // service worker is a launch-speed optimisation, not a
-                    // functional dependency.
-                  });
-                });
-              }
-            `,
-          }}
-        />
-      </head>
-      <body>{children}</body>
-    </html>
-  );
-}
-```
-
-- [ ] **Step 2: Rebuild**
+- [ ] **Step 1: Delete the inert file**
 
 ```bash
-cd mobile && npx expo export --platform web
+cd mobile && rm -f app/+html.tsx
 ```
 
-Expected: completes without error.
+- [ ] **Step 2: Write the patch script**
 
-- [ ] **Step 3: Verify the shell was actually applied**
-
-```bash
-cd mobile && grep -c 'dir="rtl"' dist/index.html && grep -c 'apple-mobile-web-app-capable' dist/index.html
-```
-
-Expected: both print `1`.
-
-**If either prints `0` or errors**, `+html.tsx` is not being applied under `output: 'single'`. Do Step 4. Otherwise skip to Step 5.
-
-- [ ] **Step 4: Fallback only — post-build HTML patch**
-
-Only if Step 3 failed. Create `mobile/scripts/patch-html.mjs`:
+Replace the entire contents of `mobile/scripts/patch-html.mjs`:
 
 ```js
-// Fallback for when Expo's +html.tsx is not applied to the single-output
-// index.html. Injects the document attributes and head tags the PWA needs
-// directly into the emitted file. Deterministic and verifiable, unlike
-// injecting them at runtime from JS.
+// Expo's `output: 'single'` export does not apply app/+html.tsx (verified on
+// SDK 57: the emitted dist/index.html is Expo's bare default template). This
+// script is therefore the single source of truth for the document shell —
+// RTL direction, viewport, PWA install metadata, global CSS, and the service
+// worker registration. It runs after every export, via `npm run build:web`.
 import { readFileSync, writeFileSync } from 'node:fs';
 
+const MARKER = '<!-- sapako-shell -->';
 const path = new URL('../dist/index.html', import.meta.url);
 let html = readFileSync(path, 'utf8');
 
-if (!html.includes('dir="rtl"')) {
-  html = html.replace(/<html([^>]*)>/, '<html$1 lang="he" dir="rtl">');
+// Idempotent: a second run over an already-patched file is a no-op rather
+// than a double injection.
+if (html.includes(MARKER)) {
+  console.log('dist/index.html already patched');
+  process.exit(0);
 }
 
-const head = `
+// Rewrite the opening tag wholesale rather than appending attributes, so the
+// template's lang="en" is replaced instead of duplicated.
+html = html.replace(/<html[^>]*>/i, '<html lang="he" dir="rtl">');
+
+// Drop every viewport tag the template emitted. Ours is the only one carrying
+// viewport-fit=cover, and leaving a losing duplicate behind makes this file
+// confusing to debug later.
+html = html.replace(/<meta[^>]*name=["']viewport["'][^>]*>/gi, '');
+
+const head = `${MARKER}
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#ffffff">
@@ -323,48 +256,107 @@ const head = `
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Sapako">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <style>
+      /* Removes the rubber-band scroll and pull-to-refresh gestures, which
+         read as broken inside a standalone home-screen app. */
+      body { overscroll-behavior: none; }
+      * { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+      /* Mobile Safari zooms the viewport whenever a focused input renders
+         below 16px, and never zooms back out. A font-size floor is the fix;
+         a maximum-scale viewport lock would also work but would disable
+         pinch-zoom for everyone, which is an accessibility regression. */
+      input, textarea, select { font-size: 16px; }
+    </style>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function () {
+            // A failed registration must never block the app: the service
+            // worker is a launch-speed optimisation, not a dependency.
+          });
+        });
+      }
+    </script>
 `;
 
-if (!html.includes('apple-mobile-web-app-capable')) {
-  html = html.replace('</head>', `${head}  </head>`);
-}
-
-// Drop any viewport tag Expo emitted without viewport-fit, so the one above wins.
-html = html.replace(
-  /<meta name="viewport" content="(?![^"]*viewport-fit)[^"]*">/g,
-  '',
-);
+html = html.replace('</head>', `${head}  </head>`);
 
 writeFileSync(path, html);
 console.log('patched dist/index.html');
 ```
 
-Add a build script to `mobile/package.json`'s `scripts`:
+Note the service worker registration lives here. `sw.js` itself is created in
+Task 4; registering a file that does not exist yet is harmless (the `catch`
+swallows the 404), and keeping the whole shell in one file is worth more than
+sequencing the two lines apart.
+
+- [ ] **Step 3: Wire up the build script**
+
+In `mobile/package.json`, the `scripts` block must contain:
 
 ```json
     "build:web": "expo export --platform web && node scripts/patch-html.mjs",
 ```
 
-Then run `cd mobile && npm run build:web` and repeat Step 3's greps. Expected: both print `1`.
+**Every build from here on uses `npm run build:web`, never a bare
+`expo export`** — a bare export produces an unpatched `index.html` with no
+RTL, no install metadata, and no service worker. This includes Task 7's
+Cloudflare build command.
 
-**If you used this fallback, the Cloudflare build command in Task 7 becomes `npm run build:web` instead of `npx expo export --platform web`.**
+- [ ] **Step 4: Build**
 
-- [ ] **Step 5: Verify RTL in a browser**
+```bash
+cd mobile && npm run build:web
+```
+
+Expected: export completes, then `patched dist/index.html`.
+
+- [ ] **Step 5: Verify every part of the shell landed**
+
+```bash
+cd mobile && for pattern in 'dir="rtl"' 'viewport-fit=cover' 'apple-mobile-web-app-capable' 'manifest.webmanifest' 'apple-touch-icon' 'serviceWorker.register' 'font-size: 16px'; do printf '%-32s %s\n' "$pattern" "$(grep -c -F "$pattern" dist/index.html)"; done
+```
+
+Expected: every line prints `1`. A `0` on any line means that part of the
+shell is missing — fix it before moving on, because nothing downstream will
+tell you it is absent.
+
+- [ ] **Step 6: Verify there are no duplicate or stale tags**
+
+```bash
+cd mobile && grep -c -F 'name="viewport"' dist/index.html && grep -c -F 'lang=' dist/index.html && head -2 dist/index.html
+```
+
+Expected: exactly `1` viewport tag, exactly `1` `lang=` occurrence, and the
+second line reads `<html lang="he" dir="rtl">`.
+
+- [ ] **Step 7: Verify idempotency**
+
+```bash
+cd mobile && node scripts/patch-html.mjs
+```
+
+Expected: prints `dist/index.html already patched` and changes nothing.
+
+- [ ] **Step 8: Verify RTL in a browser**
 
 ```bash
 cd mobile && npx serve dist -s -l 8080
 ```
 
-Open `http://localhost:8080`. Expected: the login screen now renders right-to-left — the Hebrew title and labels align to the right edge.
+Open `http://localhost:8080`. Expected: the login screen renders
+right-to-left — the Hebrew labels align to the right edge — and the page loads
+exactly once (no reload loop).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add mobile/app/+html.tsx mobile/package.json mobile/scripts 2>/dev/null
-git commit -m "feat(mobile): add HTML document shell with RTL and PWA metadata"
+git add mobile/app mobile/scripts/patch-html.mjs mobile/package.json
+git commit -m "feat(mobile): build the PWA document shell in one post-build patch"
 ```
 
 ---
+
 
 ### Task 3: PWA manifest and install icons
 
@@ -434,7 +426,7 @@ Create `mobile/public/manifest.webmanifest`:
 - [ ] **Step 3: Verify Expo copies `public/` to the export root**
 
 ```bash
-cd mobile && npx expo export --platform web && ls dist/manifest.webmanifest dist/apple-touch-icon.png dist/icon-512.png dist/icon-192.png
+cd mobile && npm run build:web && ls dist/manifest.webmanifest dist/apple-touch-icon.png dist/icon-512.png dist/icon-192.png
 ```
 
 Expected: all four paths listed, no "No such file" errors.
@@ -554,7 +546,7 @@ self.addEventListener('fetch', (event) => {
 - [ ] **Step 2: Verify it registers**
 
 ```bash
-cd mobile && npx expo export --platform web && npx serve dist -s -l 8080
+cd mobile && npm run build:web && npx serve dist -s -l 8080
 ```
 
 Open `http://localhost:8080`, then DevTools → Application → Service Workers. Expected: `sw.js` listed as **activated and running**.
@@ -564,7 +556,7 @@ Open `http://localhost:8080`, then DevTools → Application → Service Workers.
 With the page still open, edit any visible Hebrew string in `app/login.tsx`, then:
 
 ```bash
-cd mobile && npx expo export --platform web
+cd mobile && npm run build:web
 ```
 
 Reload the browser tab twice. Expected: the new string appears. If it does not, the shell is being served cache-first — recheck the `/_expo/` prefix condition in Step 1, because that is the bug this step exists to catch.
@@ -800,7 +792,7 @@ Cloudflare dashboard → Workers & Pages → Create → Pages → Connect to Git
 | Project name | `sapako` (must match `PAGES_PROJECT` from Task 5 Step 8) |
 | Production branch | `main` |
 | Framework preset | None |
-| Build command | `npx expo export --platform web` (or `npm run build:web` if Task 2 Step 4's fallback was used) |
+| Build command | `npm run build:web` |
 | Build output directory | `dist` |
 | Root directory | `mobile` |
 
@@ -1904,7 +1896,7 @@ Expected: the viewport does **not** zoom. The `input, textarea, select { font-si
 
 Expected: no content sits under the notch at the top, and the publish button on an order screen is fully visible and tappable above the home indicator.
 
-If content is clipped at the top, `react-native-safe-area-context` is reporting zero insets on web. Fall back to CSS by adding to `globalCss` in `mobile/app/+html.tsx`:
+If content is clipped at the top, `react-native-safe-area-context` is reporting zero insets on web. Fall back to CSS by adding to the `<style>` block in `mobile/scripts/patch-html.mjs`:
 
 ```css
   body {

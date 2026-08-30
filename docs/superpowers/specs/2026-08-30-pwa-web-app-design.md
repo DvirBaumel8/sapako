@@ -61,25 +61,36 @@ native binary if the web version has to be rolled back.
 
 Also update `name` and `slug` from the placeholder `'mobile'` to `'sapako'`.
 
-### `mobile/app/+html.tsx` (new)
+### `mobile/scripts/patch-html.mjs` (new)
 
-Expo Router's hook for customising the HTML document that wraps the SPA.
-Four separate concerns are solved here:
+**Expo SDK 57 does not apply `app/+html.tsx` under `output: 'single'`** —
+verified on this project: the emitted `dist/index.html` is Expo's bare
+default template, and a `+html.tsx` containing the tags below produced none
+of them in the build. A post-build patch of `dist/index.html` is therefore
+the only mechanism that works, and is the single source of truth for the
+document shell. It is wired up as `npm run build:web`
+(`expo export --platform web && node scripts/patch-html.mjs`), which replaces
+a bare export everywhere including the hosting build command.
 
-1. **RTL** — `<html lang="he" dir="rtl">`. This is the actual mechanism for
-   right-to-left on the web, replacing `I18nManager.forceRTL` (§4.1).
-2. **Notch handling** — `<meta name="viewport" content="width=device-width,
-   initial-scale=1, viewport-fit=cover">`. `viewport-fit=cover` is what
-   makes CSS `env(safe-area-inset-*)` resolve to non-zero values on
-   iPhone (§4.4).
-3. **Install metadata** — `<link rel="manifest" href="/manifest.webmanifest">`,
-   `<link rel="apple-touch-icon" href="/apple-touch-icon.png">`,
-   `<meta name="apple-mobile-web-app-capable" content="yes">`,
-   `<meta name="apple-mobile-web-app-status-bar-style" content="default">`,
-   and `<meta name="theme-color">`. Without these, "Add to Home Screen" on
-   iOS produces a Safari bookmark that opens in a browser tab with visible
-   chrome, not a standalone app.
-4. **Service worker registration** and a small global CSS block (§4.5).
+The script is idempotent (guarded by a marker comment) and rewrites rather
+than appends, so the template's own `lang` and viewport tags are replaced
+instead of duplicated. It solves four concerns:
+
+1. **RTL** — rewrites the opening tag to `<html lang="he" dir="rtl">`. This
+   is the actual mechanism for right-to-left on the web, replacing
+   `I18nManager.forceRTL` (§4.1).
+2. **Notch handling** — replaces the template's viewport tag with one
+   carrying `viewport-fit=cover`, which is what makes CSS
+   `env(safe-area-inset-*)` resolve to non-zero values on iPhone (§4.4).
+3. **Install metadata** — `<link rel="manifest">`,
+   `<link rel="apple-touch-icon">`, `apple-mobile-web-app-capable`,
+   `apple-mobile-web-app-status-bar-style`, `apple-mobile-web-app-title`,
+   and `theme-color`. Without these, "Add to Home Screen" on iOS produces a
+   Safari bookmark that opens with browser chrome visible, not a standalone
+   app. The template already emits `<title>Sapako</title>` from
+   `app.config.ts`'s `name`, so the title needs no injection.
+4. **Global CSS and service worker registration** — the mobile-browser
+   polish of §4.5, and the `navigator.serviceWorker.register('/sw.js')` call.
 
 ### `mobile/public/` (new)
 
