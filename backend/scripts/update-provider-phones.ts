@@ -3,7 +3,9 @@ import { readFileSync } from 'fs';
 import { parse } from 'csv-parse/sync';
 import { Client } from 'pg';
 
-const SUPPLIERS_CSV = '/Users/dvir.baumel/Downloads/all suplluiers with phones and names .csv';
+// Taken as an argument rather than hardcoded, for the same reason as
+// import-friend-data.ts.
+const SUPPLIERS_CSV = process.argv[2];
 
 interface SupplierPhoneRow {
   'קוד ספק': string;
@@ -44,6 +46,12 @@ export function extractPhoneNumber(raw: string): string | null {
 }
 
 async function main() {
+  if (!SUPPLIERS_CSV) {
+    console.error(
+      'Usage: ts-node scripts/update-provider-phones.ts <suppliers-with-phones.csv>',
+    );
+    process.exit(1);
+  }
   const rows = readCsv<SupplierPhoneRow>(SUPPLIERS_CSV).filter(
     (row) => row['שם הסוכן + טלפון']?.trim(),
   );

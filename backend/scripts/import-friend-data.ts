@@ -3,8 +3,17 @@ import { readFileSync } from 'fs';
 import { parse } from 'csv-parse/sync';
 import { Client } from 'pg';
 
-const SUPPLIERS_CSV = '/Users/dvir.baumel/Downloads/all suplluiers.csv';
-const PRODUCTS_CSV = '/Users/dvir.baumel/Downloads/all products by provider and his number.csv';
+// Taken as arguments rather than hardcoded: the previous absolute paths
+// pointed into one particular machine's Downloads folder, so the script could
+// not be run anywhere else — which matters when it is the recovery path for
+// rebuilding the catalogue.
+const [, , SUPPLIERS_CSV, PRODUCTS_CSV] = process.argv;
+if (!SUPPLIERS_CSV || !PRODUCTS_CSV) {
+  console.error(
+    'Usage: ts-node scripts/import-friend-data.ts <suppliers.csv> <products.csv>',
+  );
+  process.exit(1);
+}
 const BRANCH_NAME = 'Hills';
 const PLACEHOLDER_PHONE = '0000000000';
 const DEFAULT_UNIT_TYPE = "יח'";
