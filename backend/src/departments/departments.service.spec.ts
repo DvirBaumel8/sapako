@@ -68,9 +68,9 @@ describe('DepartmentsService', () => {
       name: 'מוצרי חלב',
     });
 
-    await expect(
-      service.create('b1', { name: 'מוצרי חלב' }),
-    ).rejects.toThrow(ConflictException);
+    await expect(service.create('b1', { name: 'מוצרי חלב' })).rejects.toThrow(
+      ConflictException,
+    );
 
     expect(mockRepo.save).not.toHaveBeenCalled();
   });
@@ -162,9 +162,9 @@ describe('DepartmentsService', () => {
       ),
     );
 
-    await expect(
-      service.update('d1', { name: 'קפואים' }),
-    ).rejects.toThrow(ConflictException);
+    await expect(service.update('d1', { name: 'קפואים' })).rejects.toThrow(
+      ConflictException,
+    );
 
     expect(mockRepo.save).not.toHaveBeenCalled();
   });

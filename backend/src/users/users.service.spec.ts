@@ -136,7 +136,9 @@ describe('UsersService', () => {
 
       await service.remove('u1');
 
-      expect(mockRepo.count).toHaveBeenCalledWith({ where: { role: Role.ADMIN } });
+      expect(mockRepo.count).toHaveBeenCalledWith({
+        where: { role: Role.ADMIN },
+      });
       expect(mockRepo.delete).toHaveBeenCalledWith({ id: 'u1' });
     });
 

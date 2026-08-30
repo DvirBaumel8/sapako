@@ -23,7 +23,9 @@ export class DepartmentsService {
       name: input.name,
     });
     if (existing) {
-      throw new ConflictException('A department with this name already exists in this branch');
+      throw new ConflictException(
+        'A department with this name already exists in this branch',
+      );
     }
     const entity = this.departmentsRepo.create({ branchId, ...input });
     return this.departmentsRepo.save(entity);
@@ -59,7 +61,9 @@ export class DepartmentsService {
         name: input.name,
       });
       if (existing) {
-        throw new ConflictException('A department with this name already exists in this branch');
+        throw new ConflictException(
+          'A department with this name already exists in this branch',
+        );
       }
     }
     Object.assign(department, input);
