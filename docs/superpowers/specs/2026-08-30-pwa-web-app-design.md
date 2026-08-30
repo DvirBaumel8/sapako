@@ -226,6 +226,18 @@ On web this evaluates to `0`, so the publish button — the app's single most
 important action — renders underneath the iPhone home indicator. The
 platform guard is removed and the inset applied unconditionally.
 
+The same file has a second browser-specific defect. `Linking.openURL` maps to
+`window.open` on web, and Safari blocks `window.open` unless it is
+synchronous with a user gesture. `handlePublish` currently `await`s
+`Linking.canOpenURL(url)` before opening, which breaks the gesture chain — so
+on iPhone, tapping publish would silently do nothing. The fix is to navigate
+in the same tab (`window.location.href = url`) and drop the `canOpenURL`
+check entirely: `wa.me` is an ordinary HTTPS URL that redirects to the
+WhatsApp app on mobile and to `web.whatsapp.com` on desktop, so there is
+nothing to feature-detect. The "WhatsApp is not installed" alert branch that
+check guarded becomes unreachable and is removed; the publish-marking failure
+alert stays, because it is still reachable.
+
 ### 4.5 Mobile Browser Polish
 
 - **Input zoom.** Mobile Safari zooms the viewport whenever a focused
