@@ -116,10 +116,18 @@ cache name.
 
 ### 4.1 RTL
 
-Delete `src/i18n/rtl.ts` and its invocation in `app/_layout.tsx`. Both of
-its mechanisms are wrong for this target: `I18nManager.forceRTL` is a no-op
-under `react-native-web`, and `Updates.reloadAsync()` (from `expo-updates`)
-throws in a browser. Direction is set declaratively in `+html.tsx` instead.
+Delete `src/i18n/rtl.ts` and its invocation in `app/_layout.tsx`. Direction
+is set declaratively in `+html.tsx` instead.
+
+**This is a blocking prerequisite, not cleanup.** As committed, the pair
+causes an infinite reload loop in a production web build:
+`react-native-web`'s `I18nManager.forceRTL()` is an empty function and its
+`getConstants()` returns a hardcoded `{ isRTL: false }`, so `_layout.tsx`'s
+`if (!I18nManager.isRTL)` guard is permanently true; `ensureRTL()` then
+reaches `Updates.reloadAsync()`, which throws only when `__DEV__` is true and
+otherwise calls `window.location.reload(true)`. Mount reloads the page, which
+mounts again. The loop is invisible on native, where a restart genuinely does
+set `isRTL` and terminates it.
 
 This also removes the `isRtlReady` state gate in `RootLayout`, which
 currently returns `null` on the first render pass. With direction fixed at

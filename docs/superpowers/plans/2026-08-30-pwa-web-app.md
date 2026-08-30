@@ -57,6 +57,87 @@
 
 Goal: a live, installable URL. Dialogs and scanning are still broken at the end of this stage; that is expected and fine.
 
+### Task 0: Remove the native RTL mechanism (blocking prerequisite)
+
+**This must happen before anything else can be verified in a browser.** As
+committed, the app reloads itself forever in a production web build:
+
+- `app/_layout.tsx` calls `ensureRTL()` on every mount when `!I18nManager.isRTL`.
+- `react-native-web`'s `I18nManager.forceRTL()` is an empty function and its
+  `getConstants()` returns a hardcoded `{ isRTL: false }`, so `isRTL` can
+  never become `true` on web — the condition is permanently satisfied.
+- `ensureRTL()` then calls `Updates.reloadAsync()`, which throws **only** when
+  `__DEV__` is true (`expo-updates/build/Updates.js`). In a production
+  `expo export` build `__DEV__` is false, so it reaches
+  `window.location.reload(true)` and performs a real page reload.
+
+Mount → reload → mount → reload. This is invisible on native, where a restart
+genuinely does set `isRTL` to `true` and the loop terminates.
+
+**Files:**
+- Delete: `mobile/src/i18n/rtl.ts`
+- Modify: `mobile/app/_layout.tsx`
+
+- [ ] **Step 1: Delete the module**
+
+```bash
+cd mobile && rm src/i18n/rtl.ts && rmdir src/i18n
+```
+
+Direction will come from `dir="rtl"` in `+html.tsx` (Task 2) instead. The
+module has no test, so no coverage is lost.
+
+- [ ] **Step 2: Remove its use from the root layout**
+
+Replace the contents of `mobile/app/_layout.tsx` with:
+
+```tsx
+import { Stack } from 'expo-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { AuthProvider } from '../src/auth/AuthContext';
+
+const queryClient = new QueryClient();
+const screenOptions = { headerShown: false };
+
+export default function RootLayout() {
+  return (
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+            <Stack screenOptions={screenOptions} />
+          </SafeAreaView>
+        </AuthProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>
+  );
+}
+```
+
+This drops the `ensureRTL` import, the `I18nManager` import, the `isRtlReady`
+state, the `useEffect`, and the `if (!isRtlReady) return null;` guard — so the
+app also paints immediately instead of after a state round-trip.
+
+`AlertProvider` is **not** added here; Task 9 adds it once it exists.
+
+- [ ] **Step 3: Verify**
+
+```bash
+cd mobile && npx tsc --noEmit && npm test
+```
+
+Expected: no type errors; all tests pass.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add mobile/app/_layout.tsx mobile/src
+git commit -m "fix(mobile): stop the infinite reload loop in web builds"
+```
+
+---
+
 ### Task 1: Configure the web export
 
 **Files:**
@@ -1717,65 +1798,18 @@ Grouped last because these are driven by what the device checklist actually reve
 
 ### Task 15: Remove the native RTL mechanism
 
-**Files:**
-- Delete: `mobile/src/i18n/rtl.ts`
-- Modify: `mobile/app/_layout.tsx`
+**Already done in Task 0.** This work was pulled forward to the start of
+Stage 1 after it turned out to cause an infinite reload loop that blocked
+every browser verification step. See Task 0 for the full reasoning.
 
-- [ ] **Step 1: Delete the module**
-
-```bash
-cd mobile && rm src/i18n/rtl.ts && rmdir src/i18n
-```
-
-Both of its mechanisms are wrong for this target: `I18nManager.forceRTL` is a no-op under `react-native-web`, and `Updates.reloadAsync()` throws in a browser. Direction now comes from `dir="rtl"` in `+html.tsx` (Task 2). The module has no test, so no coverage is lost.
-
-- [ ] **Step 2: Remove its use from the root layout**
-
-In `mobile/app/_layout.tsx`, delete the `ensureRTL` import, the `I18nManager` import, the `isRtlReady` state, the `useEffect` that calls `ensureRTL()`, and the `if (!isRtlReady) return null;` guard. `RootLayout` becomes:
-
-```tsx
-import { Stack } from 'expo-router';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { AuthProvider } from '../src/auth/AuthContext';
-import { AlertProvider } from '../src/ui/AlertProvider';
-
-const queryClient = new QueryClient();
-const screenOptions = { headerShown: false };
-
-export default function RootLayout() {
-  return (
-    <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <AlertProvider>
-            <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-              <Stack screenOptions={screenOptions} />
-            </SafeAreaView>
-          </AlertProvider>
-        </AuthProvider>
-      </QueryClientProvider>
-    </SafeAreaProvider>
-  );
-}
-```
-
-This also removes the first-render `null` return, so the app paints immediately instead of after a state round-trip.
-
-- [ ] **Step 3: Verify**
+- [ ] **Step 1: Confirm it is actually gone**
 
 ```bash
-cd mobile && npx tsc --noEmit && npm test && npx expo export --platform web
+cd mobile && ls src/i18n 2>&1; grep -rn "ensureRTL\|I18nManager\|isRtlReady" app src
 ```
 
-Expected: no type errors, all tests pass, export succeeds.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add mobile/app/_layout.tsx mobile/src
-git commit -m "refactor(mobile): drop native RTL forcing in favour of document dir"
-```
+Expected: `src/i18n` does not exist, and the grep returns no output. If either
+check fails, do Task 0 now.
 
 ---
 
