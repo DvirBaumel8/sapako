@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { createBarcodeReader } from './createBarcodeReader';
 
 interface BarcodeScannerModalProps {
   visible: boolean;
@@ -8,58 +8,99 @@ interface BarcodeScannerModalProps {
   onClose: () => void;
 }
 
-// Dev-build-only manual entry, for testing the scan flow on the Android
-// emulator (which has no real camera to scan a barcode with — the emulator's
-// webcam passthrough can be enabled for testing the camera UI itself, but
-// this is what lets you exercise the actual matching logic afterward).
-// __DEV__ is compiled away in production builds, so this never ships.
-//
-// This is rendered as its own full-screen mode rather than an overlay on
-// top of CameraView: the camera preview is a native surface that (on
-// Android in particular) can render above/steal touches from any RN view
-// layered on top of it, which made an overlaid text input untappable.
-// Keeping the two mutually exclusive avoids that entirely.
-const DevManualBarcodeEntry = React.forwardRef<
-  TextInput,
-  { onScanned: (barcode: string) => void; onSwitchToCamera: () => void }
->(function DevManualBarcodeEntry({ onScanned, onSwitchToCamera }, ref) {
+type Status = 'starting' | 'scanning' | 'denied' | 'unavailable';
+
+// Manual entry, for exercising the scan flow where no usable camera exists:
+// a desktop browser, or a device that denied permission. Previously
+// __DEV__-only; a browser build has more legitimate no-camera cases, so it is
+// now reachable whenever the camera cannot be used.
+function ManualBarcodeEntry({
+  onScanned,
+  onRetryCamera,
+}: {
+  onScanned: (barcode: string) => void;
+  onRetryCamera: () => void;
+}) {
   const [value, setValue] = useState('');
   return (
     <View style={styles.devContainer}>
-      <Text style={styles.devTitle}>בדיקה: הזנת ברקוד ידנית (dev בלבד)</Text>
+      <Text style={styles.devTitle}>הזנת ברקוד ידנית</Text>
       <TextInput
-        ref={ref}
         style={styles.devEntryInput}
         placeholder="ברקוד"
         value={value}
         onChangeText={setValue}
         keyboardType="number-pad"
+        autoFocus
       />
-      <Pressable style={styles.devEntryButton} disabled={!value} onPress={() => onScanned(value)}>
-        <Text style={styles.devEntryButtonText}>סימולציה</Text>
+      <Pressable
+        style={styles.devEntryButton}
+        disabled={!value}
+        onPress={() => onScanned(value)}
+      >
+        <Text style={styles.devEntryButtonText}>אישור</Text>
       </Pressable>
-      <Pressable style={styles.devSwitchButton} onPress={onSwitchToCamera}>
-        <Text style={styles.devSwitchButtonText}>מעבר למצלמה האמיתית</Text>
+      <Pressable style={styles.devSwitchButton} onPress={onRetryCamera}>
+        <Text style={styles.devSwitchButtonText}>מעבר למצלמה</Text>
       </Pressable>
     </View>
   );
-});
+}
 
 export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScannerModalProps) {
-  const [permission, requestPermission] = useCameraPermissions();
-  const [useManualEntry, setUseManualEntry] = useState(__DEV__);
-  const devInputRef = useRef<TextInput>(null);
-  // onBarcodeScanned fires once per detected frame, not once per scan — with a
-  // barcode held in view it can fire many times before this modal finishes
-  // closing. A ref (not state) guard is required here: state updates are
-  // async, so a state-based guard would still let several frames through
-  // before it takes effect, which is exactly the bug this prevents.
-  const hasScannedRef = useRef(false);
+  const [status, setStatus] = useState<Status>('starting');
+  const [useManualEntry, setUseManualEntry] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const readerRef = useRef<ReturnType<typeof createBarcodeReader> | null>(null);
+
+  useEffect(() => {
+    if (!visible || useManualEntry) {
+      return;
+    }
+    let cancelled = false;
+    setStatus('starting');
+
+    const reader = createBarcodeReader({
+      onScanned: (barcode) => {
+        reader.stop();
+        onScanned(barcode);
+        onClose();
+      },
+    });
+    readerRef.current = reader;
+
+    (async () => {
+      const video = videoRef.current;
+      if (!video) {
+        return;
+      }
+      try {
+        await reader.start(video);
+        if (!cancelled) {
+          setStatus('scanning');
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        // NotAllowedError is a denied permission prompt; anything else
+        // (no camera, insecure context) is not something the user can grant.
+        const name = (error as { name?: string })?.name;
+        setStatus(name === 'NotAllowedError' ? 'denied' : 'unavailable');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      // Must run on every close, or the phone's camera indicator stays lit.
+      reader.stop();
+      readerRef.current = null;
+    };
+  }, [visible, useManualEntry, onScanned, onClose]);
 
   useEffect(() => {
     if (visible) {
-      hasScannedRef.current = false;
-      setUseManualEntry(__DEV__);
+      setUseManualEntry(false);
     }
   }, [visible]);
 
@@ -67,29 +108,16 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
     return null;
   }
 
-  const handleScanned = (barcode: string) => {
-    if (hasScannedRef.current) {
-      return;
-    }
-    hasScannedRef.current = true;
-    onScanned(barcode);
-    onClose();
-  };
-
-  if (__DEV__ && useManualEntry) {
+  if (useManualEntry) {
     return (
-      // autoFocus on the input isn't reliable here: on Android, a Modal's
-      // native window frequently isn't fully attached yet at mount time, so
-      // autoFocus fires "focused" in RN's own state (cursor blinks) without
-      // ever reaching the OS to actually raise the keyboard, and it doesn't
-      // recover on a later tap either. onShow fires once the modal's window
-      // is truly up, which is the reliable time to request focus.
-      <Modal visible transparent onShow={() => devInputRef.current?.focus()}>
+      <Modal visible transparent>
         <View style={styles.centered}>
-          <DevManualBarcodeEntry
-            ref={devInputRef}
-            onScanned={handleScanned}
-            onSwitchToCamera={() => setUseManualEntry(false)}
+          <ManualBarcodeEntry
+            onScanned={(barcode) => {
+              onScanned(barcode);
+              onClose();
+            }}
+            onRetryCamera={() => setUseManualEntry(false)}
           />
           <Pressable onPress={onClose} style={styles.button}>
             <Text>ביטול</Text>
@@ -99,13 +127,17 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
     );
   }
 
-  if (!permission?.granted) {
+  if (status === 'denied' || status === 'unavailable') {
     return (
       <Modal visible transparent>
         <View style={styles.centered}>
-          <Text>נדרשת גישה למצלמה כדי לסרוק ברקודים.</Text>
-          <Pressable onPress={requestPermission} style={styles.button}>
-            <Text>אישור הרשאה</Text>
+          <Text style={styles.statusText}>
+            {status === 'denied'
+              ? 'נדרשת גישה למצלמה כדי לסרוק ברקודים. יש לאשר את ההרשאה בהגדרות הדפדפן.'
+              : 'לא נמצאה מצלמה זמינה במכשיר זה.'}
+          </Text>
+          <Pressable onPress={() => setUseManualEntry(true)} style={styles.button}>
+            <Text>הזנת ברקוד ידנית</Text>
           </Pressable>
           <Pressable onPress={onClose} style={styles.button}>
             <Text>ביטול</Text>
@@ -117,11 +149,24 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
 
   return (
     <Modal visible>
-      <CameraView
-        style={styles.camera}
-        barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'] }}
-        onBarcodeScanned={(result) => handleScanned(result.data)}
-      />
+      <View style={styles.cameraContainer}>
+        {/* playsInline and muted are both required for inline playback in
+            iOS Safari — without them the video takes over the whole screen
+            in the native player and the decoder never sees a frame. */}
+        <video
+          ref={videoRef}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          playsInline
+          muted
+          autoPlay
+        />
+        {status === 'starting' ? (
+          <Text style={styles.startingText}>מפעיל את המצלמה…</Text>
+        ) : null}
+      </View>
+      <Pressable onPress={() => setUseManualEntry(true)} style={styles.manualButton}>
+        <Text style={styles.closeButtonText}>הזנה ידנית</Text>
+      </Pressable>
       <Pressable onPress={onClose} style={styles.closeButton}>
         <Text style={styles.closeButtonText}>ביטול</Text>
       </Pressable>
@@ -130,10 +175,40 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
 }
 
 const styles = StyleSheet.create({
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: 'white' },
-  camera: { flex: 1 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: 'white',
+    padding: 24,
+  },
+  statusText: { textAlign: 'center', fontSize: 15, color: '#444', lineHeight: 21 },
+  cameraContainer: { flex: 1, backgroundColor: 'black' },
+  startingText: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: '50%',
+    color: 'white',
+    fontSize: 15,
+  },
   button: { padding: 12, borderWidth: 1, borderRadius: 8 },
-  closeButton: { position: 'absolute', bottom: 40, alignSelf: 'center', backgroundColor: 'white', padding: 12, borderRadius: 8 },
+  closeButton: {
+    position: 'absolute',
+    bottom: 40,
+    alignSelf: 'center',
+    backgroundColor: 'white',
+    padding: 12,
+    borderRadius: 8,
+  },
+  manualButton: {
+    position: 'absolute',
+    bottom: 100,
+    alignSelf: 'center',
+    backgroundColor: 'white',
+    padding: 12,
+    borderRadius: 8,
+  },
   closeButtonText: { fontWeight: '600' },
   devContainer: { width: '85%', gap: 10, alignItems: 'stretch' },
   devTitle: { textAlign: 'center', color: '#666', fontSize: 13 },
@@ -143,8 +218,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#fff',
-    textAlign: 'center',
     fontSize: 16,
   },
   devEntryButton: {
@@ -153,7 +226,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
-  devEntryButtonText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  devSwitchButton: { paddingVertical: 8, alignItems: 'center' },
-  devSwitchButtonText: { color: '#2563eb', fontSize: 13, fontWeight: '600' },
+  devEntryButtonText: { color: 'white', fontWeight: '600' },
+  devSwitchButton: { paddingVertical: 10, alignItems: 'center' },
+  devSwitchButtonText: { color: '#2563eb', fontWeight: '600' },
 });
