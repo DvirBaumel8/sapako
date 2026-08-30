@@ -1,0 +1,124 @@
+name: deploy-web
+
+# Builds the PWA and deploys it to Cloudflare Pages.
+#
+# Pushing any branch produces a preview at <branch>.<project>.pages.dev, which
+# is the whole point of this setup: it is what lets a change be opened on a
+# real iPhone before it reaches production. Pushing `main` deploys production.
+#
+# Typecheck and tests run here rather than only in mobile-ci.yml, because this
+# project pushes straight to main and mobile-ci only triggers on pull requests
+# — so without these steps nothing would gate a real deploy.
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/deploy-web.yml'
+  workflow_dispatch:
+
+# One deploy per branch at a time; a superseded build is not worth finishing.
+concurrency:
+  group: deploy-web-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Must match the PAGES_PROJECT variable set on the Railway backend, whose
+  # CORS allowlist derives the preview-origin pattern from it.
+  PROJECT: sapako
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          if [ -z "$API_BASE_URL" ]; then
+            echo "::error::The API_BASE_URL repository variable is not set. Without it the app would build against http://localhost:3000 and every screen would fail to load."
+            exit 1
+          fi
+          npm run build:web
+
+      - name: Verify the document shell was applied
+        # A bare `expo export` emits Expo's stock index.html: no RTL, no install
+        # metadata, no service worker. It looks like a successful build and
+        # fails silently in the browser, so check the output rather than trust
+        # that the right build command ran.
+        run: |
+          for pattern in 'dir="rtl"' 'viewport-fit=cover' 'apple-mobile-web-app-capable' 'rel="manifest"' 'apple-touch-icon' 'serviceWorker.register'; do
+            if ! grep -qF "$pattern" dist/index.html; then
+              echo "::error::dist/index.html is missing '$pattern' — the post-build patch did not run."
+              exit 1
+            fi
+          done
+          # Anchored on the assignment: sw.js's own comment names the
+          # placeholder too, so a plain string match would fail every build.
+          if grep -qE "^const CACHE_VERSION = '__BUILD_ID__';" dist/sw.js; then
+            echo "::error::dist/sw.js still carries the __BUILD_ID__ placeholder, so every deploy would share one cache name and superseded bundles would never be evicted."
+            exit 1
+          fi
+          test -f dist/_redirects || { echo "::error::dist/_redirects is missing — deep links would 404 instead of booting the app."; exit 1; }
+
+      - name: Ensure the Cloudflare Pages project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if ! npx wrangler@3 pages project list 2>/dev/null | grep -qw "$PROJECT"; then
+            npx wrangler@3 pages project create "$PROJECT" --production-branch main
+          fi
+
+      - name: Deploy
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler@3 pages deploy dist \
+            --project-name "$PROJECT" \
+            --branch "$GITHUB_REF_NAME" \
+            --commit-dirty=true | tee deploy.log
+          url=$(grep -oE 'https://[a-z0-9.-]+\.pages\.dev' deploy.log | tail -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the URL to the run summary
+        # Surfaced here so the URL is one tap away on a phone, which is where
+        # it actually gets used.
+        run: |
+          {
+            echo "### Sapako web — \`$GITHUB_REF_NAME\`"
+            echo ""
+            echo "**${{ steps.deploy.outputs.url }}**"
+            echo ""
+            if [ "$GITHUB_REF_NAME" = "main" ]; then
+              echo "Production. Also reachable at https://$PROJECT.pages.dev"
+            else
+              echo "Preview. Also reachable at https://$GITHUB_REF_NAME.$PROJECT.pages.dev"
+              echo ""
+              echo "Open it in Safari on the iPhone, then Share → Add to Home Screen. Test from the home-screen icon, not a Safari tab — safe-area insets and storage persistence both behave differently there."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

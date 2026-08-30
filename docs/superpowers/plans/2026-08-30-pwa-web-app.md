@@ -815,64 +815,112 @@ git commit -m "ci: typecheck and test the mobile package"
 
 ---
 
-### Task 7: Cloudflare Pages deployment
+### Task 7: Cloudflare Pages deployment via GitHub Actions
 
-This task is done in the Cloudflare dashboard, not in code.
+Deployment runs from `.github/workflows/deploy-web.yml` rather than
+Cloudflare's dashboard Git integration. Two reasons: the deploy is then
+version-controlled and reviewable rather than living in a dashboard nobody
+can diff, and connecting a repo through the Git integration is a dashboard-only
+operation with no API — so it could not be automated at all.
 
-- [ ] **Step 1: Push the branch**
+The workflow also runs typecheck and tests before deploying. `mobile-ci.yml`
+triggers on `pull_request` only, and this project pushes straight to `main`
+with no pull requests, so without that nothing would gate a real deploy.
+
+Pushing any branch produces a preview at `<branch>.sapako.pages.dev`; pushing
+`main` deploys production. The branch alias is what the backend's CORS
+preview-origin pattern matches (Task 5).
+
+**Files:**
+- Create: `.github/workflows/deploy-web.yml`
+
+- [ ] **Step 1: Human — create a Cloudflare API token**
+
+In the Cloudflare dashboard: My Profile → API Tokens → Create Token → use the
+**Edit Cloudflare Workers** template, or a custom token with **Account →
+Cloudflare Pages → Edit**. Copy the token, and copy your Account ID from the
+dashboard sidebar.
+
+- [ ] **Step 2: Human — add the repository secrets and variable**
+
+```bash
+gh secret set CLOUDFLARE_API_TOKEN
+gh secret set CLOUDFLARE_ACCOUNT_ID
+gh variable set API_BASE_URL --body "https://sapako-backend-production.up.railway.app"
+```
+
+The first two prompt for the value rather than taking it as an argument, so
+the token never lands in shell history. `API_BASE_URL` is a variable, not a
+secret — it is a public URL, and making it a secret would only mean GitHub
+redacts it from the build logs where you might want to read it.
+
+- [ ] **Step 3: Human — set the Railway environment variables**
+
+This is Task 5 Step 8, repeated here because the deploy depends on it. On the
+backend service in Railway:
+
+- `WEB_ORIGINS` = `https://sapako.pages.dev` (plus any custom domain, comma-separated)
+- `PAGES_PROJECT` = `sapako`
+
+`PAGES_PROJECT` must match the `PROJECT` env value in the workflow, since the
+backend derives its preview-origin regex from it. If these are missing, the
+site loads but every screen fails with a CORS error.
+
+- [ ] **Step 4: Verify the workflow file is valid and its checks are sound**
+
+```bash
+ruby -ryaml -e 'd=YAML.load_file(".github/workflows/deploy-web.yml"); puts "valid; steps=#{d["jobs"]["deploy"]["steps"].size}"'
+```
+
+Expected: `valid; steps=10`.
+
+Then confirm the build-verification step passes on a good build and fails on
+a bad one:
+
+```bash
+cd mobile && npm run build:web >/dev/null
+grep -qE "^const CACHE_VERSION = '__BUILD_ID__';" dist/sw.js && echo "FAIL" || echo "ok stamped"
+grep -qE "^const CACHE_VERSION = '__BUILD_ID__';" public/sw.js && echo "ok detects unstamped" || echo "FAIL"
+```
+
+Expected: `ok stamped` then `ok detects unstamped`. The regex is anchored on
+the assignment because `sw.js`'s own comment also names the placeholder — a
+plain string match would fail every build.
+
+- [ ] **Step 5: Push the branch and read the run summary**
 
 ```bash
 git push -u origin pwa-web-app
 ```
 
-- [ ] **Step 2: Create the Pages project**
-
-Cloudflare dashboard → Workers & Pages → Create → Pages → Connect to Git → select the Sapako repo. Settings:
-
-| Setting | Value |
-|---|---|
-| Project name | `sapako` (must match `PAGES_PROJECT` from Task 5 Step 8) |
-| Production branch | `main` |
-| Framework preset | None |
-| Build command | `npm run build:web` |
-| Build output directory | `dist` |
-| Root directory | `mobile` |
-
-Environment variables (apply to **both** Production and Preview):
-
-- `API_BASE_URL` = `https://sapako-backend-production.up.railway.app`
-
-- [ ] **Step 3: Add the SPA rewrite**
-
-Create `mobile/public/_redirects` with:
-
-```
-/*    /index.html   200
-```
-
-Without this, refreshing on a deep link like `/providers/3/order` returns 404 instead of booting the app. Commit it:
+The workflow creates the Pages project on first run if it does not exist, then
+deploys. Its run summary prints the preview URL:
 
 ```bash
-git add mobile/public/_redirects
-git commit -m "feat(mobile): add SPA rewrite for Cloudflare Pages"
-git push
+gh run watch
+gh run view --web
 ```
 
-- [ ] **Step 4: Verify the preview deployment**
+- [ ] **Step 6: Verify the deployment**
 
-Cloudflare builds `pwa-web-app` to `https://pwa-web-app.sapako.pages.dev`. Open it in a desktop browser.
+Open the preview URL in a desktop browser. Expected: the login screen,
+right-to-left, and a successful login.
 
-Expected: login screen, rendered right-to-left, and a successful login. **If login fails with a network error**, the CORS env vars from Task 5 Step 8 are missing or the origin does not match — check the browser console for a CORS message before changing anything else.
+**If login fails with a network error**, check the browser console for a CORS
+message — that means Step 3's Railway variables are missing or `PAGES_PROJECT`
+does not match the workflow's `PROJECT`.
 
-- [ ] **Step 5: Verify installation on the iPhone**
+- [ ] **Step 7: Verify installation on the iPhone**
 
-Open the preview URL in Safari on the iPhone → Share → Add to Home Screen. Launch from the home screen.
+Open the preview URL in Safari on the iPhone → Share → Add to Home Screen.
+Launch from the home screen.
 
-Expected: correct icon, the name "Sapako", and **no Safari address bar or toolbar**. Visible browser chrome means `apple-mobile-web-app-capable` is not reaching the served HTML — return to Task 2 Step 3.
-
-At this point Stage 1 is done: the app is installable and usable, with known-broken confirmation dialogs and barcode scanning.
+Expected: correct icon, the name "Sapako", and **no Safari address bar or
+toolbar**. Visible browser chrome means `apple-mobile-web-app-capable` is not
+reaching the served HTML — check the workflow's shell-verification step output.
 
 ---
+
 
 ## Stage 2 — Replace `Alert` with a Real Dialog
 

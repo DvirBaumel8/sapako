@@ -311,31 +311,48 @@ No other backend change. No database change. No API change.
 
 ## 6. Build & Deploy
 
-**Host:** Cloudflare Pages, connected to the GitHub repo. (Vercel is an
-equivalent alternative on every axis except preview-URL predictability, which
-§5 depends on.)
+**Host:** Cloudflare Pages, deployed from `.github/workflows/deploy-web.yml`
+via `wrangler` — not through Cloudflare's dashboard Git integration. The
+integration is dashboard-only with no API, so it could not be automated; and
+a workflow file is reviewable and diffable in a way a dashboard is not.
 
 | Setting | Value |
 |---|---|
-| Root directory | `mobile` |
-| Build command | `npx expo export --platform web` |
-| Output directory | `dist` |
-| SPA rewrite | all unmatched paths → `/index.html` |
-| Build env | `API_BASE_URL=https://sapako-backend-production.up.railway.app` |
+| Trigger | push to any branch touching `mobile/**`, plus manual dispatch |
+| Node | 22, npm cache keyed on `mobile/package-lock.json` |
+| Gates | `npx tsc --noEmit`, `npm test`, then a build-output verification |
+| Build | `npm run build:web` in `mobile/` |
+| Deploy | `wrangler pages deploy dist --project-name sapako --branch $GITHUB_REF_NAME` |
 
-The SPA rewrite is required: without it, a deep link or a page refresh on
-`/providers/3/order` returns a 404 instead of booting the app.
+Required repository configuration: secrets `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`, and variable `API_BASE_URL` (a variable rather than a
+secret — it is a public URL, and secret-redaction would only obscure it in
+logs). The build fails loudly if `API_BASE_URL` is unset rather than silently
+building against `localhost:3000`.
 
-`API_BASE_URL` is already read at config-evaluation time in `app.config.ts`
-and surfaced through `extra.apiBaseUrl`, so no client code changes to
-consume it. It is the same backend URL `mobile/eas.json` already targets.
+The workflow verifies its own build output before deploying: that
+`dist/index.html` carries the RTL attribute, the `viewport-fit` meta, the
+install metadata and the service worker registration; that `dist/sw.js` had
+its cache placeholder stamped; and that `dist/_redirects` exists. A bare
+`expo export` produces a plausible-looking build missing all of these and
+fails only in the browser, so the check exists to turn a silent runtime
+failure into a loud build failure.
 
-**Preview URLs are the point of this project.** Every branch builds to
-`<branch>.<project>.pages.dev`. The workflow becomes: build locally,
-push a branch, open its preview URL on an actual iPhone, verify, then merge
-to `main`. This is what replaces the current "ship it and let the friend
-find the bugs" loop, and it is compatible with `CLAUDE.md`'s push-to-`main`
-deploy model — `main` still deploys production.
+`_redirects` (`/* /index.html 200`) ships from `mobile/public/`. Without it a
+refresh on a deep link like `/providers/3/order` returns 404 instead of
+booting the app.
+
+**Preview URLs are the point of this project.** Every branch deploys to
+`<branch>.sapako.pages.dev`, and the workflow writes that URL into the run
+summary. The workflow: build locally, push a branch, open its URL on an actual
+iPhone, verify, then merge to `main`. This replaces the current "ship it and
+let the friend find the bugs" loop, and is compatible with `CLAUDE.md`'s
+push-to-`main` deploy model — `main` still deploys production.
+
+Typecheck and tests run inside this workflow rather than only in
+`mobile-ci.yml`, because that file triggers on `pull_request` and this project
+pushes straight to `main` without pull requests — so on its own it would never
+gate a real deploy.
 
 **New: `.github/workflows/mobile-ci.yml`.** The repo currently has CI for
 `backend/**` only. Mirror it for `mobile/**`: `npm ci`, `npx tsc --noEmit`,
