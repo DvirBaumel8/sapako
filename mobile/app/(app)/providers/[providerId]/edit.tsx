@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -11,12 +11,14 @@ import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { hasLetter, sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import { isValidIsraeliPhone, PHONE_VALIDATION_ERROR } from '../../../../src/utils/phoneValidation';
 import { isConflictError } from '../../../../src/api/errors';
+import { useAlert } from '../../../../src/ui/AlertProvider';
 
 export default function EditProviderScreen() {
   useRequireAdmin();
   const { providerId } = useLocalSearchParams<{ providerId: string }>();
   const { selectedBranch } = useBranch();
   const queryClient = useQueryClient();
+  const showAlert = useAlert();
   const { data: providers } = useQuery({
     queryKey: ['providers', selectedBranch!.id, 'all'],
     queryFn: () => fetchAllProvidersForBranch(selectedBranch!.id),
@@ -75,7 +77,7 @@ export default function EditProviderScreen() {
       if (isConflictError(err)) {
         setNameError('כבר קיים ספק בשם זה בסניף. יש לבחור שם אחר.');
       } else {
-        Alert.alert('שגיאה', 'שמירת הספק נכשלה. יש לנסות שוב.');
+        showAlert({ title: 'שגיאה', message: 'שמירת הספק נכשלה. יש לנסות שוב.' });
       }
     }
   };
@@ -87,19 +89,19 @@ export default function EditProviderScreen() {
       router.back();
     },
     onError: () => {
-      Alert.alert('שגיאה', 'מחיקת הספק נכשלה. יש לנסות שוב.');
+      showAlert({ title: 'שגיאה', message: 'מחיקת הספק נכשלה. יש לנסות שוב.' });
     },
   });
 
   const confirmDelete = () => {
-    Alert.alert(
-      'מחיקת ספק',
-      `למחוק לצמיתות את "${provider?.name}"? פעולה זו תמחק גם את כל המוצרים וההיסטוריה של ההזמנות שלו. לא ניתן לשחזר פעולה זו.`,
-      [
+    showAlert({
+      title: 'מחיקת ספק',
+      message: `למחוק לצמיתות את "${provider?.name}"? פעולה זו תמחק גם את כל המוצרים וההיסטוריה של ההזמנות שלו. לא ניתן לשחזר פעולה זו.`,
+      buttons: [
         { text: 'ביטול', style: 'cancel' },
         { text: 'מחיקה לצמיתות', style: 'destructive', onPress: () => removeProvider.mutate() },
       ],
-    );
+    });
   };
 
   if (!isInitialized) {

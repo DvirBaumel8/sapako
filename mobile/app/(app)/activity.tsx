@@ -1,9 +1,10 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteOrder, fetchOrdersForBranch } from '../../src/api/orders';
 import { useBranch } from '../../src/branch/BranchContext';
+import { useAlert } from '../../src/ui/AlertProvider';
 import type { Order } from '../../src/api/types';
 
 const NAME_TRUNCATE_LENGTH = 22;
@@ -15,6 +16,7 @@ function truncate(name: string): string {
 export default function ActivityScreen() {
   const { selectedBranch } = useBranch();
   const queryClient = useQueryClient();
+  const showAlert = useAlert();
   const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(new Set());
   const { data: orders, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['orders', selectedBranch!.id],
@@ -39,7 +41,7 @@ export default function ActivityScreen() {
       queryClient.invalidateQueries({ queryKey: ['orders', selectedBranch!.id] });
     },
     onError: () => {
-      Alert.alert('שגיאה', 'מחיקת ההזמנה נכשלה. יש לנסות שוב.');
+      showAlert({ title: 'שגיאה', message: 'מחיקת ההזמנה נכשלה. יש לנסות שוב.' });
     },
   });
 
@@ -56,14 +58,14 @@ export default function ActivityScreen() {
   };
 
   const confirmDelete = (order: Order) => {
-    Alert.alert(
-      'מחיקת הזמנה',
-      `למחוק את ההזמנה עבור ${order.provider.name}? לא ניתן לשחזר פעולה זו.`,
-      [
+    showAlert({
+      title: 'מחיקת הזמנה',
+      message: `למחוק את ההזמנה עבור ${order.provider.name}? לא ניתן לשחזר פעולה זו.`,
+      buttons: [
         { text: 'ביטול', style: 'cancel' },
         { text: 'מחיקה', style: 'destructive', onPress: () => removeOrder.mutate(order.id) },
       ],
-    );
+    });
   };
 
   const openInOrderBuilder = (order: Order) => {
@@ -112,7 +114,7 @@ export default function ActivityScreen() {
                   <Pressable
                     key={item.id}
                     style={styles.detailRow}
-                    onLongPress={() => Alert.alert(item.productNameSnapshot)}
+                    onLongPress={() => showAlert({ title: item.productNameSnapshot })}
                   >
                     <Text style={styles.detailQuantity}>
                       {item.quantity} {item.unitType}

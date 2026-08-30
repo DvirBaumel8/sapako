@@ -1,10 +1,11 @@
 import React from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchAllProvidersForBranch, fetchProvidersForBranch, updateProvider } from '../../../../src/api/providers';
 import { useBranch } from '../../../../src/branch/BranchContext';
 import { useAuth } from '../../../../src/auth/AuthContext';
+import { useAlert } from '../../../../src/ui/AlertProvider';
 import type { Provider } from '../../../../src/api/types';
 
 export default function DepartmentProvidersScreen() {
@@ -16,6 +17,7 @@ export default function DepartmentProvidersScreen() {
   const { role } = useAuth();
   const isAdmin = role === 'ADMIN';
   const queryClient = useQueryClient();
+  const showAlert = useAlert();
   const { data: providers, isLoading, refetch, isRefetching } = useQuery({
     queryKey: isAdmin
       ? ['providers', selectedBranch!.id, 'all']
@@ -41,19 +43,19 @@ export default function DepartmentProvidersScreen() {
       queryClient.invalidateQueries({ queryKey: ['providers', selectedBranch!.id] });
     },
     onError: () => {
-      Alert.alert('שגיאה', 'הסרת הספק מהמחלקה נכשלה. יש לנסות שוב.');
+      showAlert({ title: 'שגיאה', message: 'הסרת הספק מהמחלקה נכשלה. יש לנסות שוב.' });
     },
   });
 
   const confirmRemove = (provider: Provider) => {
-    Alert.alert(
-      'הסרת ספק מהמחלקה',
-      `להסיר את "${provider.name}" מהמחלקה "${departmentName ?? ''}"? הספק עצמו לא יימחק.`,
-      [
+    showAlert({
+      title: 'הסרת ספק מהמחלקה',
+      message: `להסיר את "${provider.name}" מהמחלקה "${departmentName ?? ''}"? הספק עצמו לא יימחק.`,
+      buttons: [
         { text: 'ביטול', style: 'cancel' },
         { text: 'הסרה', style: 'destructive', onPress: () => removeFromDepartment.mutate(provider) },
       ],
-    );
+    });
   };
 
   return (
