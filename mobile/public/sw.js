@@ -1,6 +1,9 @@
-// Cache name is bumped on every deploy by the build (see CACHE_VERSION).
-// Anything cached under an older name is deleted on activate.
-const CACHE_VERSION = 'v1';
+// __BUILD_ID__ is rewritten to a fresh value on every export by
+// scripts/patch-html.mjs, so each deploy gets its own cache name and the
+// activate handler below evicts the previous one. Without that rewrite the
+// name would be constant, eviction would never fire, and every superseded
+// bundle would accumulate on the user's device forever.
+const CACHE_VERSION = '__BUILD_ID__';
 const CACHE_NAME = `sapako-${CACHE_VERSION}`;
 
 self.addEventListener('install', (event) => {
@@ -70,17 +73,14 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       } catch (error) {
+        // Cached under the URL actually navigated to (e.g. /login), not
+        // /index.html — the SPA rewrite happens server-side, so the worker
+        // never sees that path. A deep link never visited online therefore
+        // has no cached entry and fails here, which is the accepted
+        // behaviour: offline support is out of scope (spec section 9).
         const cached = await caches.match(request);
         if (cached) {
           return cached;
-        }
-        // SPA navigation with no cached copy of that exact URL: fall back to
-        // the shell, which is what the server's SPA rewrite would have done.
-        if (request.mode === 'navigate') {
-          const shell = await caches.match('/index.html');
-          if (shell) {
-            return shell;
-          }
         }
         throw error;
       }

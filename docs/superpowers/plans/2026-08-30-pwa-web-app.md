@@ -227,6 +227,7 @@ Replace the entire contents of `mobile/scripts/patch-html.mjs`:
 // RTL direction, viewport, PWA install metadata, global CSS, and the service
 // worker registration. It runs after every export, via `npm run build:web`.
 import { readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 
 const MARKER = '<!-- sapako-shell -->';
 const path = new URL('../dist/index.html', import.meta.url);
@@ -283,6 +284,22 @@ html = html.replace('</head>', `${head}  </head>`);
 
 writeFileSync(path, html);
 console.log('patched dist/index.html');
+
+// Give this build its own service worker cache name. sw.js ships with a
+// __BUILD_ID__ placeholder; stamping it here is what makes the worker's
+// activate handler evict the previous build's cache instead of letting
+// superseded bundles accumulate on the device indefinitely.
+const swPath = new URL('../dist/sw.js', import.meta.url);
+const sw = readFileSync(swPath, 'utf8');
+// Anchored on the assignment, not the bare token: the surrounding comment in
+// sw.js also names the placeholder, and a plain string replace would rewrite
+// that first occurrence and silently leave the actual constant untouched.
+const placeholder = /^const CACHE_VERSION = '__BUILD_ID__';$/m;
+if (!placeholder.test(sw)) {
+  throw new Error('dist/sw.js has no CACHE_VERSION placeholder to stamp');
+}
+writeFileSync(swPath, sw.replace(placeholder, `const CACHE_VERSION = '${randomUUID()}';`));
+console.log('stamped dist/sw.js');
 ```
 
 Note the service worker registration lives here. `sw.js` itself is created in
@@ -330,7 +347,25 @@ cd mobile && grep -c -F 'name="viewport"' dist/index.html && grep -c -F 'lang=' 
 Expected: exactly `1` viewport tag, exactly `1` `lang=` occurrence, and the
 second line reads `<html lang="he" dir="rtl">`.
 
-- [ ] **Step 7: Verify idempotency**
+- [ ] **Step 7: Verify the service worker cache name is stamped**
+
+```bash
+cd mobile && grep -n "^const CACHE_VERSION" dist/sw.js public/sw.js
+```
+
+Expected: `dist/sw.js` shows a UUID; `public/sw.js` still shows
+`'__BUILD_ID__'`. The source keeps the placeholder; only the build output is
+stamped. Then rebuild and confirm the UUID *changes*:
+
+```bash
+cd mobile && npm run build:web >/dev/null && grep -n "^const CACHE_VERSION" dist/sw.js
+```
+
+Expected: a different UUID from the previous run. A constant value here means
+the worker's `activate` eviction never fires and superseded bundles accumulate
+on the device forever.
+
+- [ ] **Step 8: Verify idempotency**
 
 ```bash
 cd mobile && node scripts/patch-html.mjs
@@ -338,7 +373,7 @@ cd mobile && node scripts/patch-html.mjs
 
 Expected: prints `dist/index.html already patched` and changes nothing.
 
-- [ ] **Step 8: Verify RTL in a browser**
+- [ ] **Step 9: Verify RTL in a browser**
 
 ```bash
 cd mobile && npx serve dist -s -l 8080
@@ -348,7 +383,7 @@ Open `http://localhost:8080`. Expected: the login screen renders
 right-to-left — the Hebrew labels align to the right edge — and the page loads
 exactly once (no reload loop).
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add mobile/app mobile/scripts/patch-html.mjs mobile/package.json
@@ -452,9 +487,12 @@ The single most common PWA failure is pinning users to a stale build forever. Th
 Create `mobile/public/sw.js`:
 
 ```js
-// Cache name is bumped on every deploy by the build (see CACHE_VERSION).
-// Anything cached under an older name is deleted on activate.
-const CACHE_VERSION = 'v1';
+// __BUILD_ID__ is rewritten to a fresh value on every export by
+// scripts/patch-html.mjs, so each deploy gets its own cache name and the
+// activate handler below evicts the previous one. Without that rewrite the
+// name would be constant, eviction would never fire, and every superseded
+// bundle would accumulate on the user's device forever.
+const CACHE_VERSION = '__BUILD_ID__';
 const CACHE_NAME = `sapako-${CACHE_VERSION}`;
 
 self.addEventListener('install', (event) => {
@@ -524,17 +562,14 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       } catch (error) {
+        // Cached under the URL actually navigated to (e.g. /login), not
+        // /index.html — the SPA rewrite happens server-side, so the worker
+        // never sees that path. A deep link never visited online therefore
+        // has no cached entry and fails here, which is the accepted
+        // behaviour: offline support is out of scope (spec section 9).
         const cached = await caches.match(request);
         if (cached) {
           return cached;
-        }
-        // SPA navigation with no cached copy of that exact URL: fall back to
-        // the shell, which is what the server's SPA rewrite would have done.
-        if (request.mode === 'navigate') {
-          const shell = await caches.match('/index.html');
-          if (shell) {
-            return shell;
-          }
         }
         throw error;
       }

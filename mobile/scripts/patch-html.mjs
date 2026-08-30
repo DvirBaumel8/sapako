@@ -4,6 +4,7 @@
 // RTL direction, viewport, PWA install metadata, global CSS, and the service
 // worker registration. It runs after every export, via `npm run build:web`.
 import { readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 
 const MARKER = '<!-- sapako-shell -->';
 const path = new URL('../dist/index.html', import.meta.url);
@@ -60,3 +61,19 @@ html = html.replace('</head>', `${head}  </head>`);
 
 writeFileSync(path, html);
 console.log('patched dist/index.html');
+
+// Give this build its own service worker cache name. sw.js ships with a
+// __BUILD_ID__ placeholder; stamping it here is what makes the worker's
+// activate handler evict the previous build's cache instead of letting
+// superseded bundles accumulate on the device indefinitely.
+const swPath = new URL('../dist/sw.js', import.meta.url);
+const sw = readFileSync(swPath, 'utf8');
+// Anchored on the assignment, not the bare token: the surrounding comment in
+// sw.js also names the placeholder, and a plain string replace would rewrite
+// that first occurrence and silently leave the actual constant untouched.
+const placeholder = /^const CACHE_VERSION = '__BUILD_ID__';$/m;
+if (!placeholder.test(sw)) {
+  throw new Error('dist/sw.js has no CACHE_VERSION placeholder to stamp');
+}
+writeFileSync(swPath, sw.replace(placeholder, `const CACHE_VERSION = '${randomUUID()}';`));
+console.log('stamped dist/sw.js');
