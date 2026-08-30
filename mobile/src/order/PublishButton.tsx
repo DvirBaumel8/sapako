@@ -36,13 +36,23 @@ export function PublishButton({ order, items }: PublishButtonProps) {
       const message = buildOrderMessage({ ...order, items });
       const phoneDigitsOnly = toWhatsAppPhoneNumber(order.provider.phone);
       const url = `https://wa.me/${phoneDigitsOnly}?text=${encodeURIComponent(message)}`;
-      // Same-tab navigation rather than Linking.openURL: Safari blocks
-      // window.open once an await has broken the user-gesture chain, which
-      // would make publishing silently do nothing. wa.me redirects to the
+      // Hand off in a separate browsing context rather than navigating this
+      // one. Assigning location.href would begin unloading the page, and the
+      // browser cancels in-flight requests on unload — so the publishOrder
+      // call below would never complete and the order would stay a draft
+      // even though the message was sent, inviting a duplicate send.
+      //
+      // Called synchronously, before this function's first await: Safari
+      // blocks window.open once the user-gesture chain is broken, which is
+      // also why the old canOpenURL check is gone. wa.me redirects to the
       // WhatsApp app on mobile and to web.whatsapp.com on desktop, so there
-      // is nothing to feature-detect — which is why the canOpenURL check
-      // that used to guard this is gone.
-      window.location.href = url;
+      // is nothing left to feature-detect.
+      const handedOff = window.open(url, '_blank');
+      if (!handedOff) {
+        // Blocked anyway. Navigating this tab always works, at the cost of
+        // losing the publishOrder call — better than not sending the order.
+        window.location.href = url;
+      }
       try {
         await publishOrder(order.id);
       } catch {
