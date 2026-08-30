@@ -35,19 +35,33 @@ export function createBarcodeReader({
   // Not state: the decode callback fires once per frame, and a state update
   // would not have applied before the next frame arrives.
   let hasScanned = false;
+  // start() is async, so stop() can land while getUserMedia and ZXing are
+  // still negotiating — most often when the user dismisses the scanner with
+  // the OS permission prompt still up. Without this flag that stop() is a
+  // no-op (controls is still null), and the controls that arrive afterwards
+  // are never stopped by anyone: the stream stays live and the phone's
+  // camera indicator stays lit after the scanner is gone.
+  let stopped = false;
 
   return {
     async start(video: HTMLVideoElement) {
       hasScanned = false;
-      controls = await zxing.decodeFromVideoDevice(undefined, video, (result) => {
+      stopped = false;
+      const started = await zxing.decodeFromVideoDevice(undefined, video, (result) => {
         if (!result || hasScanned) {
           return;
         }
         hasScanned = true;
         onScanned(result.getText());
       });
+      if (stopped) {
+        started.stop();
+        return;
+      }
+      controls = started;
     },
     stop() {
+      stopped = true;
       controls?.stop();
       controls = null;
     },

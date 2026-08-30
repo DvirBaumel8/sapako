@@ -51,6 +51,13 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
   const [status, setStatus] = useState<Status>('starting');
   const [useManualEntry, setUseManualEntry] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Both call sites pass a fresh closure for these on every render, so
+  // depending on them directly would tear down and restart the camera
+  // whenever the parent screen re-renders — including on the React Query
+  // refetch that the permission prompt's own focus change can trigger,
+  // right as the stream is coming up. Read them through a ref instead.
+  const handlersRef = useRef({ onScanned, onClose });
+  handlersRef.current = { onScanned, onClose };
   const readerRef = useRef<ReturnType<typeof createBarcodeReader> | null>(null);
 
   useEffect(() => {
@@ -63,8 +70,8 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
     const reader = createBarcodeReader({
       onScanned: (barcode) => {
         reader.stop();
-        onScanned(barcode);
-        onClose();
+        handlersRef.current.onScanned(barcode);
+        handlersRef.current.onClose();
       },
     });
     readerRef.current = reader;
@@ -96,7 +103,7 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
       reader.stop();
       readerRef.current = null;
     };
-  }, [visible, useManualEntry, onScanned, onClose]);
+  }, [visible, useManualEntry]);
 
   useEffect(() => {
     if (visible) {

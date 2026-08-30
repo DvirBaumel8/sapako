@@ -48,9 +48,12 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
             <Text style={styles.title}>{current?.title}</Text>
             {current?.message ? <Text style={styles.message}>{current.message}</Text> : null}
             <View style={styles.buttonRow}>
-              {buttons.map((button) => (
+              {/* Index in the key, not just the label: the provider-match
+                  prompt builds its buttons from provider names, which are
+                  not guaranteed distinct from each other or from 'ביטול'. */}
+              {buttons.map((button, index) => (
                 <Pressable
-                  key={button.text}
+                  key={`${index}-${button.text}`}
                   style={styles.button}
                   onPress={() => dismiss(button.onPress)}
                 >

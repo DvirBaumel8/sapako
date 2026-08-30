@@ -1054,9 +1054,12 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
             <Text style={styles.title}>{current?.title}</Text>
             {current?.message ? <Text style={styles.message}>{current.message}</Text> : null}
             <View style={styles.buttonRow}>
-              {buttons.map((button) => (
+              {/* Index in the key, not just the label: the provider-match
+                  prompt builds its buttons from provider names, which are
+                  not guaranteed distinct from each other or from 'ביטול'. */}
+              {buttons.map((button, index) => (
                 <Pressable
-                  key={button.text}
+                  key={`${index}-${button.text}`}
                   style={styles.button}
                   onPress={() => dismiss(button.onPress)}
                 >
@@ -1458,6 +1461,31 @@ describe('createBarcodeReader', () => {
     expect(fake.stop).toHaveBeenCalledTimes(1);
   });
 
+  it('stops the camera when stop() is called before start() resolves', async () => {
+    // The widest window for this is while the OS permission prompt is up: the
+    // user taps cancel, cleanup runs stop(), and only then does ZXing hand
+    // back the controls. Nothing else holds a reference to them, so if start()
+    // does not stop them here the stream stays live and the phone's camera
+    // indicator stays lit after the scanner is gone.
+    const stop = jest.fn();
+    let resolveStart: (controls: { stop: () => void }) => void = () => {};
+    const controls = {
+      decodeFromVideoDevice: jest.fn(
+        () => new Promise((resolve) => {
+          resolveStart = resolve as (c: { stop: () => void }) => void;
+        }),
+      ),
+    };
+    const reader = createBarcodeReader({ reader: controls as never, onScanned: jest.fn() });
+
+    const startPromise = reader.start({} as never);
+    reader.stop();
+    resolveStart({ stop });
+    await startPromise;
+
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
   it('tolerates stop() before start()', async () => {
     const fake = makeFakeZxing();
     const reader = createBarcodeReader({ reader: fake.controls as never, onScanned: jest.fn() });
@@ -1517,19 +1545,33 @@ export function createBarcodeReader({
   // Not state: the decode callback fires once per frame, and a state update
   // would not have applied before the next frame arrives.
   let hasScanned = false;
+  // start() is async, so stop() can land while getUserMedia and ZXing are
+  // still negotiating — most often when the user dismisses the scanner with
+  // the OS permission prompt still up. Without this flag that stop() is a
+  // no-op (controls is still null), and the controls that arrive afterwards
+  // are never stopped by anyone: the stream stays live and the phone's
+  // camera indicator stays lit after the scanner is gone.
+  let stopped = false;
 
   return {
     async start(video: HTMLVideoElement) {
       hasScanned = false;
-      controls = await zxing.decodeFromVideoDevice(undefined, video, (result) => {
+      stopped = false;
+      const started = await zxing.decodeFromVideoDevice(undefined, video, (result) => {
         if (!result || hasScanned) {
           return;
         }
         hasScanned = true;
         onScanned(result.getText());
       });
+      if (stopped) {
+        started.stop();
+        return;
+      }
+      controls = started;
     },
     stop() {
+      stopped = true;
       controls?.stop();
       controls = null;
     },
@@ -1543,7 +1585,7 @@ export function createBarcodeReader({
 cd mobile && npx jest src/barcode/createBarcodeReader.test.ts
 ```
 
-Expected: PASS, 4 tests.
+Expected: PASS, 5 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -1619,6 +1661,13 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
   const [status, setStatus] = useState<Status>('starting');
   const [useManualEntry, setUseManualEntry] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Both call sites pass a fresh closure for these on every render, so
+  // depending on them directly would tear down and restart the camera
+  // whenever the parent screen re-renders — including on the React Query
+  // refetch that the permission prompt's own focus change can trigger,
+  // right as the stream is coming up. Read them through a ref instead.
+  const handlersRef = useRef({ onScanned, onClose });
+  handlersRef.current = { onScanned, onClose };
   const readerRef = useRef<ReturnType<typeof createBarcodeReader> | null>(null);
 
   useEffect(() => {
@@ -1631,8 +1680,8 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
     const reader = createBarcodeReader({
       onScanned: (barcode) => {
         reader.stop();
-        onScanned(barcode);
-        onClose();
+        handlersRef.current.onScanned(barcode);
+        handlersRef.current.onClose();
       },
     });
     readerRef.current = reader;
@@ -1664,7 +1713,7 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
       reader.stop();
       readerRef.current = null;
     };
-  }, [visible, useManualEntry, onScanned, onClose]);
+  }, [visible, useManualEntry]);
 
   useEffect(() => {
     if (visible) {

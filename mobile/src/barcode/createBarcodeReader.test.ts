@@ -52,6 +52,31 @@ describe('createBarcodeReader', () => {
     expect(fake.stop).toHaveBeenCalledTimes(1);
   });
 
+  it('stops the camera when stop() is called before start() resolves', async () => {
+    // The widest window for this is while the OS permission prompt is up: the
+    // user taps cancel, cleanup runs stop(), and only then does ZXing hand
+    // back the controls. Nothing else holds a reference to them, so if start()
+    // does not stop them here the stream stays live and the phone's camera
+    // indicator stays lit after the scanner is gone.
+    const stop = jest.fn();
+    let resolveStart: (controls: { stop: () => void }) => void = () => {};
+    const controls = {
+      decodeFromVideoDevice: jest.fn(
+        () => new Promise((resolve) => {
+          resolveStart = resolve as (c: { stop: () => void }) => void;
+        }),
+      ),
+    };
+    const reader = createBarcodeReader({ reader: controls as never, onScanned: jest.fn() });
+
+    const startPromise = reader.start({} as never);
+    reader.stop();
+    resolveStart({ stop });
+    await startPromise;
+
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
   it('tolerates stop() before start()', async () => {
     const fake = makeFakeZxing();
     const reader = createBarcodeReader({ reader: fake.controls as never, onScanned: jest.fn() });
