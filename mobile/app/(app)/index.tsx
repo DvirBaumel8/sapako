@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProvidersForBranch } from '../../src/api/providers';
@@ -8,9 +8,11 @@ import { useBranch } from '../../src/branch/BranchContext';
 import { BarcodeScannerModal } from '../../src/barcode/BarcodeScannerModal';
 import { resolveBarcodeMatches, type BarcodeMatch } from '../../src/providers/resolveBarcodeMatches';
 import { buildProviderSearchResults } from '../../src/providers/buildProviderSearchResults';
+import { useAlert } from '../../src/ui/AlertProvider';
 
 export default function HomeScreen() {
   const { selectedBranch } = useBranch();
+  const showAlert = useAlert();
   const [search, setSearch] = useState('');
   const [isScannerVisible, setIsScannerVisible] = useState(false);
   const [collapsedProviderIds, setCollapsedProviderIds] = useState<Set<string>>(new Set());
@@ -53,12 +55,12 @@ export default function HomeScreen() {
 
   const handleBarcodeScanned = (barcode: string) => {
     if (error || branchProductsError) {
-      Alert.alert('שגיאה', 'לא ניתן לטעון את נתוני הספקים והמוצרים כרגע. יש לנסות שוב.');
+      showAlert({ title: 'שגיאה', message: 'לא ניתן לטעון את נתוני הספקים והמוצרים כרגע. יש לנסות שוב.' });
       return;
     }
     const matches = resolveBarcodeMatches(providers ?? [], branchProducts ?? [], barcode);
     if (matches.length === 0) {
-      Alert.alert('לא נמצא מוצר תואם', 'לא נמצא מוצר עם ברקוד זה אצל אף ספק בסניף.');
+      showAlert({ title: 'לא נמצא מוצר תואם', message: 'לא נמצא מוצר עם ברקוד זה אצל אף ספק בסניף.' });
       return;
     }
     if (matches.length === 1) {
@@ -67,19 +69,19 @@ export default function HomeScreen() {
     }
     const visibleMatches = matches.slice(0, 2);
     const isTruncated = matches.length > visibleMatches.length;
-    Alert.alert(
-      'המוצר נמצא אצל כמה ספקים',
-      isTruncated
+    showAlert({
+      title: 'המוצר נמצא אצל כמה ספקים',
+      message: isTruncated
         ? `לאיזה ספק לפתוח את ההזמנה? (מוצגים 2 מתוך ${matches.length} ספקים)`
         : 'לאיזה ספק לפתוח את ההזמנה?',
-      [
+      buttons: [
         { text: 'ביטול', style: 'cancel' as const },
         ...visibleMatches.map((match) => ({
           text: match.providerName,
           onPress: () => navigateToMatch(match),
         })),
       ],
-    );
+    });
   };
 
   return (
