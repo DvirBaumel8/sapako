@@ -88,11 +88,20 @@ export default function UserAccessScreen() {
 
   // Department and branch writes touch many rows at once, so they await the
   // call and refetch instead of predicting the result locally.
+  //
+  // Each is guarded by a ref as well as the state that disables the switch.
+  // The state copy is what a rendered closure captured, so two taps landing
+  // before React re-renders both read false and both write — and the second
+  // one also re-reads isCurrentlyGranted from the same stale render, so it
+  // sends the value that was just sent rather than the opposite one.
   const [departmentPending, setDepartmentPending] = useState<Record<string, boolean>>({});
+  const departmentInFlightRef = useRef<Set<string>>(new Set());
   const [branchPending, setBranchPending] = useState(false);
+  const branchInFlightRef = useRef(false);
 
   const toggleDepartmentAccess = async (departmentId: string, isCurrentlyGranted: boolean) => {
-    if (departmentPending[departmentId]) return;
+    if (departmentInFlightRef.current.has(departmentId)) return;
+    departmentInFlightRef.current.add(departmentId);
     setDepartmentPending((prev) => ({ ...prev, [departmentId]: true }));
     try {
       await setDepartmentAccess(userId, departmentId, !isCurrentlyGranted);
@@ -103,6 +112,7 @@ export default function UserAccessScreen() {
         message: 'עדכון ההרשאה למחלקה נכשל. יש לבדוק את החיבור ולנסות שוב.',
       });
     } finally {
+      departmentInFlightRef.current.delete(departmentId);
       setDepartmentPending((prev) => {
         const updated = { ...prev };
         delete updated[departmentId];
@@ -137,7 +147,8 @@ export default function UserAccessScreen() {
   };
 
   const toggleBranchAccess = async (branchId: string, grantAll: boolean) => {
-    if (branchPending) return;
+    if (branchInFlightRef.current) return;
+    branchInFlightRef.current = true;
     setBranchPending(true);
     try {
       await setBranchAccess(userId, branchId, grantAll);
@@ -148,6 +159,7 @@ export default function UserAccessScreen() {
         message: 'עדכון ההרשאה לסניף נכשל. יש לבדוק את החיבור ולנסות שוב.',
       });
     } finally {
+      branchInFlightRef.current = false;
       setBranchPending(false);
     }
   };

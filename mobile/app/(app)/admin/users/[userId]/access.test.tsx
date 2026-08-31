@@ -147,28 +147,59 @@ describe('UserAccessScreen — granting every department', () => {
       ).toBeTruthy(),
     );
   });
+});
 
-  it('ignores a second tap while the first is still in flight', async () => {
-    // Two taps land before React re-renders, so a guard reading the pending
-    // flag from render state would still see false on the second and fire a
-    // second write across every department.
-    let release: () => void = () => {};
-    (setAllDepartmentsAccess as jest.Mock).mockReturnValue(
-      new Promise<void>((resolve) => {
-        release = resolve;
-      }),
-    );
+describe('UserAccessScreen — a single department', () => {
+  it('grants a department that is currently off', async () => {
     await renderScreen();
-    const toggle = screen.getByLabelText('הרשאה לכל המחלקות');
 
-    // Not awaited: press resolves only once the handler's write settles, so
-    // awaiting here would deadlock against the promise released below.
-    const first = fireEvent.press(toggle);
-    const second = fireEvent.press(toggle);
-    release();
-    await first;
-    await second;
+    await fireEvent.press(screen.getByLabelText('חלב'));
 
-    expect(setAllDepartmentsAccess).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(setDepartmentAccess).toHaveBeenCalledWith('user-1', 'dep-1', true),
+    );
+  });
+
+  it('revokes a department that is currently on', async () => {
+    // Sends the negation of the current value, not the value back again.
+    (fetchAccess as jest.Mock).mockResolvedValue(accessView(true));
+    await renderScreen();
+
+    await fireEvent.press(screen.getByLabelText('חלב'));
+
+    await waitFor(() =>
+      expect(setDepartmentAccess).toHaveBeenCalledWith('user-1', 'dep-1', false),
+    );
+  });
+
+  it('touches only the department that was tapped', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByLabelText('ירקות'));
+
+    await waitFor(() => expect(setDepartmentAccess).toHaveBeenCalledTimes(1));
+    expect(setDepartmentAccess).toHaveBeenCalledWith('user-1', 'dep-2', true);
+    expect(setAllDepartmentsAccess).not.toHaveBeenCalled();
+  });
+
+  it('reports a failure instead of leaving the switch looking successful', async () => {
+    (setDepartmentAccess as jest.Mock).mockRejectedValue(new Error('offline'));
+    await renderScreen();
+
+    await fireEvent.press(screen.getByLabelText('חלב'));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('עדכון ההרשאה למחלקה נכשל. יש לבדוק את החיבור ולנסות שוב.'),
+      ).toBeTruthy(),
+    );
   });
 });
+
+// The in-flight guards on these toggles are deliberately not covered here.
+// They exist for two taps landing within one frame, and this harness cannot
+// represent that: awaiting fireEvent.press waits for the handler's write to
+// settle, so no in-flight window survives the await, and firing without
+// awaiting opens overlapping act() scopes that corrupt every later test in
+// the file. A test written either way would pass without exercising the
+// guard. See the comment beside departmentInFlightRef in access.tsx.
