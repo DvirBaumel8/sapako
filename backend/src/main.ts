@@ -11,6 +11,7 @@ import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { buildCorsConfig, isAllowedOrigin } from './cors';
+import { VALIDATION_PIPE_OPTIONS } from './validation';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -24,13 +25,7 @@ async function bootstrap() {
       callback(null, isAllowedOrigin(origin, corsConfig));
     },
   });
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
+  app.useGlobalPipes(new ValidationPipe(VALIDATION_PIPE_OPTIONS));
   const port = process.env.PORT ? Number(process.env.PORT) : 3000;
   await app.listen(port);
 }

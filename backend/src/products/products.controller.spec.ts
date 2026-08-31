@@ -1,4 +1,6 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import {
   BranchProductsController,
   ProviderProductsController,
@@ -6,6 +8,7 @@ import {
 } from './products.controller';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { UNIT_TYPES } from './unit-types';
 import { Role } from '../users/role.enum';
 import { ROLES_KEY } from '../auth/roles.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -36,7 +39,10 @@ describe('BranchProductsController', () => {
 
   describe('guards', () => {
     it('requires authentication and branch access for the whole controller', () => {
-      const guards = Reflect.getMetadata(GUARDS_METADATA, BranchProductsController);
+      const guards = Reflect.getMetadata(
+        GUARDS_METADATA,
+        BranchProductsController,
+      );
       expect(guards).toEqual([JwtAuthGuard, BranchAccessGuard, RolesGuard]);
     });
   });
@@ -50,12 +56,13 @@ describe('BranchProductsController', () => {
 
       const result = await controller.findForBranch(req, 'b1');
 
-      expect(mockPermissionsService.getAccessibleProviderIds).toHaveBeenCalledWith(
-        req.user,
+      expect(
+        mockPermissionsService.getAccessibleProviderIds,
+      ).toHaveBeenCalledWith(req.user);
+      expect(mockProductsService.findActiveByBranch).toHaveBeenCalledWith(
+        'b1',
+        ['p1'],
       );
-      expect(mockProductsService.findActiveByBranch).toHaveBeenCalledWith('b1', [
-        'p1',
-      ]);
       expect(result).toBe(products);
     });
   });
@@ -75,7 +82,10 @@ describe('ProviderProductsController', () => {
 
   describe('guards', () => {
     it('requires authentication and provider access for the whole controller', () => {
-      const guards = Reflect.getMetadata(GUARDS_METADATA, ProviderProductsController);
+      const guards = Reflect.getMetadata(
+        GUARDS_METADATA,
+        ProviderProductsController,
+      );
       expect(guards).toEqual([JwtAuthGuard, ProviderAccessGuard, RolesGuard]);
     });
 
@@ -103,7 +113,9 @@ describe('ProviderProductsController', () => {
 
       const result = await controller.findForProvider('p1');
 
-      expect(mockProductsService.findActiveByProvider).toHaveBeenCalledWith('p1');
+      expect(mockProductsService.findActiveByProvider).toHaveBeenCalledWith(
+        'p1',
+      );
       expect(result).toBe(products);
     });
   });
@@ -136,7 +148,10 @@ describe('ProductAdminController', () => {
 
   describe('guards', () => {
     it('requires authentication for the whole controller', () => {
-      const guards = Reflect.getMetadata(GUARDS_METADATA, ProductAdminController);
+      const guards = Reflect.getMetadata(
+        GUARDS_METADATA,
+        ProductAdminController,
+      );
       expect(guards).toEqual([JwtAuthGuard, RolesGuard]);
     });
 
@@ -177,6 +192,84 @@ describe('ProductAdminController', () => {
       await controller.remove('prod1');
 
       expect(mockProductsService.remove).toHaveBeenCalledWith('prod1');
+    });
+  });
+});
+
+// The unit list is what tells the app a weight from a countable thing, and
+// so whether a fractional quantity is allowed. A value outside the list
+// would reach quantityStep(), fall through to the "unrecognised" branch and
+// silently become a whole-unit product — no error, just a scale item the
+// shop can no longer order 1.5 kg of. These tests hold the constraint that
+// stops that at the door; test/products-validation.e2e-spec.ts proves the
+// pipe enforcing it is actually mounted on the running app.
+describe('unitType validation', () => {
+  describe('CreateProductDto', () => {
+    it.each(UNIT_TYPES)('accepts the listed unit %s', async (unitType) => {
+      const dto = plainToInstance(CreateProductDto, {
+        name: 'עגבניות',
+        unitType,
+      });
+
+      const errors = await validate(dto);
+
+      expect(errors).toHaveLength(0);
+    });
+
+    it('rejects a unit outside the list', async () => {
+      const dto = plainToInstance(CreateProductDto, {
+        name: 'עגבניות',
+        unitType: 'שקית',
+      });
+
+      const errors = await validate(dto);
+
+      expect(errors.map((error) => error.property)).toContain('unitType');
+    });
+
+    it('rejects a missing unit, so no product is stored without one', async () => {
+      const dto = plainToInstance(CreateProductDto, { name: 'עגבניות' });
+
+      const errors = await validate(dto);
+
+      expect(errors.map((error) => error.property)).toContain('unitType');
+    });
+
+    it('rejects an empty-string unit', async () => {
+      const dto = plainToInstance(CreateProductDto, {
+        name: 'עגבניות',
+        unitType: '',
+      });
+
+      const errors = await validate(dto);
+
+      expect(errors.map((error) => error.property)).toContain('unitType');
+    });
+  });
+
+  describe('UpdateProductDto', () => {
+    it.each(UNIT_TYPES)('accepts the listed unit %s', async (unitType) => {
+      const dto = plainToInstance(UpdateProductDto, { unitType });
+
+      const errors = await validate(dto);
+
+      expect(errors).toHaveLength(0);
+    });
+
+    it('rejects a unit outside the list', async () => {
+      const dto = plainToInstance(UpdateProductDto, { unitType: 'שקית' });
+
+      const errors = await validate(dto);
+
+      expect(errors.map((error) => error.property)).toContain('unitType');
+    });
+
+    it('allows the unit to be omitted, since an update may touch only the name', async () => {
+      const dto = plainToInstance(UpdateProductDto, { name: 'עגבניות שרי' });
+
+      const errors = await validate(dto);
+
+      expect(errors).toHaveLength(0);
     });
   });
 });

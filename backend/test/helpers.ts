@@ -3,17 +3,16 @@ import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { randomUUID } from 'crypto';
 import { AppModule } from '../src/app.module';
+import { VALIDATION_PIPE_OPTIONS } from '../src/validation';
 
 export async function createTestApp(): Promise<INestApplication> {
   const moduleFixture = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
   const app = moduleFixture.createNestApplication();
-  // Mirrors main.ts: without it, DTO validation is absent and every test
-  // asserting a 400 would fail for reasons unrelated to the endpoint.
-  app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-  );
+  // The same options object main.ts uses, not a copy of it — so a test
+  // asserting a 400 is asserting something about production.
+  app.useGlobalPipes(new ValidationPipe(VALIDATION_PIPE_OPTIONS));
   await app.init();
   return app;
 }
@@ -69,20 +68,30 @@ export async function seed(app: INestApplication): Promise<Seeded> {
   const staffUsername = `${STAFF.username}-${suffix}`;
 
   const branch = await request(http)
-    .post('/branches').set(auth(adminToken)).send({ name: `סניף בדיקה ${suffix}` }).expect(201);
+    .post('/branches')
+    .set(auth(adminToken))
+    .send({ name: `סניף בדיקה ${suffix}` })
+    .expect(201);
   const otherBranch = await request(http)
-    .post('/branches').set(auth(adminToken)).send({ name: `סניף שני ${suffix}` }).expect(201);
+    .post('/branches')
+    .set(auth(adminToken))
+    .send({ name: `סניף שני ${suffix}` })
+    .expect(201);
 
   const department = await request(http)
     .post(`/branches/${branch.body.id}/departments`)
-    .set(auth(adminToken)).send({ name: 'חלב' }).expect(201);
+    .set(auth(adminToken))
+    .send({ name: 'חלב' })
+    .expect(201);
   // CreateProviderDto requires a non-empty departmentIds array (@ArrayNotEmpty),
   // so a provider outside any department isn't possible — the other two
   // providers go in a second, ungranted department instead. That still makes
   // a department grant distinguishable from a grant of everything.
   const otherDepartment = await request(http)
     .post(`/branches/${branch.body.id}/departments`)
-    .set(auth(adminToken)).send({ name: 'ירקות' }).expect(201);
+    .set(auth(adminToken))
+    .send({ name: 'ירקות' })
+    .expect(201);
 
   const providerIds: string[] = [];
   for (const name of ['תנובה', 'שטראוס', 'אוסם', 'הנמל']) {
@@ -103,7 +112,8 @@ export async function seed(app: INestApplication): Promise<Seeded> {
   }
 
   const staff = await request(http)
-    .post('/users').set(auth(adminToken))
+    .post('/users')
+    .set(auth(adminToken))
     .send({ username: staffUsername, password: STAFF.password, role: 'STAFF' })
     .expect(201);
 

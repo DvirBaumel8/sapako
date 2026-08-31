@@ -156,7 +156,10 @@ describe('BranchOrdersController', () => {
 
   describe('guards', () => {
     it('requires authentication and branch access for the whole controller', () => {
-      const guards = Reflect.getMetadata(GUARDS_METADATA, BranchOrdersController);
+      const guards = Reflect.getMetadata(
+        GUARDS_METADATA,
+        BranchOrdersController,
+      );
       expect(guards).toEqual([JwtAuthGuard, BranchAccessGuard]);
     });
   });
@@ -170,9 +173,9 @@ describe('BranchOrdersController', () => {
 
       const result = await controller.findForBranch(req, 'b1');
 
-      expect(mockPermissionsService.getAccessibleProviderIds).toHaveBeenCalledWith(
-        req.user,
-      );
+      expect(
+        mockPermissionsService.getAccessibleProviderIds,
+      ).toHaveBeenCalledWith(req.user);
       expect(mockOrdersService.findByBranch).toHaveBeenCalledWith('b1', ['p1']);
       expect(result).toBe(orders);
     });

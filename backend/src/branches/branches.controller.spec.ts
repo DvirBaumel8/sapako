@@ -33,11 +33,16 @@ describe('BranchesController', () => {
       expect(guards).toEqual([JwtAuthGuard, RolesGuard]);
 
       // No class-level @Roles: any authenticated role may reach findAccessible.
-      expect(Reflect.getMetadata(ROLES_KEY, BranchesController)).toBeUndefined();
+      expect(
+        Reflect.getMetadata(ROLES_KEY, BranchesController),
+      ).toBeUndefined();
     });
 
     it('restricts creating a branch to ADMIN', () => {
-      const roles = Reflect.getMetadata(ROLES_KEY, BranchesController.prototype.create);
+      const roles = Reflect.getMetadata(
+        ROLES_KEY,
+        BranchesController.prototype.create,
+      );
       expect(roles).toEqual([Role.ADMIN]);
     });
 
@@ -59,7 +64,9 @@ describe('BranchesController', () => {
 
       const result = await controller.findAccessible(req);
 
-      expect(mockPermissionsService.getAccessibleBranchIds).toHaveBeenCalledWith(req.user);
+      expect(
+        mockPermissionsService.getAccessibleBranchIds,
+      ).toHaveBeenCalledWith(req.user);
       expect(mockBranchesService.findAll).toHaveBeenCalledTimes(1);
       expect(mockBranchesService.findByIds).not.toHaveBeenCalled();
       expect(result).toBe(allBranches);

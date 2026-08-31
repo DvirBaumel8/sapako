@@ -106,7 +106,9 @@ describe('BranchesService', () => {
 
       await service.findAll();
 
-      expect(mockRepo.find).toHaveBeenCalledWith({ order: { createdAt: 'ASC' } });
+      expect(mockRepo.find).toHaveBeenCalledWith({
+        order: { createdAt: 'ASC' },
+      });
     });
   });
 });

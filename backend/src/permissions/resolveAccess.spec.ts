@@ -9,11 +9,16 @@ const input = {
 
 describe('resolveAccess', () => {
   it('denies a provider with no rule at all', () => {
-    expect(resolveAccess('p1', input)).toEqual({ isGranted: false, reason: 'NONE' });
+    expect(resolveAccess('p1', input)).toEqual({
+      isGranted: false,
+      reason: 'NONE',
+    });
   });
 
   it('grants a directly granted provider', () => {
-    expect(resolveAccess('p1', { ...input, directProviderIds: ['p1'] })).toEqual({
+    expect(
+      resolveAccess('p1', { ...input, directProviderIds: ['p1'] }),
+    ).toEqual({
       isGranted: true,
       reason: 'DIRECT',
     });
@@ -26,7 +31,11 @@ describe('resolveAccess', () => {
         grantedDepartmentIds: ['d1'],
         departmentsByProviderId: { p1: [{ id: 'd1', name: 'חלב' }] },
       }),
-    ).toEqual({ isGranted: true, reason: 'DEPARTMENT', viaDepartmentName: 'חלב' });
+    ).toEqual({
+      isGranted: true,
+      reason: 'DEPARTMENT',
+      viaDepartmentName: 'חלב',
+    });
   });
 
   it('lets a block beat a direct grant', () => {
@@ -49,7 +58,11 @@ describe('resolveAccess', () => {
         grantedDepartmentIds: ['d1'],
         departmentsByProviderId: { p1: [{ id: 'd1', name: 'חלב' }] },
       }),
-    ).toEqual({ isGranted: false, reason: 'BLOCKED', viaDepartmentName: 'חלב' });
+    ).toEqual({
+      isGranted: false,
+      reason: 'BLOCKED',
+      viaDepartmentName: 'חלב',
+    });
   });
 
   it('reports a dormant block as a plain denial', () => {
@@ -70,10 +83,17 @@ describe('resolveAccess', () => {
         ...input,
         grantedDepartmentIds: ['d2'],
         departmentsByProviderId: {
-          p1: [{ id: 'd1', name: 'חלב' }, { id: 'd2', name: 'ירקות' }],
+          p1: [
+            { id: 'd1', name: 'חלב' },
+            { id: 'd2', name: 'ירקות' },
+          ],
         },
       }),
-    ).toEqual({ isGranted: true, reason: 'DEPARTMENT', viaDepartmentName: 'ירקות' });
+    ).toEqual({
+      isGranted: true,
+      reason: 'DEPARTMENT',
+      viaDepartmentName: 'ירקות',
+    });
   });
 
   it('names the alphabetically first granted department when several apply', () => {
@@ -84,7 +104,10 @@ describe('resolveAccess', () => {
         ...input,
         grantedDepartmentIds: ['d1', 'd2'],
         departmentsByProviderId: {
-          p1: [{ id: 'd2', name: 'ירקות' }, { id: 'd1', name: 'חלב' }],
+          p1: [
+            { id: 'd2', name: 'ירקות' },
+            { id: 'd1', name: 'חלב' },
+          ],
         },
       }).viaDepartmentName,
     ).toBe('חלב');

@@ -36,7 +36,9 @@ describe('permissions (e2e)', () => {
     // providerIds[3] sits in the second, ungranted department, so this is a
     // grant with no department behind it at all.
     await request(app.getHttpServer())
-      .put(`/users/${fixtures.staffUserId}/providers/${fixtures.providerIds[3]}/access`)
+      .put(
+        `/users/${fixtures.staffUserId}/providers/${fixtures.providerIds[3]}/access`,
+      )
       .set(auth(fixtures.adminToken))
       .send({ granted: true })
       .expect(200);
@@ -63,7 +65,9 @@ describe('permissions (e2e)', () => {
 
   it('a department grant makes every provider in it visible, reported as DEPARTMENT', async () => {
     await request(app.getHttpServer())
-      .put(`/users/${fixtures.staffUserId}/departments/${fixtures.departmentId}/access`)
+      .put(
+        `/users/${fixtures.staffUserId}/departments/${fixtures.departmentId}/access`,
+      )
       .set(auth(fixtures.adminToken))
       .send({ granted: true })
       .expect(200);
@@ -83,7 +87,10 @@ describe('permissions (e2e)', () => {
       .set(auth(fixtures.adminToken))
       .expect(200);
     const byId = Object.fromEntries(
-      access.body.providers.map((p: { id: string; reason: string }) => [p.id, p]),
+      access.body.providers.map((p: { id: string; reason: string }) => [
+        p.id,
+        p,
+      ]),
     );
     expect(byId[fixtures.providerIds[0]].reason).toBe('DEPARTMENT');
     expect(byId[fixtures.providerIds[1]].reason).toBe('DEPARTMENT');
@@ -111,7 +118,9 @@ describe('permissions (e2e)', () => {
 
   it('blocking a department-granted provider 403s it while siblings stay 200', async () => {
     await request(app.getHttpServer())
-      .put(`/users/${fixtures.staffUserId}/providers/${fixtures.providerIds[0]}/access`)
+      .put(
+        `/users/${fixtures.staffUserId}/providers/${fixtures.providerIds[0]}/access`,
+      )
       .set(auth(fixtures.adminToken))
       .send({ granted: false })
       .expect(200);
@@ -130,7 +139,9 @@ describe('permissions (e2e)', () => {
 
   it('revoking the department leaves the block dormant, with no viaDepartmentName', async () => {
     await request(app.getHttpServer())
-      .put(`/users/${fixtures.staffUserId}/departments/${fixtures.departmentId}/access`)
+      .put(
+        `/users/${fixtures.staffUserId}/departments/${fixtures.departmentId}/access`,
+      )
       .set(auth(fixtures.adminToken))
       .send({ granted: false })
       .expect(200);
@@ -149,7 +160,9 @@ describe('permissions (e2e)', () => {
 
   it('re-granting the department brings the exception back, name and all', async () => {
     await request(app.getHttpServer())
-      .put(`/users/${fixtures.staffUserId}/departments/${fixtures.departmentId}/access`)
+      .put(
+        `/users/${fixtures.staffUserId}/departments/${fixtures.departmentId}/access`,
+      )
       .set(auth(fixtures.adminToken))
       .send({ granted: true })
       .expect(200);
@@ -194,7 +207,9 @@ describe('permissions (e2e)', () => {
       })
       .expect(201);
     await request(app.getHttpServer())
-      .put(`/users/${fixtures.staffUserId}/providers/${otherProvider.body.id}/access`)
+      .put(
+        `/users/${fixtures.staffUserId}/providers/${otherProvider.body.id}/access`,
+      )
       .set(auth(fixtures.adminToken))
       .send({ granted: true })
       .expect(200);
@@ -205,7 +220,9 @@ describe('permissions (e2e)', () => {
 
     // Clear the first branch entirely.
     await request(app.getHttpServer())
-      .put(`/users/${fixtures.staffUserId}/branches/${fixtures.branchId}/access`)
+      .put(
+        `/users/${fixtures.staffUserId}/branches/${fixtures.branchId}/access`,
+      )
       .set(auth(fixtures.adminToken))
       .send({ granted: false })
       .expect(200);
@@ -240,19 +257,25 @@ describe('permissions (e2e)', () => {
       .expect(403);
 
     await request(app.getHttpServer())
-      .put(`/users/${fixtures.staffUserId}/providers/${fixtures.providerIds[0]}/access`)
+      .put(
+        `/users/${fixtures.staffUserId}/providers/${fixtures.providerIds[0]}/access`,
+      )
       .set(auth(fixtures.staffToken))
       .send({ granted: true })
       .expect(403);
 
     await request(app.getHttpServer())
-      .put(`/users/${fixtures.staffUserId}/departments/${fixtures.departmentId}/access`)
+      .put(
+        `/users/${fixtures.staffUserId}/departments/${fixtures.departmentId}/access`,
+      )
       .set(auth(fixtures.staffToken))
       .send({ granted: true })
       .expect(403);
 
     await request(app.getHttpServer())
-      .put(`/users/${fixtures.staffUserId}/branches/${fixtures.branchId}/access`)
+      .put(
+        `/users/${fixtures.staffUserId}/branches/${fixtures.branchId}/access`,
+      )
       .set(auth(fixtures.staffToken))
       .send({ granted: true })
       .expect(403);

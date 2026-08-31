@@ -192,16 +192,24 @@ export class PermissionsService {
   }
 
   /** Grants or revokes one provider, choosing the mechanism the rule requires. */
-  async setProviderAccess(userId: string, providerId: string, granted: boolean) {
+  async setProviderAccess(
+    userId: string,
+    providerId: string,
+    granted: boolean,
+  ) {
     const provider = await this.providerRepo.findOne({
       where: { id: providerId },
       relations: { departments: true },
     });
     if (!provider) throw new NotFoundException();
-    const departmentGrants = await this.departmentAccessRepo.find({ where: { userId } });
-    const grantedDepartmentIds = departmentGrants.map((row) => row.departmentId);
-    const reachedByDepartment = (provider.departments ?? []).some((department) =>
-      grantedDepartmentIds.includes(department.id),
+    const departmentGrants = await this.departmentAccessRepo.find({
+      where: { userId },
+    });
+    const grantedDepartmentIds = departmentGrants.map(
+      (row) => row.departmentId,
+    );
+    const reachedByDepartment = (provider.departments ?? []).some(
+      (department) => grantedDepartmentIds.includes(department.id),
     );
 
     if (granted) {
@@ -221,7 +229,11 @@ export class PermissionsService {
     }
   }
 
-  async setDepartmentAccess(userId: string, departmentId: string, granted: boolean) {
+  async setDepartmentAccess(
+    userId: string,
+    departmentId: string,
+    granted: boolean,
+  ) {
     if (granted) {
       await this.departmentAccessRepo.save({ userId, departmentId });
       return;
@@ -241,14 +253,19 @@ export class PermissionsService {
 
     if (granted) {
       await this.blockRepo.delete({ userId, providerId: In(providerIds) });
-      await this.accessRepo.save(providerIds.map((providerId) => ({ userId, providerId })));
+      await this.accessRepo.save(
+        providerIds.map((providerId) => ({ userId, providerId })),
+      );
       return;
     }
 
     await this.accessRepo.delete({ userId, providerId: In(providerIds) });
     await this.blockRepo.delete({ userId, providerId: In(providerIds) });
     if (departmentIds.length > 0) {
-      await this.departmentAccessRepo.delete({ userId, departmentId: In(departmentIds) });
+      await this.departmentAccessRepo.delete({
+        userId,
+        departmentId: In(departmentIds),
+      });
     }
   }
 }

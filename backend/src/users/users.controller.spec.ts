@@ -48,7 +48,10 @@ describe('UsersController', () => {
   describe('findAll', () => {
     it('delegates to the users service and maps each user through toSafeUser', async () => {
       const rawUsers = [{ id: 'u1' }, { id: 'u2' }];
-      const safeUsers = [{ id: 'u1', safe: true }, { id: 'u2', safe: true }];
+      const safeUsers = [
+        { id: 'u1', safe: true },
+        { id: 'u2', safe: true },
+      ];
       mockUsersService.findAllWithAccess.mockResolvedValue(rawUsers);
       mockUsersService.toSafeUser.mockImplementation((user: any) => ({
         ...user,
@@ -100,7 +103,10 @@ describe('UsersController', () => {
 
       controller.getAccess('u1', 'b1');
 
-      expect(mockPermissionsService.getAccessForBranch).toHaveBeenCalledWith('u1', 'b1');
+      expect(mockPermissionsService.getAccessForBranch).toHaveBeenCalledWith(
+        'u1',
+        'b1',
+      );
     });
   });
 
@@ -173,7 +179,9 @@ describe('UsersController', () => {
 
       const errors = await validate(dto);
 
-      const passwordError = errors.find((error) => error.property === 'password');
+      const passwordError = errors.find(
+        (error) => error.property === 'password',
+      );
       expect(passwordError).toBeDefined();
       expect(passwordError?.constraints).toHaveProperty('minLength');
     });

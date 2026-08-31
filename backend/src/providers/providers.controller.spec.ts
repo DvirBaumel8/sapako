@@ -36,7 +36,10 @@ describe('BranchProvidersController', () => {
 
   describe('guards', () => {
     it('requires authentication and branch access for the whole controller', () => {
-      const guards = Reflect.getMetadata(GUARDS_METADATA, BranchProvidersController);
+      const guards = Reflect.getMetadata(
+        GUARDS_METADATA,
+        BranchProvidersController,
+      );
       expect(guards).toEqual([JwtAuthGuard, BranchAccessGuard, RolesGuard]);
     });
 
@@ -74,12 +77,13 @@ describe('BranchProvidersController', () => {
 
       const result = await controller.findForBranch(req, 'b1');
 
-      expect(mockPermissionsService.getAccessibleProviderIds).toHaveBeenCalledWith(
-        req.user,
+      expect(
+        mockPermissionsService.getAccessibleProviderIds,
+      ).toHaveBeenCalledWith(req.user);
+      expect(mockProvidersService.findActiveByBranch).toHaveBeenCalledWith(
+        'b1',
+        ['p1'],
       );
-      expect(mockProvidersService.findActiveByBranch).toHaveBeenCalledWith('b1', [
-        'p1',
-      ]);
       expect(result).toBe(providers);
     });
   });
@@ -128,7 +132,10 @@ describe('ProviderAdminController', () => {
 
   describe('guards', () => {
     it('requires authentication for the whole controller', () => {
-      const guards = Reflect.getMetadata(GUARDS_METADATA, ProviderAdminController);
+      const guards = Reflect.getMetadata(
+        GUARDS_METADATA,
+        ProviderAdminController,
+      );
       expect(guards).toEqual([JwtAuthGuard, RolesGuard]);
     });
 

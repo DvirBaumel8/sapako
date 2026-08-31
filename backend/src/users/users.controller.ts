@@ -55,7 +55,11 @@ export class UsersController {
     @Param('providerId') providerId: string,
     @Body() dto: SetAccessDto,
   ) {
-    return this.permissionsService.setProviderAccess(userId, providerId, dto.granted);
+    return this.permissionsService.setProviderAccess(
+      userId,
+      providerId,
+      dto.granted,
+    );
   }
 
   @Put(':id/departments/:departmentId/access')
@@ -64,7 +68,11 @@ export class UsersController {
     @Param('departmentId') departmentId: string,
     @Body() dto: SetAccessDto,
   ) {
-    return this.permissionsService.setDepartmentAccess(userId, departmentId, dto.granted);
+    return this.permissionsService.setDepartmentAccess(
+      userId,
+      departmentId,
+      dto.granted,
+    );
   }
 
   @Put(':id/branches/:branchId/access')
@@ -73,6 +81,10 @@ export class UsersController {
     @Param('branchId') branchId: string,
     @Body() dto: SetAccessDto,
   ) {
-    return this.permissionsService.setBranchAccess(userId, branchId, dto.granted);
+    return this.permissionsService.setBranchAccess(
+      userId,
+      branchId,
+      dto.granted,
+    );
   }
 }

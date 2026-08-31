@@ -53,7 +53,10 @@ describe('PermissionsService', () => {
     const module = await Test.createTestingModule({
       providers: [
         PermissionsService,
-        { provide: getRepositoryToken(UserProviderAccess), useValue: directRepo },
+        {
+          provide: getRepositoryToken(UserProviderAccess),
+          useValue: directRepo,
+        },
         {
           provide: getRepositoryToken(UserDepartmentAccess),
           useValue: departmentAccessRepo,
@@ -328,11 +331,25 @@ describe('PermissionsService', () => {
 
       const result = await service.getAccessForBranch('u1', 'b1');
 
-      expect(result.departments).toEqual([{ id: 'd1', name: 'חלב', isGranted: true }]);
+      expect(result.departments).toEqual([
+        { id: 'd1', name: 'חלב', isGranted: true },
+      ]);
       expect(result.providers).toEqual([
         { id: 'p1', name: 'אוסם', isGranted: true, reason: 'DIRECT' },
-        { id: 'p2', name: 'תנובה', isGranted: true, reason: 'DEPARTMENT', viaDepartmentName: 'חלב' },
-        { id: 'p3', name: 'שטראוס', isGranted: false, reason: 'BLOCKED', viaDepartmentName: 'חלב' },
+        {
+          id: 'p2',
+          name: 'תנובה',
+          isGranted: true,
+          reason: 'DEPARTMENT',
+          viaDepartmentName: 'חלב',
+        },
+        {
+          id: 'p3',
+          name: 'שטראוס',
+          isGranted: false,
+          reason: 'BLOCKED',
+          viaDepartmentName: 'חלב',
+        },
       ]);
     });
   });
@@ -400,7 +417,10 @@ describe('PermissionsService', () => {
       providerRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.hasProviderAccess({ userId: 'u1', role: Role.STAFF } as never, 'nope'),
+        service.hasProviderAccess(
+          { userId: 'u1', role: Role.STAFF } as never,
+          'nope',
+        ),
       ).resolves.toBe(false);
     });
   });
@@ -415,7 +435,10 @@ describe('PermissionsService', () => {
 
       await service.setProviderAccess('u1', 'p1', true);
 
-      expect(blockRepo.delete).toHaveBeenCalledWith({ userId: 'u1', providerId: 'p1' });
+      expect(blockRepo.delete).toHaveBeenCalledWith({
+        userId: 'u1',
+        providerId: 'p1',
+      });
       expect(directRepo.save).not.toHaveBeenCalled();
     });
 
@@ -425,7 +448,10 @@ describe('PermissionsService', () => {
 
       await service.setProviderAccess('u1', 'p1', true);
 
-      expect(directRepo.save).toHaveBeenCalledWith({ userId: 'u1', providerId: 'p1' });
+      expect(directRepo.save).toHaveBeenCalledWith({
+        userId: 'u1',
+        providerId: 'p1',
+      });
     });
 
     it('blocks a department-granted provider when switched off', async () => {
@@ -437,7 +463,10 @@ describe('PermissionsService', () => {
 
       await service.setProviderAccess('u1', 'p1', false);
 
-      expect(blockRepo.save).toHaveBeenCalledWith({ userId: 'u1', providerId: 'p1' });
+      expect(blockRepo.save).toHaveBeenCalledWith({
+        userId: 'u1',
+        providerId: 'p1',
+      });
     });
 
     it('only removes the grant when switching off a directly granted provider', async () => {
@@ -448,7 +477,10 @@ describe('PermissionsService', () => {
 
       await service.setProviderAccess('u1', 'p1', false);
 
-      expect(directRepo.delete).toHaveBeenCalledWith({ userId: 'u1', providerId: 'p1' });
+      expect(directRepo.delete).toHaveBeenCalledWith({
+        userId: 'u1',
+        providerId: 'p1',
+      });
       expect(blockRepo.save).not.toHaveBeenCalled();
     });
 
@@ -458,7 +490,10 @@ describe('PermissionsService', () => {
 
       await service.setProviderAccess('u1', 'p1', true);
 
-      expect(blockRepo.delete).toHaveBeenCalledWith({ userId: 'u1', providerId: 'p1' });
+      expect(blockRepo.delete).toHaveBeenCalledWith({
+        userId: 'u1',
+        providerId: 'p1',
+      });
     });
 
     it('throws NotFoundException for a provider that does not exist', async () => {
@@ -599,7 +634,10 @@ describe('PermissionsService', () => {
 
       await service.setProviderAccess('u1', 'p1', true);
 
-      expect(directRepo.save).toHaveBeenCalledWith({ userId: 'u1', providerId: 'p1' });
+      expect(directRepo.save).toHaveBeenCalledWith({
+        userId: 'u1',
+        providerId: 'p1',
+      });
     });
   });
 });

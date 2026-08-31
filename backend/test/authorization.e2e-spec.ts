@@ -90,7 +90,10 @@ describe('authorization matrix (e2e)', () => {
     const order = await request(http)
       .post('/orders')
       .set(auth(fixtures.adminToken))
-      .send({ branchId: fixtures.branchId, providerId: fixtures.providerIds[0] })
+      .send({
+        branchId: fixtures.branchId,
+        providerId: fixtures.providerIds[0],
+      })
       .expect(201);
     orderId = order.body.id;
 

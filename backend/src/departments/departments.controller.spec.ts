@@ -29,7 +29,10 @@ describe('BranchDepartmentsController', () => {
 
   describe('guards', () => {
     it('requires authentication and branch access for the whole controller', () => {
-      const guards = Reflect.getMetadata(GUARDS_METADATA, BranchDepartmentsController);
+      const guards = Reflect.getMetadata(
+        GUARDS_METADATA,
+        BranchDepartmentsController,
+      );
       expect(guards).toEqual([JwtAuthGuard, BranchAccessGuard, RolesGuard]);
     });
 
@@ -57,7 +60,9 @@ describe('BranchDepartmentsController', () => {
 
       const result = await controller.findForBranch('b1');
 
-      expect(mockDepartmentsService.findAllForBranch).toHaveBeenCalledWith('b1');
+      expect(mockDepartmentsService.findAllForBranch).toHaveBeenCalledWith(
+        'b1',
+      );
       expect(result).toBe(departments);
     });
   });
@@ -90,7 +95,10 @@ describe('DepartmentAdminController', () => {
 
   describe('guards', () => {
     it('requires authentication for the whole controller', () => {
-      const guards = Reflect.getMetadata(GUARDS_METADATA, DepartmentAdminController);
+      const guards = Reflect.getMetadata(
+        GUARDS_METADATA,
+        DepartmentAdminController,
+      );
       expect(guards).toEqual([JwtAuthGuard, RolesGuard]);
     });
 
