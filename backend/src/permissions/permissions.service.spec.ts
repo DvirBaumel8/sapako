@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { In } from 'typeorm';
@@ -292,6 +293,25 @@ describe('PermissionsService', () => {
 
       expect(result).toEqual([]);
     });
+
+    it('excludes a blocked provider even though it is directly granted', async () => {
+      // The list endpoints (branch providers, branch products) go through
+      // this method, not hasProviderAccess — nothing else in this file
+      // proves a block is honoured on that path rather than only on the
+      // single-provider guard path.
+      directRepo.find.mockResolvedValue([{ userId: 'u1', providerId: 'p1' }]);
+      blockRepo.find.mockResolvedValue([{ userId: 'u1', providerId: 'p1' }]);
+      providerRepo.find.mockResolvedValue([
+        { id: 'p1', branchId: 'b1', departments: [] },
+      ]);
+
+      const result = await service.getAccessibleProviderIds({
+        userId: 'u1',
+        role: Role.STAFF,
+      });
+
+      expect(result).toEqual([]);
+    });
   });
 
   describe('getAccessForBranch', () => {
@@ -440,6 +460,16 @@ describe('PermissionsService', () => {
 
       expect(blockRepo.delete).toHaveBeenCalledWith({ userId: 'u1', providerId: 'p1' });
     });
+
+    it('throws NotFoundException for a provider that does not exist', async () => {
+      providerRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.setProviderAccess('u1', 'nope', true),
+      ).rejects.toThrow(NotFoundException);
+      expect(directRepo.save).not.toHaveBeenCalled();
+      expect(blockRepo.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('setDepartmentAccess', () => {
@@ -453,6 +483,18 @@ describe('PermissionsService', () => {
         departmentId: 'd1',
       });
       expect(directRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('grants the department', async () => {
+      // The feature's main happy path, previously unexercised: everything
+      // else in this describe block only covers revocation.
+      await service.setDepartmentAccess('u1', 'd1', true);
+
+      expect(departmentAccessRepo.save).toHaveBeenCalledWith({
+        userId: 'u1',
+        departmentId: 'd1',
+      });
+      expect(departmentAccessRepo.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -471,6 +513,93 @@ describe('PermissionsService', () => {
         userId: 'u1',
         departmentId: In(['d1']),
       });
+    });
+
+    it('makes no writes and does not throw for a branch with no providers', async () => {
+      // Not hypothetical: נתניה is exactly this today. Every write in the
+      // method is keyed off providerIds, so this only passes if the early
+      // return is actually reached rather than one of the deletes running
+      // with an empty In([]).
+      providerRepo.find.mockResolvedValue([]);
+      departmentRepo.find.mockResolvedValue([]);
+
+      await expect(
+        service.setBranchAccess('u1', 'b1', true),
+      ).resolves.toBeUndefined();
+
+      expect(directRepo.save).not.toHaveBeenCalled();
+      expect(directRepo.delete).not.toHaveBeenCalled();
+      expect(blockRepo.save).not.toHaveBeenCalled();
+      expect(blockRepo.delete).not.toHaveBeenCalled();
+      expect(departmentAccessRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('grants every provider in the branch and clears existing blocks', async () => {
+      providerRepo.find.mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
+      departmentRepo.find.mockResolvedValue([{ id: 'd1' }]);
+
+      await service.setBranchAccess('u1', 'b1', true);
+
+      expect(blockRepo.delete).toHaveBeenCalledWith({
+        userId: 'u1',
+        providerId: In(['p1', 'p2']),
+      });
+      expect(directRepo.save).toHaveBeenCalledWith([
+        { userId: 'u1', providerId: 'p1' },
+        { userId: 'u1', providerId: 'p2' },
+      ]);
+      expect(directRepo.delete).not.toHaveBeenCalled();
+      expect(departmentAccessRepo.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('missing departments relation', () => {
+    // The `?? []` fallback at each of the four call sites exists for a
+    // provider fetched without the departments relation joined at all —
+    // not one joined to zero departments, which every other test in this
+    // file uses. Nothing before this proved the fallback actually works.
+
+    it('hasProviderAccess treats it as empty rather than throwing', async () => {
+      providerRepo.findOne.mockResolvedValue({ id: 'p1' });
+
+      const allowed = await service.hasProviderAccess(
+        { userId: 'u1', role: Role.STAFF },
+        'p1',
+      );
+
+      expect(allowed).toBe(false);
+    });
+
+    it('getAccessibleBranchIds treats it as empty rather than throwing', async () => {
+      directRepo.find.mockResolvedValue([{ userId: 'u1', providerId: 'p1' }]);
+      providerRepo.find.mockResolvedValue([{ id: 'p1', branchId: 'b1' }]);
+
+      const result = await service.getAccessibleBranchIds({
+        userId: 'u1',
+        role: Role.STAFF,
+      });
+
+      expect(result).toEqual(['b1']);
+    });
+
+    it('getAccessForBranch treats it as empty rather than throwing', async () => {
+      providerRepo.find.mockResolvedValue([{ id: 'p1', name: 'אוסם' }]);
+      departmentRepo.find.mockResolvedValue([]);
+
+      const result = await service.getAccessForBranch('u1', 'b1');
+
+      expect(result.providers).toEqual([
+        { id: 'p1', name: 'אוסם', isGranted: false, reason: 'NONE' },
+      ]);
+    });
+
+    it('setProviderAccess treats it as empty rather than throwing', async () => {
+      departmentAccessRepo.find.mockResolvedValue([]);
+      providerRepo.findOne.mockResolvedValue({ id: 'p1' });
+
+      await service.setProviderAccess('u1', 'p1', true);
+
+      expect(directRepo.save).toHaveBeenCalledWith({ userId: 'u1', providerId: 'p1' });
     });
   });
 });
