@@ -58,8 +58,6 @@ git commit --allow-empty -m "chore: redeploy against the new API" && git push
 The Cloudflare workflow bakes `API_BASE_URL` in at build time, so the app must
 be rebuilt after this changes — an empty commit is enough.
 
-Also update `mobile/eas.json` if a native build is ever needed again.
-
 ## 4. Import the catalogue
 
 From `backend/`, with `DATABASE_URL` pointing at Neon and `DATABASE_SSL=true`:

@@ -9,13 +9,11 @@
     "@zxing/library": "^0.23.0",
     "axios": "^1.18.1",
     "expo": "~57.0.8",
-    "expo-camera": "~57.0.3",
     "expo-constants": "~57.0.7",
     "expo-linking": "~57.0.4",
     "expo-router": "~57.0.8",
     "expo-secure-store": "~57.0.1",
     "expo-status-bar": "~57.0.1",
-    "expo-updates": "~57.0.10",
     "jwt-decode": "^4.0.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -35,8 +33,6 @@
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
     "web": "expo start --web",
     "build:web": "expo export --platform web && node scripts/patch-html.mjs",
     "test": "jest"
