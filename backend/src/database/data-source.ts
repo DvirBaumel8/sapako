@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
+import { buildDatabaseSsl } from './ssl';
 import { EnableUuidExtension1700000000000 } from './migrations/1700000000000-EnableUuidExtension';
 import { CreateUsers1700000000001 } from './migrations/1700000000001-CreateUsers';
 import { CreateBranches1700000000002 } from './migrations/1700000000002-CreateBranches';
@@ -23,6 +24,7 @@ import { AddNameUniqueConstraints1700000000009 } from './migrations/170000000000
 const dataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
+  ssl: buildDatabaseSsl(process.env),
   entities: [__dirname + '/../**/*.entity.{ts,js}'],
   migrations: [
     EnableUuidExtension1700000000000,
