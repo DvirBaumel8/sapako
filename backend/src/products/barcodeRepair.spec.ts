@@ -2,9 +2,9 @@ import { planBarcodeRepairs } from './barcodeRepair';
 
 describe('planBarcodeRepairs', () => {
   it('leaves a barcode that is already canonical alone', () => {
-    expect(
-      planBarcodeRepairs([{ id: 'a', barcode: '7290000060071' }]),
-    ).toEqual([]);
+    expect(planBarcodeRepairs([{ id: 'a', barcode: '7290000060071' }])).toEqual(
+      [],
+    );
   });
 
   it('pads a UPC-A that lost its leading zero', () => {

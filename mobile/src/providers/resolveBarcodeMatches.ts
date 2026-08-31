@@ -1,4 +1,5 @@
 import type { Provider, ProviderProductSummary } from '../api/types';
+import { matchesBarcode } from '../barcode/matchesBarcode';
 
 export interface BarcodeMatch {
   providerId: string;
@@ -14,7 +15,7 @@ export function resolveBarcodeMatches(
   const providersById = new Map(providers.map((provider) => [provider.id, provider]));
   const matches: BarcodeMatch[] = [];
   for (const product of products) {
-    if (product.barcode !== barcode) continue;
+    if (!product.barcode || !matchesBarcode(product.barcode, barcode)) continue;
     const provider = providersById.get(product.providerId);
     if (!provider) continue;
     matches.push({ providerId: provider.id, providerName: provider.name, productId: product.id });

@@ -62,3 +62,34 @@ describe('resolveBarcodeMatches', () => {
     expect(resolveBarcodeMatches(providers, products, '111')).toEqual([]);
   });
 });
+
+describe('matching on the GTIN rather than the raw string', () => {
+  const providers = [{ id: 'p1', name: 'ספק א' }] as any;
+
+  it('matches a stored UPC-A when the scan drops the leading zero', () => {
+    const products = [
+      { id: 'x1', providerId: 'p1', name: 'פייבר', barcode: '016000185517' },
+    ] as any;
+
+    expect(resolveBarcodeMatches(providers, products, '16000185517')).toHaveLength(1);
+  });
+
+  it('matches a stored barcode that still carries a scanner prefix', () => {
+    // Eight products were saved with the "]C1" symbology identifier attached.
+    const products = [
+      { id: 'x1', providerId: 'p1', name: 'לאונידס', barcode: ']C17290019721024' },
+    ] as any;
+
+    expect(resolveBarcodeMatches(providers, products, '7290019721024')).toHaveLength(1);
+  });
+
+  it('does not match two products that merely both have unreadable barcodes', () => {
+    // Both normalise to null. Treating null as equal would make every junk
+    // barcode match every other one.
+    const products = [
+      { id: 'x1', providerId: 'p1', name: 'א', barcode: '#NAME?' },
+    ] as any;
+
+    expect(resolveBarcodeMatches(providers, products, 'tukuuhz ndi')).toEqual([]);
+  });
+});

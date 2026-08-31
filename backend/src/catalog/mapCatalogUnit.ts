@@ -13,13 +13,13 @@ import { UnitType } from '../products/unit-types';
  * fractional.
  */
 const FEED_UNITS: Record<string, UnitType> = {
-  'קילוגרם': 'ק"ג',
+  קילוגרם: 'ק"ג',
   'ק"ג': 'ק"ג',
-  'יחידות': 'יחידה',
-  'יחידה': 'יחידה',
-  'ליטר': 'ליטר',
-  'גרם': 'גרם',
-  'מיליליטר': 'מיליליטר',
+  יחידות: 'יחידה',
+  יחידה: 'יחידה',
+  ליטר: 'ליטר',
+  גרם: 'גרם',
+  מיליליטר: 'מיליליטר',
 };
 
 export function mapCatalogUnit(unitQty: string | undefined): UnitType | null {

@@ -1,9 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 import { planBarcodeRepairs } from '../../products/barcodeRepair';
 
-export class NormalizeProductBarcodes1700000000014
-  implements MigrationInterface
-{
+export class NormalizeProductBarcodes1700000000014 implements MigrationInterface {
   name = 'NormalizeProductBarcodes1700000000014';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -25,10 +23,10 @@ export class NormalizeProductBarcodes1700000000014
     // five-figure table, and a readable loop is worth more here than the
     // round trips it costs.
     for (const repair of repairs) {
-      await queryRunner.query(`UPDATE products SET barcode = $1 WHERE id = $2`, [
-        repair.to,
-        repair.id,
-      ]);
+      await queryRunner.query(
+        `UPDATE products SET barcode = $1 WHERE id = $2`,
+        [repair.to, repair.id],
+      );
     }
 
     console.log(`normalised ${repairs.length} product barcodes`);

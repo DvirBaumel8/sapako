@@ -18,6 +18,7 @@ import { PublishButton } from '../../../../src/order/PublishButton';
 import { createQuantityWriter } from '../../../../src/order/createQuantityWriter';
 import { BarcodeScannerModal } from '../../../../src/barcode/BarcodeScannerModal';
 import { AddUnknownProductModal } from '../../../../src/order/AddUnknownProductModal';
+import { matchesBarcode } from '../../../../src/barcode/matchesBarcode';
 import { findResumableDraft } from '../../../../src/order/findResumableDraft';
 import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 import { useAlert } from '../../../../src/ui/AlertProvider';
@@ -322,7 +323,9 @@ export default function OrderBuilderScreen() {
   };
 
   const handleBarcodeScanned = (barcode: string) => {
-    const match = products?.find((product) => product.barcode === barcode);
+    const match = products?.find(
+      (product) => product.barcode && matchesBarcode(product.barcode, barcode),
+    );
     if (!match) {
       if (role !== 'ADMIN') {
         showAlert({

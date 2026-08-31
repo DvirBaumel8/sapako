@@ -14,7 +14,8 @@ describe('CatalogController', () => {
   });
 
   it('requires an authenticated user', () => {
-    const guards = Reflect.getMetadata(GUARDS_METADATA, CatalogController) ?? [];
+    const guards =
+      Reflect.getMetadata(GUARDS_METADATA, CatalogController) ?? [];
     expect(guards).toContain(JwtAuthGuard);
   });
 

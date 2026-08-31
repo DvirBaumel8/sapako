@@ -21,7 +21,9 @@ export class CatalogController {
    * logs with failures that mean "this product is not in the supermarket".
    */
   @Get('lookup/:barcode')
-  async lookup(@Param('barcode') barcode: string): Promise<CatalogLookupResult> {
+  async lookup(
+    @Param('barcode') barcode: string,
+  ): Promise<CatalogLookupResult> {
     const found = await this.catalogService.lookup(barcode);
     if (!found) return { item: null };
     return {
