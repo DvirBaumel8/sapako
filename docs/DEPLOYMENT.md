@@ -72,18 +72,49 @@ through the admin screens.
 ## 5. Keep the API warm
 
 **A free Render web service sleeps after ~15 minutes idle and takes roughly 50
-seconds to wake.** For an app opened a few times a morning, that means a
+seconds to wake.** For an app opened a few times a morning, that is a
 50-second spinner on the first order of the day, every day.
 
-Point a free uptime monitor (UptimeRobot, cron-job.org) at
-`https://sapako-backend.onrender.com/health` every 5–10 minutes.
+Render's free tier allows 750 instance hours a month. A service kept awake
+around the clock uses about 730, so a permanent keep-warm ping fits inside the
+cap — but only for a single free service. Adding a second one puts the pair
+over the limit and both stop.
 
-Do **not** use a GitHub Actions cron for this. A 10-minute schedule is ~4,300
+### Setting it up
+
+1. Create a free account at uptimerobot.com (or cron-job.org).
+2. Add an **HTTP(s)** monitor:
+   - URL: `https://sapako-backend.onrender.com/health`
+   - Interval: **5 minutes** (UptimeRobot's free minimum; anything under 15
+     works)
+3. That is all. No change to this repo.
+
+`/health` returns a static `{"status":"ok"}` and touches no database
+(`src/health/health.controller.ts`). That is deliberate: the ping keeps
+Render's instance awake without waking Neon or spending database compute every
+five minutes.
+
+The trade-off is that this endpoint cannot detect a database outage — it
+answers `ok` even if Postgres is unreachable. That is the right shape for both
+of its jobs: Render's `healthCheckPath` should not kill a running instance
+over a transient database blip, and the pinger only needs to prevent sleep. If
+you later want genuine outage alerting, add a *second*, less frequent monitor
+against an endpoint that does query the database.
+
+### What this does and does not fix
+
+- It prevents the instance from sleeping, so ordinary use never hits a cold
+  start.
+- It does **not** remove cold starts after a deploy, or if the ping lapses.
+- It does not help the database: Neon's free tier also scales to zero, but it
+  wakes in well under a second, which nobody notices.
+
+**Do not use a GitHub Actions cron for this.** A 10-minute schedule is ~4,300
 runs a month, and each bills a minimum of one minute against the 2,000 free
 minutes a private repo gets — it would cost more than Render's paid tier.
 
-Note this only masks the cold start; it does not remove it. Render's free
-tier also caps monthly instance hours, and a keep-warm ping consumes them.
+If the cold start still proves annoying in practice, Fly.io wakes a stopped
+machine in about a second rather than fifty, for a small monthly cost.
 
 ## Environments
 
