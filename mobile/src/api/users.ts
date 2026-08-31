@@ -11,14 +11,6 @@ export async function createUser(input: { username: string; password: string; ro
   return response.data;
 }
 
-export async function grantProviderAccess(userId: string, providerId: string): Promise<void> {
-  await apiClient.post(`/users/${userId}/provider-access`, { providerId });
-}
-
-export async function revokeProviderAccess(userId: string, providerId: string): Promise<void> {
-  await apiClient.delete(`/users/${userId}/provider-access/${providerId}`);
-}
-
 export async function deleteUser(userId: string): Promise<void> {
   await apiClient.delete(`/users/${userId}`);
 }
