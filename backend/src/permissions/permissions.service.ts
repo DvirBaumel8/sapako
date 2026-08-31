@@ -242,6 +242,41 @@ export class PermissionsService {
     await this.departmentAccessRepo.delete({ userId, departmentId });
   }
 
+  /**
+   * Grants or revokes every department in a branch at once.
+   *
+   * Deliberately not the same thing as setBranchAccess, which writes a direct
+   * grant per provider. A department grant is a standing rule: a provider
+   * added to one of these departments tomorrow is reachable without anyone
+   * revisiting the permissions screen, where a direct grant would have to be
+   * added by hand. With 33 departments in the live catalogue, doing this one
+   * row at a time is 33 round-trips.
+   */
+  async setAllDepartmentsAccess(
+    userId: string,
+    branchId: string,
+    granted: boolean,
+  ) {
+    const departments = await this.departmentsOfBranch(branchId);
+    const departmentIds = departments.map((department) => department.id);
+    if (departmentIds.length === 0) return;
+
+    if (granted) {
+      await this.departmentAccessRepo.save(
+        departmentIds.map((departmentId) => ({ userId, departmentId })),
+      );
+      return;
+    }
+
+    // Direct provider grants inside these departments are left alone, matching
+    // what revoking a single department does — see spec 3.3. Revoking the
+    // rule must not silently withdraw access somebody granted explicitly.
+    await this.departmentAccessRepo.delete({
+      userId,
+      departmentId: In(departmentIds),
+    });
+  }
+
   async setBranchAccess(userId: string, branchId: string, granted: boolean) {
     const [providers, departments] = await Promise.all([
       this.providersOfBranch(branchId),

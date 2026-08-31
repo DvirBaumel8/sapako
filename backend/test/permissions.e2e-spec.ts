@@ -280,4 +280,165 @@ describe('permissions (e2e)', () => {
       .send({ granted: true })
       .expect(403);
   });
+
+  describe('granting every department at once', () => {
+    const grantAllDepartments = (granted: boolean) =>
+      request(app.getHttpServer())
+        .put(
+          `/users/${fixtures.staffUserId}/branches/${fixtures.branchId}/departments/access`,
+        )
+        .set(auth(fixtures.adminToken))
+        .send({ granted })
+        .expect(200);
+
+    it('reaches providers in every department of the branch', async () => {
+      await grantAllDepartments(true);
+
+      const access = await request(app.getHttpServer())
+        .get(
+          `/users/${fixtures.staffUserId}/access?branchId=${fixtures.branchId}`,
+        )
+        .set(auth(fixtures.adminToken))
+        .expect(200);
+
+      expect(
+        access.body.providers.every((p: { isGranted: boolean }) => p.isGranted),
+      ).toBe(true);
+    });
+
+    it('grants through the department rule, not as a direct grant', async () => {
+      // The distinction that makes this worth having: the reason recorded is
+      // DEPARTMENT, which is what makes it a standing rule.
+      await grantAllDepartments(true);
+
+      const access = await request(app.getHttpServer())
+        .get(
+          `/users/${fixtures.staffUserId}/access?branchId=${fixtures.branchId}`,
+        )
+        .set(auth(fixtures.adminToken))
+        .expect(200);
+
+      expect(
+        access.body.providers.every(
+          (provider: { reason: string }) => provider.reason === 'DEPARTMENT',
+        ),
+      ).toBe(true);
+    });
+
+    it('covers a provider added to a department afterwards', async () => {
+      // A direct per-provider grant would not: this is the whole reason the
+      // bulk department toggle is not just the existing branch toggle.
+      await grantAllDepartments(true);
+
+      const created = await request(app.getHttpServer())
+        .post(`/branches/${fixtures.branchId}/providers`)
+        .set(auth(fixtures.adminToken))
+        .send({
+          name: `ספק חדש ${Date.now()}`,
+          phone: '0500000000',
+          departmentIds: [fixtures.departmentId],
+        })
+        .expect(201);
+
+      const access = await request(app.getHttpServer())
+        .get(
+          `/users/${fixtures.staffUserId}/access?branchId=${fixtures.branchId}`,
+        )
+        .set(auth(fixtures.adminToken))
+        .expect(200);
+
+      const added = access.body.providers.find(
+        (provider: { id: string }) => provider.id === created.body.id,
+      );
+      expect(added.isGranted).toBe(true);
+    });
+
+    it('marks every department granted, so the screen shows it', async () => {
+      await grantAllDepartments(true);
+
+      const access = await request(app.getHttpServer())
+        .get(
+          `/users/${fixtures.staffUserId}/access?branchId=${fixtures.branchId}`,
+        )
+        .set(auth(fixtures.adminToken))
+        .expect(200);
+
+      expect(
+        access.body.departments.every(
+          (d: { isGranted: boolean }) => d.isGranted,
+        ),
+      ).toBe(true);
+    });
+
+    it('revoking removes the rule again', async () => {
+      await grantAllDepartments(true);
+
+      await grantAllDepartments(false);
+
+      const access = await request(app.getHttpServer())
+        .get(
+          `/users/${fixtures.staffUserId}/access?branchId=${fixtures.branchId}`,
+        )
+        .set(auth(fixtures.adminToken))
+        .expect(200);
+
+      expect(
+        access.body.departments.some(
+          (d: { isGranted: boolean }) => d.isGranted,
+        ),
+      ).toBe(false);
+    });
+
+    it('leaves an existing direct grant standing after revoking', async () => {
+      // Granted before the departments are: setProviderAccess deliberately
+      // writes no direct row for a provider a department already reaches, so
+      // granting one afterwards is a no-op and would prove nothing here.
+      await request(app.getHttpServer())
+        .put(
+          `/users/${fixtures.staffUserId}/providers/${fixtures.providerIds[0]}/access`,
+        )
+        .set(auth(fixtures.adminToken))
+        .send({ granted: true })
+        .expect(200);
+      await grantAllDepartments(true);
+
+      await grantAllDepartments(false);
+
+      const access = await request(app.getHttpServer())
+        .get(
+          `/users/${fixtures.staffUserId}/access?branchId=${fixtures.branchId}`,
+        )
+        .set(auth(fixtures.adminToken))
+        .expect(200);
+      const provider = access.body.providers.find(
+        (candidate: { id: string }) => candidate.id === fixtures.providerIds[0],
+      );
+      expect(provider.isGranted).toBe(true);
+    });
+
+    it('leaves the other branch alone', async () => {
+      await grantAllDepartments(true);
+
+      const other = await request(app.getHttpServer())
+        .get(
+          `/users/${fixtures.staffUserId}/access?branchId=${fixtures.otherBranchId}`,
+        )
+        .set(auth(fixtures.adminToken))
+        .expect(200);
+
+      expect(
+        other.body.departments.some((d: { isGranted: boolean }) => d.isGranted),
+      ).toBe(false);
+    });
+
+    it('is refused to a non-admin', async () => {
+      await request(app.getHttpServer())
+        .put(
+          `/users/${fixtures.staffUserId}/branches/${fixtures.branchId}/departments/access`,
+        )
+        .set(auth(fixtures.staffToken))
+        .send({ granted: true })
+        .expect(403);
+    });
+  });
 });

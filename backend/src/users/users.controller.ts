@@ -75,6 +75,19 @@ export class UsersController {
     );
   }
 
+  @Put(':id/branches/:branchId/departments/access')
+  setAllDepartmentsAccess(
+    @Param('id') userId: string,
+    @Param('branchId') branchId: string,
+    @Body() dto: SetAccessDto,
+  ) {
+    return this.permissionsService.setAllDepartmentsAccess(
+      userId,
+      branchId,
+      dto.granted,
+    );
+  }
+
   @Put(':id/branches/:branchId/access')
   setBranchAccess(
     @Param('id') userId: string,

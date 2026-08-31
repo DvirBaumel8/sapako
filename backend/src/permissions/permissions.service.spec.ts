@@ -588,6 +588,74 @@ describe('PermissionsService', () => {
     });
   });
 
+  describe('setAllDepartmentsAccess', () => {
+    it('grants every department in the branch in one write', async () => {
+      departmentRepo.find.mockResolvedValue([{ id: 'd1' }, { id: 'd2' }]);
+
+      await service.setAllDepartmentsAccess('u1', 'b1', true);
+
+      expect(departmentAccessRepo.save).toHaveBeenCalledWith([
+        { userId: 'u1', departmentId: 'd1' },
+        { userId: 'u1', departmentId: 'd2' },
+      ]);
+    });
+
+    it('revokes every department in the branch', async () => {
+      departmentRepo.find.mockResolvedValue([{ id: 'd1' }, { id: 'd2' }]);
+
+      await service.setAllDepartmentsAccess('u1', 'b1', false);
+
+      expect(departmentAccessRepo.delete).toHaveBeenCalledWith({
+        userId: 'u1',
+        departmentId: In(['d1', 'd2']),
+      });
+    });
+
+    it('leaves direct provider grants alone when revoking', async () => {
+      // Matches revoking a single department: the rule goes away, but access
+      // somebody granted explicitly is not silently withdrawn with it.
+      departmentRepo.find.mockResolvedValue([{ id: 'd1' }]);
+
+      await service.setAllDepartmentsAccess('u1', 'b1', false);
+
+      expect(directRepo.delete).not.toHaveBeenCalled();
+      expect(directRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('does not touch blocks, so a blocked provider stays blocked', async () => {
+      // Blocks outrank department grants. Granting every department must not
+      // quietly reinstate a provider an admin deliberately blocked.
+      departmentRepo.find.mockResolvedValue([{ id: 'd1' }]);
+
+      await service.setAllDepartmentsAccess('u1', 'b1', true);
+
+      expect(blockRepo.delete).not.toHaveBeenCalled();
+      expect(blockRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing for a branch with no departments', async () => {
+      // נתניה is exactly this today, and In([]) is not a query worth issuing.
+      departmentRepo.find.mockResolvedValue([]);
+
+      await expect(
+        service.setAllDepartmentsAccess('u1', 'b1', true),
+      ).resolves.toBeUndefined();
+
+      expect(departmentAccessRepo.save).not.toHaveBeenCalled();
+      expect(departmentAccessRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('only considers departments of the branch it was given', async () => {
+      departmentRepo.find.mockResolvedValue([{ id: 'd1' }]);
+
+      await service.setAllDepartmentsAccess('u1', 'b1', true);
+
+      expect(departmentRepo.find).toHaveBeenCalledWith({
+        where: { branchId: 'b1', isActive: true },
+      });
+    });
+  });
+
   describe('missing departments relation', () => {
     // The `?? []` fallback at each of the four call sites exists for a
     // provider fetched without the departments relation joined at all —

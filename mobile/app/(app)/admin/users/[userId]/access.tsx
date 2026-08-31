@@ -4,6 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchAccess,
+  setAllDepartmentsAccess,
   setBranchAccess,
   setDepartmentAccess,
   setProviderAccess,
@@ -110,6 +111,31 @@ export default function UserAccessScreen() {
     }
   };
 
+  const [allDepartmentsPending, setAllDepartmentsPending] = useState(false);
+  // Guarded by a ref as well as state, like providerInFlightRef above: two
+  // quick taps can both land before React re-renders, and the state copy this
+  // closure captured would still read false — so the second tap would fire a
+  // second write over 33 departments.
+  const allDepartmentsInFlightRef = useRef(false);
+
+  const toggleAllDepartments = async (branchId: string, grantAll: boolean) => {
+    if (allDepartmentsInFlightRef.current) return;
+    allDepartmentsInFlightRef.current = true;
+    setAllDepartmentsPending(true);
+    try {
+      await setAllDepartmentsAccess(userId, branchId, grantAll);
+      await refetchAccess();
+    } catch {
+      showAlert({
+        title: 'שגיאה',
+        message: 'עדכון ההרשאה למחלקות נכשל. יש לבדוק את החיבור ולנסות שוב.',
+      });
+    } finally {
+      allDepartmentsInFlightRef.current = false;
+      setAllDepartmentsPending(false);
+    }
+  };
+
   const toggleBranchAccess = async (branchId: string, grantAll: boolean) => {
     if (branchPending) return;
     setBranchPending(true);
@@ -131,6 +157,11 @@ export default function UserAccessScreen() {
 
   const allProvidersGranted =
     !!access && access.providers.length > 0 && access.providers.every((provider) => isProviderGranted(provider));
+
+  const allDepartmentsGranted =
+    !!access &&
+    access.departments.length > 0 &&
+    access.departments.every((department) => department.isGranted);
 
   return (
     <View style={common.screen}>
@@ -165,6 +196,7 @@ export default function UserAccessScreen() {
               <View style={common.cardRow}>
                 <Text style={common.label}>הרשאה לכל הספקים בסניף</Text>
                 <Toggle
+                  accessibilityLabel="הרשאה לכל הספקים בסניף"
                   value={allProvidersGranted}
                   disabled={branchPending}
                   onValueChange={(next) => toggleBranchAccess(activeBranch.id, next)}
@@ -180,11 +212,23 @@ export default function UserAccessScreen() {
                 <Text style={styles.sectionChevron}>{isDepartmentsOpen ? '⌄' : '⌃'}</Text>
               </Pressable>
               <View style={styles.section}>
+                {isDepartmentsOpen && access.departments.length > 0 && (
+                  <View style={[common.cardRow, styles.allDepartmentsRow]}>
+                    <Text style={common.label}>הרשאה לכל המחלקות</Text>
+                    <Toggle
+                      accessibilityLabel="הרשאה לכל המחלקות"
+                      value={allDepartmentsGranted}
+                      disabled={allDepartmentsPending}
+                      onValueChange={(next) => toggleAllDepartments(activeBranch.id, next)}
+                    />
+                  </View>
+                )}
                 {isDepartmentsOpen &&
                   access.departments.map((department) => (
                   <View key={department.id} style={common.cardRow}>
                     <Text style={common.label}>{department.name}</Text>
                     <Toggle
+                      accessibilityLabel={department.name}
                       value={department.isGranted}
                       disabled={!!departmentPending[department.id]}
                       onValueChange={() => toggleDepartmentAccess(department.id, department.isGranted)}
@@ -212,6 +256,7 @@ export default function UserAccessScreen() {
                   {line && <Text style={styles.reasonText}>{line}</Text>}
                 </View>
                 <Toggle
+                  accessibilityLabel={provider.name}
                   value={isProviderGranted(provider)}
                   onValueChange={() => toggleProviderAccess(provider.id, isProviderGranted(provider))}
                 />
@@ -245,6 +290,9 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: spacing.lg },
   headerSections: { gap: spacing.sm, marginBottom: spacing.sm, marginTop: spacing.sm },
   section: { gap: spacing.sm },
+  // Tinted so it reads as the section's own control rather than the first
+  // department in the list.
+  allDepartmentsRow: { backgroundColor: colors.accentSurface },
   providerTextColumn: { flex: 1, gap: 2 },
   reasonText: { fontSize: 12, textAlign: 'right', color: colors.textMuted },
 });

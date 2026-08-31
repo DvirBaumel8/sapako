@@ -22,6 +22,7 @@ describe('UsersController', () => {
     setProviderAccess: jest.fn(),
     setDepartmentAccess: jest.fn(),
     setBranchAccess: jest.fn(),
+    setAllDepartmentsAccess: jest.fn(),
   };
 
   beforeEach(() => {
@@ -131,6 +132,25 @@ describe('UsersController', () => {
         'd1',
         false,
       );
+    });
+  });
+
+  describe('setAllDepartmentsAccess', () => {
+    it('delegates to the service with the user, branch and intent', () => {
+      controller.setAllDepartmentsAccess('u1', 'b1', { granted: true });
+
+      expect(
+        mockPermissionsService.setAllDepartmentsAccess,
+      ).toHaveBeenCalledWith('u1', 'b1', true);
+    });
+
+    it('does not route to the branch-wide provider grant', () => {
+      // The two are different mechanisms: this writes department rules, that
+      // writes a direct grant per provider. Confusing them would silently
+      // change what a later provider addition inherits.
+      controller.setAllDepartmentsAccess('u1', 'b1', { granted: true });
+
+      expect(mockPermissionsService.setBranchAccess).not.toHaveBeenCalled();
     });
   });
 
