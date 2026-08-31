@@ -380,12 +380,12 @@ describe('getAccessForBranch', () => {
     directRepo.find.mockResolvedValue([{ providerId: 'p1' }]);
     departmentRepo.find.mockResolvedValue([{ departmentId: 'd1' }]);
     blockRepo.find.mockResolvedValue([{ providerId: 'p3' }]);
-    providersService.findAllForBranch.mockResolvedValue([
+    providerRepo.find.mockResolvedValue([
       { id: 'p1', name: 'אוסם', departments: [] },
       { id: 'p2', name: 'תנובה', departments: [{ id: 'd1', name: 'חלב' }] },
       { id: 'p3', name: 'שטראוס', departments: [{ id: 'd1', name: 'חלב' }] },
     ]);
-    departmentsService.findByBranch.mockResolvedValue([{ id: 'd1', name: 'חלב' }]);
+    departmentRepo.find.mockResolvedValue([{ id: 'd1', name: 'חלב' }]);
 
     const result = await service.getAccessForBranch('u1', 'b1');
 
@@ -406,8 +406,52 @@ Expected: FAIL — `service.getAccessForBranch is not a function`.
 
 - [ ] **Step 3: Implement**
 
-Inject `UserDepartmentAccess` and `UserProviderBlock` repositories plus
-`ProvidersService` and `DepartmentsService`, then:
+**Inject repositories, not services.** `ProvidersModule` and
+`DepartmentsModule` both import `PermissionsModule` for its guards, so
+injecting their services here creates a module cycle — verified, not
+theoretical: adding those imports makes Nest fail to construct
+`ProvidersModule` at boot. `forwardRef` would defer the cycle rather than
+remove it, and would invert the layering: permissions is the lower-level
+concern that providers depend on, not the reverse. What this service needs is
+data, not behaviour — two queries, not reusable logic.
+
+So register `Provider` and `Department` in `PermissionsModule`'s
+`TypeOrmModule.forFeature([...])` alongside the three access entities, inject
+their repositories, and read directly:
+
+```ts
+constructor(
+  @InjectRepository(UserProviderAccess)
+  private readonly accessRepo: Repository<UserProviderAccess>,
+  @InjectRepository(UserDepartmentAccess)
+  private readonly departmentAccessRepo: Repository<UserDepartmentAccess>,
+  @InjectRepository(UserProviderBlock)
+  private readonly blockRepo: Repository<UserProviderBlock>,
+  @InjectRepository(Provider)
+  private readonly providerRepo: Repository<Provider>,
+  @InjectRepository(Department)
+  private readonly departmentRepo: Repository<Department>,
+) {}
+
+/** Providers of one branch with the departments they belong to. */
+private providersOfBranch(branchId: string): Promise<Provider[]> {
+  return this.providerRepo.find({
+    where: { branchId },
+    relations: { departments: true },
+  });
+}
+
+/**
+ * Active departments only: an inactive department is not offered as something
+ * to grant. An existing grant against one still resolves, the same way a block
+ * outlives the grant it was made against (spec section 3.3).
+ */
+private departmentsOfBranch(branchId: string): Promise<Department[]> {
+  return this.departmentRepo.find({ where: { branchId, isActive: true } });
+}
+```
+
+Then:
 
 ```ts
 async getAccessForBranch(userId: string, branchId: string) {
@@ -416,8 +460,8 @@ async getAccessForBranch(userId: string, branchId: string) {
       this.accessRepo.find({ where: { userId } }),
       this.departmentAccessRepo.find({ where: { userId } }),
       this.blockRepo.find({ where: { userId } }),
-      this.providersService.findAllForBranch(branchId),
-      this.departmentsService.findByBranch(branchId),
+      this.providersOfBranch(branchId),
+      this.departmentsOfBranch(branchId),
     ]);
 
   const input = {
@@ -534,7 +578,7 @@ setBranchAccess(
 describe('setProviderAccess', () => {
   it('removes the block rather than adding a grant when a department already grants it', async () => {
     departmentRepo.find.mockResolvedValue([{ departmentId: 'd1' }]);
-    providersService.findById.mockResolvedValue({
+    providerRepo.findOne.mockResolvedValue({
       id: 'p1',
       departments: [{ id: 'd1', name: 'חלב' }],
     });
@@ -547,7 +591,7 @@ describe('setProviderAccess', () => {
 
   it('adds a direct grant when nothing else would reach the provider', async () => {
     departmentRepo.find.mockResolvedValue([]);
-    providersService.findById.mockResolvedValue({ id: 'p1', departments: [] });
+    providerRepo.findOne.mockResolvedValue({ id: 'p1', departments: [] });
 
     await service.setProviderAccess('u1', 'p1', true);
 
@@ -556,7 +600,7 @@ describe('setProviderAccess', () => {
 
   it('blocks a department-granted provider when switched off', async () => {
     departmentRepo.find.mockResolvedValue([{ departmentId: 'd1' }]);
-    providersService.findById.mockResolvedValue({
+    providerRepo.findOne.mockResolvedValue({
       id: 'p1',
       departments: [{ id: 'd1', name: 'חלב' }],
     });
@@ -570,7 +614,7 @@ describe('setProviderAccess', () => {
     // Adding a block here too would be redundant, and would outlive the grant
     // as a dormant rule nobody asked for.
     departmentRepo.find.mockResolvedValue([]);
-    providersService.findById.mockResolvedValue({ id: 'p1', departments: [] });
+    providerRepo.findOne.mockResolvedValue({ id: 'p1', departments: [] });
 
     await service.setProviderAccess('u1', 'p1', false);
 
@@ -580,7 +624,7 @@ describe('setProviderAccess', () => {
 
   it('never leaves a direct grant and a block in place together', async () => {
     departmentRepo.find.mockResolvedValue([]);
-    providersService.findById.mockResolvedValue({ id: 'p1', departments: [] });
+    providerRepo.findOne.mockResolvedValue({ id: 'p1', departments: [] });
 
     await service.setProviderAccess('u1', 'p1', true);
 
@@ -604,8 +648,8 @@ describe('setDepartmentAccess', () => {
 
 describe('setBranchAccess', () => {
   it('leaves the other branch untouched when clearing one', async () => {
-    providersService.findAllForBranch.mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
-    departmentsService.findByBranch.mockResolvedValue([{ id: 'd1' }]);
+    providerRepo.find.mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
+    departmentRepo.find.mockResolvedValue([{ id: 'd1' }]);
 
     await service.setBranchAccess('u1', 'b1', false);
 
@@ -631,7 +675,11 @@ Expected: FAIL — the three methods do not exist.
 ```ts
 /** Grants or revokes one provider, choosing the mechanism the rule requires. */
 async setProviderAccess(userId: string, providerId: string, granted: boolean) {
-  const provider = await this.providersService.findById(providerId);
+  const provider = await this.providerRepo.findOne({
+    where: { id: providerId },
+    relations: { departments: true },
+  });
+  if (!provider) throw new NotFoundException();
   const departmentGrants = await this.departmentAccessRepo.find({ where: { userId } });
   const grantedDepartmentIds = departmentGrants.map((row) => row.departmentId);
   const reachedByDepartment = (provider.departments ?? []).some((department) =>
@@ -666,8 +714,8 @@ async setDepartmentAccess(userId: string, departmentId: string, granted: boolean
 
 async setBranchAccess(userId: string, branchId: string, granted: boolean) {
   const [providers, departments] = await Promise.all([
-    this.providersService.findAllForBranch(branchId),
-    this.departmentsService.findByBranch(branchId),
+    this.providersOfBranch(branchId),
+    this.departmentsOfBranch(branchId),
   ]);
   const providerIds = providers.map((provider) => provider.id);
   const departmentIds = departments.map((department) => department.id);
