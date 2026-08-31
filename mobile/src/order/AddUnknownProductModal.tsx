@@ -36,10 +36,19 @@ export function AddUnknownProductModal({
   const isNameValid = hasLetter(name);
   const nameInputRef = useRef<TextInput>(null);
 
+  // Cleared per opening rather than per mount: the same modal instance is
+  // reused for the next scan, so without this it would open pre-filled with
+  // the previous product.
+  //
+  // Resets to the default unit, not to empty. Blanking it made the
+  // useState initialiser above dead — the effect runs on mount, since this
+  // is only rendered with visible already true — and left the submit button
+  // disabled with nothing on screen saying why, while the catalogue is
+  // ordered by the carton anyway.
   useEffect(() => {
     if (visible) {
       setName('');
-      setUnitType('');
+      setUnitType(DEFAULT_UNIT_TYPE);
     }
   }, [visible]);
 
