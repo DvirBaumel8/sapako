@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Button, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
+import { isUnreachableError } from '../src/api/errors';
 import { useAuth } from '../src/auth/AuthContext';
 
 export default function LoginScreen() {
@@ -16,8 +17,16 @@ export default function LoginScreen() {
     try {
       await login(username, password);
       router.replace('/');
-    } catch {
-      setError('שם משתמש או סיסמה שגויים');
+    } catch (err) {
+      // A bare catch here used to report every failure as bad credentials,
+      // including the server being unreachable — which is what an asleep
+      // free-tier instance looks like, and it sends the user hunting for a
+      // password problem that does not exist.
+      setError(
+        isUnreachableError(err)
+          ? 'לא ניתן להתחבר לשרת כרגע. יש לבדוק את החיבור ולנסות שוב.'
+          : 'שם משתמש או סיסמה שגויים',
+      );
     } finally {
       setIsSubmitting(false);
     }
