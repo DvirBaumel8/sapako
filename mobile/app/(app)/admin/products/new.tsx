@@ -181,6 +181,7 @@ export default function NewProductScreen() {
           />
           <FlatList
             style={styles.providerList}
+            contentContainerStyle={styles.providerListContent}
             data={filteredProviders}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
@@ -227,15 +228,21 @@ export default function NewProductScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
+  container: { flex: 1, padding: 16, gap: 12, backgroundColor: '#f5f5f5' },
   label: { fontWeight: '600' },
   branchList: { flexGrow: 0 },
   chip: { paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginRight: 8 },
   chipSelected: { backgroundColor: '#dbeafe', borderColor: '#2563eb' },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
   providerSection: { flex: 1, gap: 12 },
-  providerList: { flex: 1, borderWidth: 1, borderColor: '#eee', borderRadius: 8 },
-  providerRow: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  providerList: { flex: 1 },
+  providerListContent: { gap: 8, paddingBottom: 8 },
+  providerRow: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
   providerRowText: { fontSize: 15, textAlign: 'right' },
   emptyText: { padding: 12, textAlign: 'center', color: '#666' },
   selectedProviderRow: {

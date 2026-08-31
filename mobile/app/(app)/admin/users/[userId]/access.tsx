@@ -124,13 +124,22 @@ function ProviderToggles({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
+  screen: { flex: 1, backgroundColor: '#f5f5f5' },
   branchList: { flexGrow: 0, borderBottomWidth: 1, borderBottomColor: '#eee' },
   branchListContent: { padding: 12, gap: 8 },
   branchChip: { paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#ccc', borderRadius: 20, marginRight: 8 },
   branchChipSelected: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
   branchChipTextSelected: { color: '#fff', fontWeight: '600' },
-  providerList: { padding: 16, gap: 4 },
-  providerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f2f2f2' },
+  providerList: { padding: 16, gap: 8, paddingBottom: 24 },
+  providerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
   providerName: { fontSize: 15, textAlign: 'right', flex: 1 },
 });
