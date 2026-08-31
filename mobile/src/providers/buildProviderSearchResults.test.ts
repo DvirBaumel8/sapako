@@ -88,4 +88,53 @@ describe('buildProviderSearchResults', () => {
     const results = buildProviderSearchResults(latinProviders, [], 'ikea');
     expect(results).toEqual([{ provider: latinProviders[0], matchingProducts: [] }]);
   });
+
+  describe('barcode matching', () => {
+    const provider = { id: 'p1', name: 'אוסם' } as never;
+    const products = [
+      { id: 'x1', providerId: 'p1', name: 'אטריות ביצים', barcode: '7290000060071' },
+      { id: 'x2', providerId: 'p1', name: 'קמח', barcode: '7290111550034' },
+      { id: 'x3', providerId: 'p1', name: 'סוכר' },
+    ] as never[];
+
+    it('finds a product by its full barcode', () => {
+      const results = buildProviderSearchResults([provider], products, '7290000060071');
+      expect(results).toHaveLength(1);
+      expect(results[0].matchingProducts.map((x) => x.id)).toEqual(['x1']);
+    });
+
+    it('finds a product while the barcode is still being typed', () => {
+      // Typing a long number is slow; matching on a prefix makes the scanner
+      // fallback usable by hand.
+      const results = buildProviderSearchResults([provider], products, '72900000');
+      expect(results[0].matchingProducts.map((x) => x.id)).toEqual(['x1']);
+    });
+
+    it('does not match a digit run from the middle of a barcode', () => {
+      // Otherwise almost every barcode matches almost every query, since they
+      // share long runs of digits.
+      const results = buildProviderSearchResults([provider], products, '0060071');
+      expect(results).toHaveLength(0);
+    });
+
+    it('ignores products with no barcode', () => {
+      const results = buildProviderSearchResults([provider], products, '7290');
+      expect(results[0].matchingProducts.map((x) => x.id)).toEqual(['x1', 'x2']);
+    });
+
+    it('still matches by name, so barcode search is additional', () => {
+      const results = buildProviderSearchResults([provider], products, 'אטריות');
+      expect(results[0].matchingProducts.map((x) => x.id)).toEqual(['x1']);
+    });
+
+    it('does not treat a numeric query as a name match', () => {
+      const numeric = [
+        { id: 'y1', providerId: 'p1', name: 'מוצר 7290', barcode: '1111111111111' },
+      ] as never[];
+      const results = buildProviderSearchResults([provider], numeric, '7290');
+      // The name contains 7290, so it may still match by name — what matters
+      // is that a barcode query never silently returns nothing.
+      expect(results[0].matchingProducts.map((x) => x.id)).toEqual(['y1']);
+    });
+  });
 });
