@@ -261,7 +261,10 @@ export default function OrderBuilderScreen() {
       });
       return;
     }
-    adjustQuantity(match, 1);
+    // Deliberately does not change the quantity. Scanning identifies which
+    // product the user means; how many they want is a separate decision, and
+    // one is rarely the answer — so it scrolls there and lets them set it.
+    //
     // Clear the filter first: a scanned product that the current search hides
     // is not in the list, so there would be nothing to scroll to.
     setSearch('');
