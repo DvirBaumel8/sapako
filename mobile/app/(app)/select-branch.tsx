@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -7,24 +7,31 @@ import { useBranch } from '../../src/branch/BranchContext';
 import { useAuth } from '../../src/auth/AuthContext';
 
 export default function SelectBranchScreen() {
-  const { selectBranch } = useBranch();
+  const { selectBranch, selectedBranch } = useBranch();
   const { role } = useAuth();
   const { data: branches, isLoading, error } = useQuery({
     queryKey: ['branches'],
     queryFn: fetchAccessibleBranches,
   });
 
-  // With a single branch there is no choice to make, so presenting one is
-  // just a tap on every launch. Selecting it automatically is what the user
-  // would have done anyway.
+  // Auto-select only on first entry, when nothing has been chosen yet: with a
+  // single branch there is no choice to make, and presenting one is just a tap
+  // on every launch.
+  //
+  // Captured once at mount, because if a branch is already selected the user
+  // navigated here deliberately — to switch branches, or to reach admin, which
+  // this screen's header is the only route to. Auto-selecting then would bounce
+  // them straight back and make both unreachable.
+  const [shouldAutoSelect] = useState(selectedBranch === null);
+
   useEffect(() => {
-    if (branches?.length === 1) {
+    if (shouldAutoSelect && branches?.length === 1) {
       selectBranch(branches[0]);
       router.replace('/');
     }
-  }, [branches, selectBranch]);
+  }, [branches, selectBranch, shouldAutoSelect]);
 
-  if (isLoading || branches?.length === 1) {
+  if (isLoading || (shouldAutoSelect && branches?.length === 1)) {
     return (
       <View style={styles.centered}>
         <Text>טוען סניפים…</Text>
