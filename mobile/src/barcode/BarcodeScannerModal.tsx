@@ -49,6 +49,10 @@ function ManualBarcodeEntry({
 
 export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScannerModalProps) {
   const [status, setStatus] = useState<Status>('starting');
+  // Shown while scanning so a "it just doesn't work" report carries the one
+  // number that matters: iOS silently falls back to 640x480, at which a
+  // barcode held over a shelf does not survive downscaling and never decodes.
+  const [resolution, setResolution] = useState('');
   const [useManualEntry, setUseManualEntry] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Both call sites pass a fresh closure for these on every render, so
@@ -85,6 +89,9 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
         await reader.start(video);
         if (!cancelled) {
           setStatus('scanning');
+          const report = () => setResolution(`${video.videoWidth}×${video.videoHeight}`);
+          if (video.videoWidth) report();
+          video.addEventListener('loadedmetadata', report, { once: true });
         }
       } catch (error) {
         if (cancelled) {
@@ -170,6 +177,7 @@ export function BarcodeScannerModal({ visible, onScanned, onClose }: BarcodeScan
         {status === 'starting' ? (
           <Text style={styles.startingText}>מפעיל את המצלמה…</Text>
         ) : null}
+        {resolution ? <Text style={styles.resolutionText}>{resolution}</Text> : null}
       </View>
       <Pressable onPress={() => setUseManualEntry(true)} style={styles.manualButton}>
         <Text style={styles.closeButtonText}>הזנה ידנית</Text>
@@ -198,6 +206,13 @@ const styles = StyleSheet.create({
     top: '50%',
     color: 'white',
     fontSize: 15,
+  },
+  resolutionText: {
+    position: 'absolute',
+    top: 12,
+    alignSelf: 'center',
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 12,
   },
   button: { padding: 12, borderWidth: 1, borderRadius: 8 },
   closeButton: {

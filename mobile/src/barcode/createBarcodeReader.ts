@@ -23,12 +23,28 @@ const FORMATS = [
   BarcodeFormat.UPC_E,
 ];
 
+// Ask for a usable resolution explicitly. Left to its own devices iOS hands
+// back 640x480, at which the bars of a barcode held at arm's length do not
+// survive downscaling and nothing ever decodes — the preview looks perfect
+// while the scanner sits there doing nothing.
+const CONSTRAINTS: MediaStreamConstraints = {
+  video: {
+    facingMode: { ideal: 'environment' },
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+  },
+  audio: false,
+};
+
 export function createBarcodeReader({
   onScanned,
   reader,
 }: CreateBarcodeReaderOptions): BarcodeReader {
   const hints = new Map();
   hints.set(DecodeHintType.POSSIBLE_FORMATS, FORMATS);
+  // Spend more effort per frame, including trying rotated orientations. The
+  // camera is handheld over a shelf, so the barcode is rarely square-on.
+  hints.set(DecodeHintType.TRY_HARDER, true);
   const zxing = reader ?? new BrowserMultiFormatReader(hints);
 
   let controls: IScannerControls | null = null;
@@ -47,7 +63,7 @@ export function createBarcodeReader({
     async start(video: HTMLVideoElement) {
       hasScanned = false;
       stopped = false;
-      const started = await zxing.decodeFromVideoDevice(undefined, video, (result) => {
+      const started = await zxing.decodeFromConstraints(CONSTRAINTS, video, (result) => {
         if (!result || hasScanned) {
           return;
         }

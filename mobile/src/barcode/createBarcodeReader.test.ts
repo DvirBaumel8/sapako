@@ -4,13 +4,13 @@ describe('createBarcodeReader', () => {
   const makeFakeZxing = () => {
     const stop = jest.fn();
     let emit: (text: string) => void = () => {};
-    const decodeFromVideoDevice = jest.fn(
-      (_deviceId: string | undefined, _video: unknown, callback: (result: { getText: () => string } | undefined) => void) => {
+    const decodeFromConstraints = jest.fn(
+      (_constraints: unknown, _video: unknown, callback: (result: { getText: () => string } | undefined) => void) => {
         emit = (text) => callback({ getText: () => text });
         return Promise.resolve({ stop });
       },
     );
-    return { controls: { decodeFromVideoDevice }, stop, emitScan: (text: string) => emit(text) };
+    return { controls: { decodeFromConstraints }, stop, emitScan: (text: string) => emit(text) };
   };
 
   it('forwards a decoded barcode to onScanned', async () => {
@@ -61,7 +61,7 @@ describe('createBarcodeReader', () => {
     const stop = jest.fn();
     let resolveStart: (controls: { stop: () => void }) => void = () => {};
     const controls = {
-      decodeFromVideoDevice: jest.fn(
+      decodeFromConstraints: jest.fn(
         () => new Promise((resolve) => {
           resolveStart = resolve as (c: { stop: () => void }) => void;
         }),
