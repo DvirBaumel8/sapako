@@ -11,6 +11,7 @@ import { PermissionsModule } from './permissions/permissions.module';
 import { ProductsModule } from './products/products.module';
 import { OrdersModule } from './orders/orders.module';
 import { DepartmentsModule } from './departments/departments.module';
+import { CatalogModule } from './catalog/catalog.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { DepartmentsModule } from './departments/departments.module';
     ProductsModule,
     OrdersModule,
     DepartmentsModule,
+    CatalogModule,
   ],
   controllers: [HealthController],
   providers: [],

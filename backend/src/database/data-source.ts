@@ -14,6 +14,8 @@ import { AddNameUniqueConstraints1700000000009 } from './migrations/170000000000
 import { SupportWeightUnits1700000000010 } from './migrations/1700000000010-SupportWeightUnits';
 import { AddPermissionLayers1700000000011 } from './migrations/1700000000011-AddPermissionLayers';
 import { ConfirmOrderSend1700000000012 } from './migrations/1700000000012-ConfirmOrderSend';
+import { CreateCatalogItems1700000000013 } from './migrations/1700000000013-CreateCatalogItems';
+import { NormalizeProductBarcodes1700000000014 } from './migrations/1700000000014-NormalizeProductBarcodes';
 
 // NOTE: the installed TypeORM CLI rejects a module that exports the same
 // DataSource instance under more than one export name (it iterates every
@@ -43,6 +45,8 @@ const dataSource = new DataSource({
     SupportWeightUnits1700000000010,
     AddPermissionLayers1700000000011,
     ConfirmOrderSend1700000000012,
+    CreateCatalogItems1700000000013,
+    NormalizeProductBarcodes1700000000014,
   ],
   synchronize: false,
 });
