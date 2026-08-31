@@ -1,4 +1,3 @@
-import { NotFoundException } from '@nestjs/common';
 import { UsersController } from './users.controller';
 
 describe('UsersController', () => {
@@ -8,13 +7,13 @@ describe('UsersController', () => {
     toSafeUser: jest.fn(),
     create: jest.fn(),
     findById: jest.fn(),
+    remove: jest.fn(),
   };
   const mockPermissionsService = {
-    grant: jest.fn(),
-    revoke: jest.fn(),
-  };
-  const mockProvidersService = {
-    findById: jest.fn(),
+    getAccessForBranch: jest.fn(),
+    setProviderAccess: jest.fn(),
+    setDepartmentAccess: jest.fn(),
+    setBranchAccess: jest.fn(),
   };
 
   beforeEach(() => {
@@ -22,51 +21,55 @@ describe('UsersController', () => {
     controller = new UsersController(
       mockUsersService as any,
       mockPermissionsService as any,
-      mockProvidersService as any,
     );
   });
 
-  describe('grantAccess', () => {
-    it('grants access when both the user and provider exist', async () => {
-      mockUsersService.findById.mockResolvedValue({ id: 'u1' });
-      mockProvidersService.findById.mockResolvedValue({ id: 'p1' });
-      mockPermissionsService.grant.mockResolvedValue({
-        userId: 'u1',
-        providerId: 'p1',
+  describe('getAccess', () => {
+    it('delegates to the permissions service for the given branch', () => {
+      mockPermissionsService.getAccessForBranch.mockResolvedValue({
+        departments: [],
+        providers: [],
       });
 
-      const result = await controller.grantAccess('u1', { providerId: 'p1' });
+      controller.getAccess('u1', 'b1');
 
-      expect(mockUsersService.findById).toHaveBeenCalledWith('u1');
-      expect(mockProvidersService.findById).toHaveBeenCalledWith('p1');
-      expect(mockPermissionsService.grant).toHaveBeenCalledWith('u1', 'p1');
-      expect(result).toEqual({ userId: 'u1', providerId: 'p1' });
+      expect(mockPermissionsService.getAccessForBranch).toHaveBeenCalledWith('u1', 'b1');
     });
+  });
 
-    it('rejects with NotFoundException when the provider does not exist, without granting', async () => {
-      mockUsersService.findById.mockResolvedValue({ id: 'u1' });
-      mockProvidersService.findById.mockRejectedValue(
-        new NotFoundException('Provider not found'),
+  describe('setProviderAccess', () => {
+    it('delegates the intent to the permissions service', () => {
+      controller.setProviderAccess('u1', 'p1', { granted: true });
+
+      expect(mockPermissionsService.setProviderAccess).toHaveBeenCalledWith(
+        'u1',
+        'p1',
+        true,
       );
-
-      await expect(
-        controller.grantAccess('u1', { providerId: 'missing' }),
-      ).rejects.toThrow(NotFoundException);
-
-      expect(mockPermissionsService.grant).not.toHaveBeenCalled();
     });
+  });
 
-    it('rejects with NotFoundException when the user does not exist, without checking the provider or granting', async () => {
-      mockUsersService.findById.mockRejectedValue(
-        new NotFoundException('User not found'),
+  describe('setDepartmentAccess', () => {
+    it('delegates the intent to the permissions service', () => {
+      controller.setDepartmentAccess('u1', 'd1', { granted: false });
+
+      expect(mockPermissionsService.setDepartmentAccess).toHaveBeenCalledWith(
+        'u1',
+        'd1',
+        false,
       );
+    });
+  });
 
-      await expect(
-        controller.grantAccess('missing', { providerId: 'p1' }),
-      ).rejects.toThrow(NotFoundException);
+  describe('setBranchAccess', () => {
+    it('delegates the intent to the permissions service', () => {
+      controller.setBranchAccess('u1', 'b1', { granted: false });
 
-      expect(mockProvidersService.findById).not.toHaveBeenCalled();
-      expect(mockPermissionsService.grant).not.toHaveBeenCalled();
+      expect(mockPermissionsService.setBranchAccess).toHaveBeenCalledWith(
+        'u1',
+        'b1',
+        false,
+      );
     });
   });
 });

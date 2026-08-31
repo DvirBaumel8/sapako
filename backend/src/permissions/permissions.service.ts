@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { UserProviderAccess } from './user-provider-access.entity';
 import { UserDepartmentAccess } from './user-department-access.entity';
 import { UserProviderBlock } from './user-provider-block.entity';
@@ -189,5 +189,66 @@ export class PermissionsService {
 
   revoke(userId: string, providerId: string): Promise<void> {
     return this.accessRepo.delete({ userId, providerId }).then(() => undefined);
+  }
+
+  /** Grants or revokes one provider, choosing the mechanism the rule requires. */
+  async setProviderAccess(userId: string, providerId: string, granted: boolean) {
+    const provider = await this.providerRepo.findOne({
+      where: { id: providerId },
+      relations: { departments: true },
+    });
+    if (!provider) throw new NotFoundException();
+    const departmentGrants = await this.departmentAccessRepo.find({ where: { userId } });
+    const grantedDepartmentIds = departmentGrants.map((row) => row.departmentId);
+    const reachedByDepartment = (provider.departments ?? []).some((department) =>
+      grantedDepartmentIds.includes(department.id),
+    );
+
+    if (granted) {
+      // Clearing the block is always right; a direct grant is only needed when
+      // no department would reach it anyway.
+      await this.blockRepo.delete({ userId, providerId });
+      if (!reachedByDepartment) {
+        await this.accessRepo.save({ userId, providerId });
+      }
+      return;
+    }
+
+    await this.accessRepo.delete({ userId, providerId });
+    if (reachedByDepartment) {
+      // Only a department keeps it reachable, so an exception is required.
+      await this.blockRepo.save({ userId, providerId });
+    }
+  }
+
+  async setDepartmentAccess(userId: string, departmentId: string, granted: boolean) {
+    if (granted) {
+      await this.departmentAccessRepo.save({ userId, departmentId });
+      return;
+    }
+    // Direct grants inside the department are left alone — see spec 3.3.
+    await this.departmentAccessRepo.delete({ userId, departmentId });
+  }
+
+  async setBranchAccess(userId: string, branchId: string, granted: boolean) {
+    const [providers, departments] = await Promise.all([
+      this.providersOfBranch(branchId),
+      this.departmentsOfBranch(branchId),
+    ]);
+    const providerIds = providers.map((provider) => provider.id);
+    const departmentIds = departments.map((department) => department.id);
+    if (providerIds.length === 0) return;
+
+    if (granted) {
+      await this.blockRepo.delete({ userId, providerId: In(providerIds) });
+      await this.accessRepo.save(providerIds.map((providerId) => ({ userId, providerId })));
+      return;
+    }
+
+    await this.accessRepo.delete({ userId, providerId: In(providerIds) });
+    await this.blockRepo.delete({ userId, providerId: In(providerIds) });
+    if (departmentIds.length > 0) {
+      await this.departmentAccessRepo.delete({ userId, departmentId: In(departmentIds) });
+    }
   }
 }

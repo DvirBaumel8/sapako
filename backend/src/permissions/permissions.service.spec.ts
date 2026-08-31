@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { In } from 'typeorm';
 import { PermissionsService } from './permissions.service';
 import { UserProviderAccess } from './user-provider-access.entity';
 import { UserDepartmentAccess } from './user-department-access.entity';
@@ -381,6 +382,95 @@ describe('PermissionsService', () => {
       await expect(
         service.hasProviderAccess({ userId: 'u1', role: Role.STAFF } as never, 'nope'),
       ).resolves.toBe(false);
+    });
+  });
+
+  describe('setProviderAccess', () => {
+    it('removes the block rather than adding a grant when a department already grants it', async () => {
+      departmentAccessRepo.find.mockResolvedValue([{ departmentId: 'd1' }]);
+      providerRepo.findOne.mockResolvedValue({
+        id: 'p1',
+        departments: [{ id: 'd1', name: 'חלב' }],
+      });
+
+      await service.setProviderAccess('u1', 'p1', true);
+
+      expect(blockRepo.delete).toHaveBeenCalledWith({ userId: 'u1', providerId: 'p1' });
+      expect(directRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('adds a direct grant when nothing else would reach the provider', async () => {
+      departmentAccessRepo.find.mockResolvedValue([]);
+      providerRepo.findOne.mockResolvedValue({ id: 'p1', departments: [] });
+
+      await service.setProviderAccess('u1', 'p1', true);
+
+      expect(directRepo.save).toHaveBeenCalledWith({ userId: 'u1', providerId: 'p1' });
+    });
+
+    it('blocks a department-granted provider when switched off', async () => {
+      departmentAccessRepo.find.mockResolvedValue([{ departmentId: 'd1' }]);
+      providerRepo.findOne.mockResolvedValue({
+        id: 'p1',
+        departments: [{ id: 'd1', name: 'חלב' }],
+      });
+
+      await service.setProviderAccess('u1', 'p1', false);
+
+      expect(blockRepo.save).toHaveBeenCalledWith({ userId: 'u1', providerId: 'p1' });
+    });
+
+    it('only removes the grant when switching off a directly granted provider', async () => {
+      // Adding a block here too would be redundant, and would outlive the grant
+      // as a dormant rule nobody asked for.
+      departmentAccessRepo.find.mockResolvedValue([]);
+      providerRepo.findOne.mockResolvedValue({ id: 'p1', departments: [] });
+
+      await service.setProviderAccess('u1', 'p1', false);
+
+      expect(directRepo.delete).toHaveBeenCalledWith({ userId: 'u1', providerId: 'p1' });
+      expect(blockRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('never leaves a direct grant and a block in place together', async () => {
+      departmentAccessRepo.find.mockResolvedValue([]);
+      providerRepo.findOne.mockResolvedValue({ id: 'p1', departments: [] });
+
+      await service.setProviderAccess('u1', 'p1', true);
+
+      expect(blockRepo.delete).toHaveBeenCalledWith({ userId: 'u1', providerId: 'p1' });
+    });
+  });
+
+  describe('setDepartmentAccess', () => {
+    it('leaves a direct grant inside the department intact when revoked', async () => {
+      // Spec section 3.3: the two rules are independent, and dropping one
+      // because an unrelated one was withdrawn would be surprising.
+      await service.setDepartmentAccess('u1', 'd1', false);
+
+      expect(departmentAccessRepo.delete).toHaveBeenCalledWith({
+        userId: 'u1',
+        departmentId: 'd1',
+      });
+      expect(directRepo.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setBranchAccess', () => {
+    it('leaves the other branch untouched when clearing one', async () => {
+      providerRepo.find.mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
+      departmentRepo.find.mockResolvedValue([{ id: 'd1' }]);
+
+      await service.setBranchAccess('u1', 'b1', false);
+
+      expect(directRepo.delete).toHaveBeenCalledWith({
+        userId: 'u1',
+        providerId: In(['p1', 'p2']),
+      });
+      expect(departmentAccessRepo.delete).toHaveBeenCalledWith({
+        userId: 'u1',
+        departmentId: In(['d1']),
+      });
     });
   });
 });
