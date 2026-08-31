@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { deleteProduct, updateProduct } from '../../../../src/api/products';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { hasLetter, sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
+import { useAlert } from '../../../../src/ui/AlertProvider';
 
 export default function EditProductScreen() {
   useRequireAdmin();
@@ -18,6 +19,7 @@ export default function EditProductScreen() {
       providerId: string;
     }>();
   const queryClient = useQueryClient();
+  const showAlert = useAlert();
   const [name, setName] = useState(productName ?? '');
   const [unitType, setUnitType] = useState(initialUnitType ?? '');
   const [barcode, setBarcode] = useState(initialBarcode ?? '');
@@ -32,7 +34,7 @@ export default function EditProductScreen() {
       await invalidateProducts();
       router.back();
     } catch {
-      Alert.alert('שגיאה', 'שמירת המוצר נכשלה. יש לנסות שוב.');
+      showAlert({ title: 'שגיאה', message: 'שמירת המוצר נכשלה. יש לנסות שוב.' });
     }
   };
 
@@ -43,19 +45,19 @@ export default function EditProductScreen() {
       router.back();
     },
     onError: () => {
-      Alert.alert('שגיאה', 'מחיקת המוצר נכשלה. יש לנסות שוב.');
+      showAlert({ title: 'שגיאה', message: 'מחיקת המוצר נכשלה. יש לנסות שוב.' });
     },
   });
 
   const confirmDelete = () => {
-    Alert.alert(
-      'מחיקת מוצר',
-      `למחוק את "${productName ?? name}"? לא ניתן לשחזר פעולה זו.`,
-      [
+    showAlert({
+      title: 'מחיקת מוצר',
+      message: `למחוק את "${productName ?? name}"? לא ניתן לשחזר פעולה זו.`,
+      buttons: [
         { text: 'ביטול', style: 'cancel' },
         { text: 'מחיקה', style: 'destructive', onPress: () => removeProduct.mutate() },
       ],
-    );
+    });
   };
 
   return (

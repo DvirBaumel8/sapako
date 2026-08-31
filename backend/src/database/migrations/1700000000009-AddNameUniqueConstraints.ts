@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddNameUniqueConstraints1700000000009
-  implements MigrationInterface
-{
+export class AddNameUniqueConstraints1700000000009 implements MigrationInterface {
   name = 'AddNameUniqueConstraints1700000000009';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

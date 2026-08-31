@@ -2,8 +2,8 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: 'mobile',
-  slug: 'mobile',
+  name: 'Sapako',
+  slug: 'sapako',
   version: '1.0.0',
   scheme: 'sapako',
   orientation: 'portrait',
@@ -27,6 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     permissions: ['android.permission.CAMERA', 'android.permission.RECORD_AUDIO'],
   },
   web: {
+    output: 'single',
     favicon: './assets/favicon.png',
   },
   plugins: [

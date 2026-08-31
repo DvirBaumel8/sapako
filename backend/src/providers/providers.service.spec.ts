@@ -57,10 +57,7 @@ describe('ProvidersService', () => {
     });
 
     expect(mockBranchesService.findById).toHaveBeenCalledWith('b1');
-    expect(mockDepartmentsService.findByIds).toHaveBeenCalledWith([
-      'd1',
-      'd2',
-    ]);
+    expect(mockDepartmentsService.findByIds).toHaveBeenCalledWith(['d1', 'd2']);
     expect(provider).toMatchObject({
       id: 'p1',
       branchId: 'b1',
@@ -74,7 +71,11 @@ describe('ProvidersService', () => {
 
   it('rejects with ConflictException when a provider with the same name already exists in the branch', async () => {
     mockBranchesService.findById.mockResolvedValue({ id: 'b1' });
-    mockRepo.findOneBy.mockResolvedValue({ id: 'existing', branchId: 'b1', name: 'Meat Co' });
+    mockRepo.findOneBy.mockResolvedValue({
+      id: 'existing',
+      branchId: 'b1',
+      name: 'Meat Co',
+    });
 
     await expect(
       service.create('b1', {
@@ -242,9 +243,9 @@ describe('ProvidersService', () => {
       name: 'Fish Co',
     });
 
-    await expect(
-      service.update('p1', { name: 'Fish Co' }),
-    ).rejects.toThrow(ConflictException);
+    await expect(service.update('p1', { name: 'Fish Co' })).rejects.toThrow(
+      ConflictException,
+    );
 
     expect(mockRepo.save).not.toHaveBeenCalled();
   });

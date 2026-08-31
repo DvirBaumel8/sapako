@@ -1,14 +1,16 @@
 import React from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteUser, fetchUsers } from '../../../../src/api/users';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { isConflictError } from '../../../../src/api/errors';
+import { useAlert } from '../../../../src/ui/AlertProvider';
 
 export default function UsersScreen() {
   useRequireAdmin();
   const queryClient = useQueryClient();
+  const showAlert = useAlert();
   const { data: users } = useQuery({ queryKey: ['users'], queryFn: fetchUsers });
 
   const removeUser = useMutation({
@@ -18,22 +20,22 @@ export default function UsersScreen() {
     },
     onError: (err) => {
       if (isConflictError(err)) {
-        Alert.alert('לא ניתן למחוק', 'לא ניתן למחוק את המנהל האחרון במערכת.');
+        showAlert({ title: 'לא ניתן למחוק', message: 'לא ניתן למחוק את המנהל האחרון במערכת.' });
       } else {
-        Alert.alert('שגיאה', 'מחיקת המשתמש נכשלה. יש לנסות שוב.');
+        showAlert({ title: 'שגיאה', message: 'מחיקת המשתמש נכשלה. יש לנסות שוב.' });
       }
     },
   });
 
   const confirmDelete = (userId: string, username: string) => {
-    Alert.alert(
-      'מחיקת משתמש',
-      `למחוק את המשתמש "${username}"? פעולה זו תמחק גם את כל היסטוריית ההזמנות שהוא יצר. לא ניתן לשחזר פעולה זו.`,
-      [
+    showAlert({
+      title: 'מחיקת משתמש',
+      message: `למחוק את המשתמש "${username}"? פעולה זו תמחק גם את כל היסטוריית ההזמנות שהוא יצר. לא ניתן לשחזר פעולה זו.`,
+      buttons: [
         { text: 'ביטול', style: 'cancel' },
         { text: 'מחיקה', style: 'destructive', onPress: () => removeUser.mutate(userId) },
       ],
-    );
+    });
   };
 
   return (

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { deleteDepartment, updateDepartment } from '../../../../src/api/departments';
@@ -8,6 +8,7 @@ import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { useBranch } from '../../../../src/branch/BranchContext';
 import { hasLetter, sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import { isConflictError } from '../../../../src/api/errors';
+import { useAlert } from '../../../../src/ui/AlertProvider';
 
 export default function EditDepartmentScreen() {
   useRequireAdmin();
@@ -17,6 +18,7 @@ export default function EditDepartmentScreen() {
   }>();
   const { selectedBranch } = useBranch();
   const queryClient = useQueryClient();
+  const showAlert = useAlert();
   const [name, setName] = useState(departmentName ?? '');
   const [nameError, setNameError] = useState('');
   const isNameValid = hasLetter(name);
@@ -34,7 +36,7 @@ export default function EditDepartmentScreen() {
       if (isConflictError(err)) {
         setNameError('כבר קיימת מחלקה בשם זה בסניף. יש לבחור שם אחר.');
       } else {
-        Alert.alert('שגיאה', 'שמירת המחלקה נכשלה. יש לנסות שוב.');
+        showAlert({ title: 'שגיאה', message: 'שמירת המחלקה נכשלה. יש לנסות שוב.' });
       }
     }
   };
@@ -46,19 +48,19 @@ export default function EditDepartmentScreen() {
       router.back();
     },
     onError: () => {
-      Alert.alert('שגיאה', 'מחיקת המחלקה נכשלה. יש לנסות שוב.');
+      showAlert({ title: 'שגיאה', message: 'מחיקת המחלקה נכשלה. יש לנסות שוב.' });
     },
   });
 
   const confirmDelete = () => {
-    Alert.alert(
-      'מחיקת מחלקה',
-      `למחוק את המחלקה "${departmentName ?? name}"? הספקים המשויכים אליה לא יימחקו, רק השיוך למחלקה זו יוסר. לא ניתן לשחזר פעולה זו.`,
-      [
+    showAlert({
+      title: 'מחיקת מחלקה',
+      message: `למחוק את המחלקה "${departmentName ?? name}"? הספקים המשויכים אליה לא יימחקו, רק השיוך למחלקה זו יוסר. לא ניתן לשחזר פעולה זו.`,
+      buttons: [
         { text: 'ביטול', style: 'cancel' },
         { text: 'מחיקה', style: 'destructive', onPress: () => removeDepartment.mutate() },
       ],
-    );
+    });
   };
 
   return (

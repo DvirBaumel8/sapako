@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Platform, Pressable, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { publishOrder } from '../api/orders';
 import { buildOrderMessage } from './buildOrderMessage';
 import { toWhatsAppPhoneNumber } from '../utils/whatsappPhone';
+import { useAlert } from '../ui/AlertProvider';
 import type { Order, OrderItem } from '../api/types';
 
 interface PublishButtonProps {
@@ -13,13 +14,14 @@ interface PublishButtonProps {
 }
 
 export function PublishButton({ order, items }: PublishButtonProps) {
+  const showAlert = useAlert();
   const [isPublishing, setIsPublishing] = useState(false);
   // The root layout's SafeAreaView only reserves the top edge, so nothing
-  // pads content away from Android's gesture/nav bar at the bottom — this
-  // button ends up rendered mostly underneath it. iOS's home indicator area
-  // doesn't have this problem, so only add the inset on Android.
+  // pads this button away from the bottom of the screen — the iPhone home
+  // indicator on an installed PWA, or Android's gesture bar. Applied
+  // unconditionally: the inset is zero on devices that have no such area.
   const insets = useSafeAreaInsets();
-  const androidBottomInset = Platform.OS === 'android' ? insets.bottom : 0;
+  const bottomInset = insets.bottom;
 
   const handlePublish = async () => {
     if (items.length === 0) return;
@@ -34,26 +36,34 @@ export function PublishButton({ order, items }: PublishButtonProps) {
       const message = buildOrderMessage({ ...order, items });
       const phoneDigitsOnly = toWhatsAppPhoneNumber(order.provider.phone);
       const url = `https://wa.me/${phoneDigitsOnly}?text=${encodeURIComponent(message)}`;
-      const canOpen = await Linking.canOpenURL(url);
-      if (!canOpen) {
-        Alert.alert(
-          'לא ניתן לפתוח את WhatsApp',
-          'ודאו ש-WhatsApp מותקן במכשיר ונסו שוב. ההזמנה נשמרה כטיוטה.',
-        );
-        return;
+      // Hand off in a separate browsing context rather than navigating this
+      // one. Assigning location.href would begin unloading the page, and the
+      // browser cancels in-flight requests on unload — so the publishOrder
+      // call below would never complete and the order would stay a draft
+      // even though the message was sent, inviting a duplicate send.
+      //
+      // Called synchronously, before this function's first await: Safari
+      // blocks window.open once the user-gesture chain is broken, which is
+      // also why the old canOpenURL check is gone. wa.me redirects to the
+      // WhatsApp app on mobile and to web.whatsapp.com on desktop, so there
+      // is nothing left to feature-detect.
+      const handedOff = window.open(url, '_blank');
+      if (!handedOff) {
+        // Blocked anyway. Navigating this tab always works, at the cost of
+        // losing the publishOrder call — better than not sending the order.
+        window.location.href = url;
       }
-      await Linking.openURL(url);
       try {
         await publishOrder(order.id);
       } catch {
-        Alert.alert(
-          'ההודעה נשלחה, אך סימון ההזמנה נכשל',
-          'ההודעה כבר נפתחה ב-WhatsApp. אם ההזמנה עדיין מופיעה כטיוטה, אין צורך לשלוח שוב — יש לפנות לתמיכה אם הבעיה חוזרת.',
-        );
+        showAlert({
+          title: 'ההודעה נשלחה, אך סימון ההזמנה נכשל',
+          message: 'ההודעה כבר נפתחה ב-WhatsApp. אם ההזמנה עדיין מופיעה כטיוטה, אין צורך לשלוח שוב — יש לפנות לתמיכה אם הבעיה חוזרת.',
+        });
       }
       router.replace('/');
     } catch {
-      Alert.alert('לא ניתן היה לפתוח את WhatsApp', 'ההזמנה נשמרה כטיוטה. ניתן לנסות שוב.');
+      showAlert({ title: 'לא ניתן היה לפתוח את WhatsApp', message: 'ההזמנה נשמרה כטיוטה. ניתן לנסות שוב.' });
     } finally {
       setIsPublishing(false);
     }
@@ -63,7 +73,7 @@ export function PublishButton({ order, items }: PublishButtonProps) {
     <Pressable
       style={({ pressed }) => [
         styles.button,
-        { marginBottom: 12 + androidBottomInset },
+        { marginBottom: 12 + bottomInset },
         pressed && styles.buttonPressed,
         (isPublishing || items.length === 0) && styles.buttonDisabled,
       ]}

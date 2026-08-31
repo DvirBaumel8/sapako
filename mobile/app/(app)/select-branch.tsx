@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -14,7 +14,17 @@ export default function SelectBranchScreen() {
     queryFn: fetchAccessibleBranches,
   });
 
-  if (isLoading) {
+  // With a single branch there is no choice to make, so presenting one is
+  // just a tap on every launch. Selecting it automatically is what the user
+  // would have done anyway.
+  useEffect(() => {
+    if (branches?.length === 1) {
+      selectBranch(branches[0]);
+      router.replace('/');
+    }
+  }, [branches, selectBranch]);
+
+  if (isLoading || branches?.length === 1) {
     return (
       <View style={styles.centered}>
         <Text>טוען סניפים…</Text>

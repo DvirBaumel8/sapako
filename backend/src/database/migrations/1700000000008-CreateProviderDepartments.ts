@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateProviderDepartments1700000000008
-  implements MigrationInterface
-{
+export class CreateProviderDepartments1700000000008 implements MigrationInterface {
   name = 'CreateProviderDepartments1700000000008';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

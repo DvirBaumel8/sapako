@@ -33,7 +33,9 @@ export class ProvidersService {
       name: input.name,
     });
     if (existing) {
-      throw new ConflictException('A provider with this name already exists in this branch');
+      throw new ConflictException(
+        'A provider with this name already exists in this branch',
+      );
     }
     const { departmentIds, ...rest } = input;
     const departments = await this.resolveDepartments(branchId, departmentIds);
@@ -96,7 +98,9 @@ export class ProvidersService {
         name: input.name,
       });
       if (existing) {
-        throw new ConflictException('A provider with this name already exists in this branch');
+        throw new ConflictException(
+          'A provider with this name already exists in this branch',
+        );
       }
     }
     const { departmentIds, ...rest } = input;
@@ -128,9 +132,7 @@ export class ProvidersService {
     branchId: string,
     departmentIds: string[],
   ): Promise<Department[]> {
-    const departments = await this.departmentsService.findByIds(
-      departmentIds,
-    );
+    const departments = await this.departmentsService.findByIds(departmentIds);
     if (departments.length !== departmentIds.length) {
       throw new NotFoundException('One or more departments not found');
     }
@@ -138,9 +140,7 @@ export class ProvidersService {
       (department) => department.branchId !== branchId,
     );
     if (mismatched) {
-      throw new NotFoundException(
-        'Department does not belong to this branch',
-      );
+      throw new NotFoundException('Department does not belong to this branch');
     }
     return departments;
   }

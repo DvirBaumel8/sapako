@@ -10,11 +10,20 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { buildCorsConfig, isAllowedOrigin } from './cors';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(helmet());
-  app.enableCors();
+  const corsConfig = buildCorsConfig(process.env);
+  app.enableCors({
+    origin: (
+      origin: string | undefined,
+      callback: (error: Error | null, allow?: boolean) => void,
+    ) => {
+      callback(null, isAllowedOrigin(origin, corsConfig));
+    },
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

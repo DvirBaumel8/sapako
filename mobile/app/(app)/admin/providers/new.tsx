@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAccessibleBranches } from '../../../../src/api/branches';
@@ -11,9 +11,11 @@ import { hasLetter, sanitizeHebrewInput } from '../../../../src/utils/hebrewInpu
 import { intersectDepartmentNames } from '../../../../src/utils/departmentIntersection';
 import { isValidIsraeliPhone, PHONE_VALIDATION_ERROR } from '../../../../src/utils/phoneValidation';
 import { isConflictError } from '../../../../src/api/errors';
+import { useAlert } from '../../../../src/ui/AlertProvider';
 
 export default function NewProviderScreen() {
   useRequireAdmin();
+  const showAlert = useAlert();
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: fetchAccessibleBranches });
   const [selectedBranchIds, setSelectedBranchIds] = useState<Set<string>>(new Set());
   const [name, setName] = useState('');
@@ -84,7 +86,7 @@ export default function NewProviderScreen() {
       if (isConflictError(err)) {
         setNameError('כבר קיים ספק בשם זה באחד הסניפים שנבחרו. יש לבחור שם אחר.');
       } else {
-        Alert.alert('שגיאה', 'יצירת הספק נכשלה. יש לנסות שוב.');
+        showAlert({ title: 'שגיאה', message: 'יצירת הספק נכשלה. יש לנסות שוב.' });
       }
     }
   };

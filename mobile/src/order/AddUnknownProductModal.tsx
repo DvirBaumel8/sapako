@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { createProduct } from '../api/products';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { hasLetter, sanitizeHebrewInput } from '../utils/hebrewInput';
+import { useAlert } from '../ui/AlertProvider';
 import type { Product } from '../api/types';
 
 interface AddUnknownProductModalProps {
@@ -26,6 +27,7 @@ export function AddUnknownProductModal({
   onClose,
   onCreated,
 }: AddUnknownProductModalProps) {
+  const showAlert = useAlert();
   const [name, setName] = useState('');
   const [unitType, setUnitType] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -45,7 +47,7 @@ export function AddUnknownProductModal({
       const product = await createProduct(providerId, { name, unitType, barcode });
       onCreated(product);
     } catch {
-      Alert.alert('שגיאה', 'הוספת המוצר נכשלה. יש לנסות שוב.');
+      showAlert({ title: 'שגיאה', message: 'הוספת המוצר נכשלה. יש לנסות שוב.' });
     } finally {
       setIsSaving(false);
     }

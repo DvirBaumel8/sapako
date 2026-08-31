@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { createBranch } from '../../../../src/api/branches';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { hasLetter, sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import { isConflictError } from '../../../../src/api/errors';
+import { useAlert } from '../../../../src/ui/AlertProvider';
 
 export default function NewBranchScreen() {
   useRequireAdmin();
+  const showAlert = useAlert();
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
   const isNameValid = hasLetter(name);
@@ -22,7 +24,7 @@ export default function NewBranchScreen() {
       if (isConflictError(err)) {
         setNameError('כבר קיים סניף בשם זה. יש לבחור שם אחר.');
       } else {
-        Alert.alert('שגיאה', 'יצירת הסניף נכשלה. יש לנסות שוב.');
+        showAlert({ title: 'שגיאה', message: 'יצירת הסניף נכשלה. יש לנסות שוב.' });
       }
     }
   };

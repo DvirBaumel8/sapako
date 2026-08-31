@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchProductsForProvider } from '../../../../src/api/products';
@@ -12,6 +12,7 @@ import { BarcodeScannerModal } from '../../../../src/barcode/BarcodeScannerModal
 import { AddUnknownProductModal } from '../../../../src/order/AddUnknownProductModal';
 import { findResumableDraft } from '../../../../src/order/findResumableDraft';
 import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
+import { useAlert } from '../../../../src/ui/AlertProvider';
 
 export default function OrderBuilderScreen() {
   const { providerId, providerName, sourceOrder, highlightProductId } = useLocalSearchParams<{
@@ -23,6 +24,7 @@ export default function OrderBuilderScreen() {
   const { selectedBranch } = useBranch();
   const { role, userId } = useAuth();
   const queryClient = useQueryClient();
+  const showAlert = useAlert();
   const [order, setOrder] = useState<Order | null>(null);
   const [itemsByProductId, setItemsByProductId] = useState<Record<string, OrderItem>>({});
   const [isScannerVisible, setIsScannerVisible] = useState(false);
@@ -98,10 +100,10 @@ export default function OrderBuilderScreen() {
     if (!resumable) return;
 
     hasPromptedResumeRef.current = true;
-    Alert.alert(
-      'יש הזמנה פתוחה לספק זה',
-      'יש לך הזמנה שטרם הושלמה לספק הזה. להמשיך אותה?',
-      [
+    showAlert({
+      title: 'יש הזמנה פתוחה לספק זה',
+      message: 'יש לך הזמנה שטרם הושלמה לספק הזה. להמשיך אותה?',
+      buttons: [
         { text: 'לא, התחל חדש', style: 'cancel' },
         {
           text: 'כן, המשך',
@@ -113,7 +115,7 @@ export default function OrderBuilderScreen() {
           },
         },
       ],
-    );
+    });
   }, [sourceOrder, branchOrders, userId, providerId, order]);
 
   // Creates the draft order on first use rather than eagerly on screen open,
@@ -157,17 +159,20 @@ export default function OrderBuilderScreen() {
     const match = products?.find((product) => product.barcode === barcode);
     if (!match) {
       if (role !== 'ADMIN') {
-        Alert.alert('לא נמצא מוצר תואם', `לא נמצא מוצר עם ברקוד ${barcode} בקטלוג של הספק הזה.`);
+        showAlert({
+          title: 'לא נמצא מוצר תואם',
+          message: `לא נמצא מוצר עם ברקוד ${barcode} בקטלוג של הספק הזה.`,
+        });
         return;
       }
-      Alert.alert(
-        'לא נמצא מוצר תואם',
-        `לא נמצא מוצר עם ברקוד ${barcode} בקטלוג של הספק הזה.`,
-        [
+      showAlert({
+        title: 'לא נמצא מוצר תואם',
+        message: `לא נמצא מוצר עם ברקוד ${barcode} בקטלוג של הספק הזה.`,
+        buttons: [
           { text: 'ביטול', style: 'cancel' },
           { text: 'הוספת מוצר חדש', onPress: () => setUnknownBarcode(barcode) },
         ],
-      );
+      });
       return;
     }
     const currentQuantity = itemsByProductId[match.id]?.quantity ?? 0;

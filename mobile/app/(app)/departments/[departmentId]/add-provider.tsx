@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchAllProvidersForBranch, updateProvider } from '../../../../src/api/providers';
 import { useBranch } from '../../../../src/branch/BranchContext';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
+import { useAlert } from '../../../../src/ui/AlertProvider';
 
 export default function AddProviderToDepartmentScreen() {
   useRequireAdmin();
@@ -15,6 +16,7 @@ export default function AddProviderToDepartmentScreen() {
   }>();
   const { selectedBranch } = useBranch();
   const queryClient = useQueryClient();
+  const showAlert = useAlert();
   const [search, setSearch] = useState('');
 
   const { data: providers, isLoading } = useQuery({
@@ -38,7 +40,7 @@ export default function AddProviderToDepartmentScreen() {
       queryClient.invalidateQueries({ queryKey: ['providers', selectedBranch!.id] });
     },
     onError: () => {
-      Alert.alert('שגיאה', 'הוספת הספק למחלקה נכשלה. יש לנסות שוב.');
+      showAlert({ title: 'שגיאה', message: 'הוספת הספק למחלקה נכשלה. יש לנסות שוב.' });
     },
   });
 

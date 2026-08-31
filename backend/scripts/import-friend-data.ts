@@ -2,9 +2,19 @@ import 'dotenv/config';
 import { readFileSync } from 'fs';
 import { parse } from 'csv-parse/sync';
 import { Client } from 'pg';
+import { buildDepartmentLinks } from './buildDepartmentLinks';
 
-const SUPPLIERS_CSV = '/Users/dvir.baumel/Downloads/all suplluiers.csv';
-const PRODUCTS_CSV = '/Users/dvir.baumel/Downloads/all products by provider and his number.csv';
+// Taken as arguments rather than hardcoded: the previous absolute paths
+// pointed into one particular machine's Downloads folder, so the script could
+// not be run anywhere else — which matters when it is the recovery path for
+// rebuilding the catalogue.
+const [, , SUPPLIERS_CSV, PRODUCTS_CSV] = process.argv;
+if (!SUPPLIERS_CSV || !PRODUCTS_CSV) {
+  console.error(
+    'Usage: ts-node scripts/import-friend-data.ts <suppliers.csv> <products.csv>',
+  );
+  process.exit(1);
+}
 const BRANCH_NAME = 'Hills';
 const PLACEHOLDER_PHONE = '0000000000';
 const DEFAULT_UNIT_TYPE = "יח'";
@@ -22,6 +32,59 @@ interface ProductRow {
   'שם מחלקה': string;
   'קוד ספק ראשי': string;
   'שם ספק ראשי': string;
+}
+
+async function importDepartments(
+  client: Client,
+  branchId: string,
+  products: ProductRow[],
+  supplierCodeToProviderId: Map<string, string>,
+): Promise<void> {
+  const { departmentNames, supplierCodeToDepartments } =
+    buildDepartmentLinks(products);
+  if (departmentNames.length === 0) {
+    console.log('No departments found in the products file; skipping.');
+    return;
+  }
+
+  const departmentNameToId = new Map<string, string>();
+  for (const name of departmentNames) {
+    const result = await client.query<{ id: string }>(
+      'INSERT INTO departments ("branchId", name) VALUES ($1, $2) RETURNING id',
+      [branchId, name],
+    );
+    departmentNameToId.set(name, result.rows[0].id);
+  }
+  console.log(`Created ${departmentNameToId.size} departments.`);
+
+  const values: string[] = [];
+  const params: unknown[] = [];
+  let linkCount = 0;
+  for (const [supplierCode, departments] of supplierCodeToDepartments) {
+    const providerId = supplierCodeToProviderId.get(supplierCode);
+    if (!providerId) {
+      // A product referencing a supplier that was filtered out of the
+      // suppliers file. The product itself is skipped for the same reason,
+      // so there is nothing to link.
+      continue;
+    }
+    for (const department of departments) {
+      const departmentId = departmentNameToId.get(department);
+      if (!departmentId) continue;
+      const base = linkCount * 2;
+      values.push(`($${base + 1}, $${base + 2})`);
+      params.push(providerId, departmentId);
+      linkCount++;
+    }
+  }
+
+  if (values.length > 0) {
+    await client.query(
+      `INSERT INTO provider_departments ("providerId", "departmentId") VALUES ${values.join(', ')}`,
+      params,
+    );
+  }
+  console.log(`Linked ${linkCount} provider-department pairs.`);
 }
 
 function readCsv<T>(path: string): T[] {
@@ -104,6 +167,8 @@ async function main() {
       }
     }
     console.log(`Created ${productsCreated} products, skipped ${productsSkipped} (missing supplier match or name).`);
+
+    await importDepartments(client, branchId, products, supplierCodeToProviderId);
 
     await client.query('COMMIT');
     console.log('Import committed successfully.');
