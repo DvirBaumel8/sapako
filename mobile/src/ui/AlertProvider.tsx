@@ -40,6 +40,7 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
         onRequestClose={() => dismiss(findCancelHandler(current?.buttons))}
       >
         <Pressable
+          testID="alert-backdrop"
           style={styles.backdrop}
           onPress={() => dismiss(findCancelHandler(current?.buttons))}
         >

@@ -406,10 +406,15 @@ export default function OrderBuilderScreen() {
                 <View style={styles.stepper}>
                   {/* RN mirrors flexDirection:'row' under RTL, so JSX order here is
                       reversed on purpose: this renders visually as [−] [qty] [+]. */}
-                  <Pressable onPress={() => adjustQuantity(product, 1)} style={styles.stepperButton}>
+                  <Pressable
+                    testID={`increment-${product.id}`}
+                    onPress={() => adjustQuantity(product, 1)}
+                    style={styles.stepperButton}
+                  >
                     <Text style={styles.stepperButtonText}>+</Text>
                   </Pressable>
                   <TextInput
+                    testID={`quantity-${product.id}`}
                     style={styles.quantityInput}
                     keyboardType={isWeightUnit(product.unitType) ? 'decimal-pad' : 'number-pad'}
                     value={formatQuantity(currentQuantity)}
@@ -423,6 +428,7 @@ export default function OrderBuilderScreen() {
                     }}
                   />
                   <Pressable
+                    testID={`decrement-${product.id}`}
                     onPress={() => adjustQuantity(product, -1)}
                     style={styles.stepperButton}
                   >
