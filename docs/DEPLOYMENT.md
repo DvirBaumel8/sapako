@@ -39,6 +39,13 @@ after a fixed period while Neon's free tier does not.
 
 3. First deploy runs migrations, then boots. The bootstrap admin is created
    **only if the users table is empty** (`src/auth/admin-bootstrap.service.ts`).
+
+   Both steps run from compiled output rather than `ts-node`. That is not a
+   style preference: running migrations through `ts-node` compiles TypeScript
+   in-process on every boot, and inside the free tier's 512 MB that produced a
+   restart loop — roughly a quarter of all requests returned Render's
+   `x-render-routing: no-server` 404, including CORS preflights, so browser
+   logins failed intermittently and looked like a CORS misconfiguration.
 4. Note the service URL: `https://sapako-backend.onrender.com`.
 
 ## 3. Point the web app at it

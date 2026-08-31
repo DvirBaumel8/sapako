@@ -14,14 +14,16 @@ services:
     plan: free
     region: frankfurt
     rootDir: backend
-    # --include=dev is load-bearing: the start command runs migrations through
-    # ts-node, which is a devDependency. Render sets NODE_ENV=production, so a
-    # plain `npm ci` would omit it and every boot would fail.
-    buildCommand: npm ci --include=dev && npm run build
-    # Migrations run before the server starts, the same ordering Railway's
-    # releaseCommand gave us. TypeORM records applied migrations, so re-running
-    # on each restart is a no-op.
-    startCommand: npm run migration:run && npm run start:prod
+    # devDependencies are needed to compile (nest build, typescript), then
+    # pruned: nothing in the runtime path needs them, and the free instance
+    # has 512 MB to work with.
+    buildCommand: npm ci --include=dev && npm run build && npm prune --omit=dev
+    # Both steps run from compiled output. The previous version ran migrations
+    # through ts-node, which compiles TypeScript in-process on every boot —
+    # inside a 512 MB instance that produced a restart loop, with roughly a
+    # quarter of all requests returning Render's "no-server" 404. TypeORM
+    # records applied migrations, so re-running on each restart is a no-op.
+    startCommand: node dist/database/migrate.js && node dist/main
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
