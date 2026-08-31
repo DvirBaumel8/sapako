@@ -37,6 +37,10 @@ export default function OrderBuilderScreen() {
   const [order, setOrder] = useState<Order | null>(null);
   const [itemsByProductId, setItemsByProductId] = useState<Record<string, OrderItem>>({});
   const [isScannerVisible, setIsScannerVisible] = useState(false);
+  // Editing a product from here is rare; a pencil on every row is permanent
+  // clutter on a screen whose job is setting quantities. Same toggle as the
+  // departments list.
+  const [isEditingProducts, setIsEditingProducts] = useState(false);
   const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const orderCreationRef = useRef<Promise<Order> | null>(null);
@@ -298,6 +302,24 @@ export default function OrderBuilderScreen() {
         <Pressable onPress={() => setIsScannerVisible(true)} style={styles.scanButton}>
           <Text style={styles.scanButtonText}>סריקת ברקוד</Text>
         </Pressable>
+        {role === 'ADMIN' && (
+          <Pressable
+            onPress={() => setIsEditingProducts((previous) => !previous)}
+            accessibilityRole="button"
+            accessibilityLabel={isEditingProducts ? 'סיום עריכת מוצרים' : 'עריכת מוצרים'}
+            hitSlop={12}
+            style={[styles.editToggle, isEditingProducts && styles.editToggleActive]}
+          >
+            <Text
+              style={[
+                styles.editToggleText,
+                isEditingProducts && styles.editToggleTextActive,
+              ]}
+            >
+              {isEditingProducts ? 'סיום' : '✎'}
+            </Text>
+          </Pressable>
+        )}
       </View>
       <BarcodeScannerModal
         visible={isScannerVisible}
@@ -354,7 +376,7 @@ export default function OrderBuilderScreen() {
             <View style={[styles.card, isHighlighted && styles.cardHighlighted]}>
               <View style={styles.productNameRow}>
                 <Text style={styles.productName}>{product.name}</Text>
-                {role === 'ADMIN' && (
+                {role === 'ADMIN' && isEditingProducts && (
                   <Pressable
                     hitSlop={8}
                     onPress={() =>
@@ -426,6 +448,17 @@ export default function OrderBuilderScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12 },
+  editToggle: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#eef2ff',
+    minWidth: 46,
+    alignItems: 'center',
+  },
+  editToggleActive: { backgroundColor: '#2563eb' },
+  editToggleText: { color: '#2563eb', fontWeight: '600', fontSize: 16 },
+  editToggleTextActive: { color: '#fff', fontSize: 14 },
   search: {
     flex: 1,
     backgroundColor: '#fff',
