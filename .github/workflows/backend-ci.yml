@@ -1,6 +1,13 @@
 name: backend-ci
 
+# Runs on push, not only on pull_request. This project pushes straight to
+# main and opens no pull requests, so with the previous trigger this workflow
+# had never run at all — the backend tests existed but nothing executed them.
 on:
+  push:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
   pull_request:
     paths:
       - 'backend/**'
@@ -9,9 +16,31 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+
+    # The API tests run against real Postgres rather than mocked repositories,
+    # which is the only way they can catch what they exist to catch — a
+    # numeric column arriving as a string, a guard resolving the wrong rows.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        # Without the health check the steps begin before Postgres accepts
+        # connections, and the first run fails intermittently.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     defaults:
       run:
         working-directory: backend
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,3 +51,9 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      - run: npm run test:e2e
+        env:
+          # The suite creates and drops this database itself; it never touches
+          # the one named here's neighbour.
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sapako_e2e
+          JWT_SECRET: ci-only-secret-not-used-anywhere-else
