@@ -663,3 +663,113 @@ percentage without also stating how many lines are instrumented — the current
 git add backend/src
 git commit -m "test(backend): cover controller delegation and DTO validation"
 ```
+
+---
+
+## Task 8: An authorization matrix
+
+**The most likely place a real bug is still hiding.** Four controllers —
+`departments`, `orders`, `products`, `providers` — have 0% coverage, and what
+lives in them is routing plus guards. A missing `@UseGuards` or `@Roles` on a
+mutating endpoint is invisible to every test written so far and would let any
+signed-in user change another branch's data.
+
+Rather than test each controller's internals, assert the property that
+matters across all of them at once.
+
+**Files:**
+- Create: `backend/test/authorization.e2e-spec.ts`
+
+- [ ] **Step 1: Enumerate every mutating endpoint**
+
+Read the four controllers and list every `@Post`, `@Patch`, `@Put` and
+`@Delete` with its path and the role it should require. Write the list into
+the spec as a table of cases — a literal array the tests iterate — so that
+adding an endpoint later without a guard shows up as a missing row rather
+than as silence.
+
+- [ ] **Step 2: Assert the matrix**
+
+For each endpoint, three cases:
+
+1. **No token** → 401.
+2. **STAFF token, no access to the target** → 403.
+3. **Admin token** → anything other than 401/403 (the call may legitimately
+   400 on a body this test does not bother to make valid; what matters is
+   that authorization did not reject it).
+
+Case 2 is the one that finds bugs. Use the existing `seed()` staff user, who
+holds no grants.
+
+- [ ] **Step 3: Run**
+
+```bash
+cd backend && npm run test:e2e
+```
+
+**If a case fails, that is a finding, not a test to adjust.** Report the
+endpoint and what it allowed. Do not add a guard and move on — the fix may
+need to be a deliberate decision about that endpoint's intended audience.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add backend/test/authorization.e2e-spec.ts
+git commit -m "test(backend): assert every mutating endpoint rejects the wrong caller"
+```
+
+---
+
+## Task 9: The permission branches nothing exercises
+
+Unit coverage of `permissions.service.ts` sits at 65% of branches. Statements
+are nearly all covered, which is exactly how a gap hides: the paths not taken
+are the ones with the surprises.
+
+**Files:**
+- Modify: `backend/src/permissions/permissions.service.spec.ts`
+
+- [ ] **Step 1: Cover the untaken paths**
+
+Each of these is currently unexercised at unit level:
+
+1. `setDepartmentAccess(granted: true)` — the feature's main happy path.
+2. `setBranchAccess` on a branch with **no providers**. This is not
+   hypothetical: נתניה is exactly that today. Assert it makes no writes and
+   does not throw.
+3. `setBranchAccess(granted: true)` clearing existing blocks in that branch.
+4. `setProviderAccess` for a provider id that does not exist → `NotFoundException`.
+5. A provider whose `departments` relation is absent rather than empty —
+   the `?? []` fallbacks at four call sites exist for this and nothing proves
+   they work.
+
+- [ ] **Step 2: Re-measure and commit**
+
+```bash
+cd backend && npx jest --coverage --coverageReporters=text 2>&1 | grep permissions.service
+git add backend/src/permissions/permissions.service.spec.ts
+git commit -m "test(backend): cover the permission branches nothing exercised"
+```
+
+---
+
+## Task 10: Controller delegation
+
+Lower value than the two above — do it last, and only after they are green.
+
+**Files:**
+- Create: `departments`, `orders`, `products`, `providers` controller specs
+
+- [ ] **Step 1: For each, assert it delegates correctly**
+
+With mocked services: that each route calls the expected service method with
+the parameters taken from the request, and that the class carries the guards
+Task 8 asserts behaviourally. Two levels covering the same property is
+deliberate here — the unit test names the intent, the e2e proves the wiring.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add backend/src
+git commit -m "test(backend): cover controller delegation"
+```
