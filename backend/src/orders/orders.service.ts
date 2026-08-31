@@ -12,6 +12,19 @@ import { OrderStatus } from './order-status.enum';
 import { ProvidersService } from '../providers/providers.service';
 import { ProductsService } from '../products/products.service';
 
+/**
+ * How many recent orders the activity list returns.
+ *
+ * The query was previously unbounded, so it grew with every order the branch
+ * had ever placed — each one joined to all of its items. A shop ordering
+ * daily would eventually be downloading months of history to render a screen
+ * called "recent activity".
+ *
+ * The one thing this bounds that callers still care about is resuming a
+ * draft: a draft older than this many orders will no longer be offered.
+ */
+export const RECENT_ORDER_LIMIT = 200;
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -58,11 +71,15 @@ export class OrdersService {
     if (accessibleProviderIds !== 'ALL') {
       where.providerId = In(accessibleProviderIds);
     }
-    return this.orderRepo.find({
+    const orders = await this.orderRepo.find({
       where,
       relations: { items: true, provider: true },
       order: { createdAt: 'DESC' },
+      take: RECENT_ORDER_LIMIT,
     });
+    // Both screens that read this list discard empty orders, so shipping them
+    // is pure transfer cost on a connection that may be slow.
+    return orders.filter((order) => order.items.length > 0);
   }
 
   async addItem(

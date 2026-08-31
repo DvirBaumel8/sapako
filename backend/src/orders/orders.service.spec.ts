@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { In } from 'typeorm';
-import { OrdersService } from './orders.service';
+import { OrdersService, RECENT_ORDER_LIMIT } from './orders.service';
 import { Order } from './order.entity';
 import { OrderItem } from './order-item.entity';
 import { OrderStatus } from './order-status.enum';
@@ -109,7 +109,10 @@ describe('OrdersService', () => {
 
   describe('findByBranch', () => {
     it('lists all orders for a branch when the caller has ALL access', async () => {
-      orderRepo.find.mockResolvedValue([{ id: 'o1', branchId: 'b1' }]);
+      // items is always present: the query eager-loads the relation.
+      orderRepo.find.mockResolvedValue([
+        { id: 'o1', branchId: 'b1', items: [{ id: 'i1' }] },
+      ]);
 
       const orders = await service.findByBranch('b1', 'ALL');
 
@@ -117,13 +120,14 @@ describe('OrdersService', () => {
         where: { branchId: 'b1' },
         relations: { items: true, provider: true },
         order: { createdAt: 'DESC' },
+        take: RECENT_ORDER_LIMIT,
       });
       expect(orders).toHaveLength(1);
     });
 
     it('filters orders by the accessible provider ids when not ALL', async () => {
       orderRepo.find.mockResolvedValue([
-        { id: 'o1', branchId: 'b1', providerId: 'p1' },
+        { id: 'o1', branchId: 'b1', providerId: 'p1', items: [{ id: 'i1' }] },
       ]);
 
       const orders = await service.findByBranch('b1', ['p1']);
@@ -132,8 +136,22 @@ describe('OrdersService', () => {
         where: { branchId: 'b1', providerId: In(['p1']) },
         relations: { items: true, provider: true },
         order: { createdAt: 'DESC' },
+        take: RECENT_ORDER_LIMIT,
       });
       expect(orders).toHaveLength(1);
+    });
+
+    it('drops orders with no items, which every caller discards anyway', async () => {
+      // Both screens that read this list filter empty orders out client-side,
+      // so returning them is pure transfer cost over a slow connection.
+      orderRepo.find.mockResolvedValue([
+        { id: 'o1', branchId: 'b1', items: [{ id: 'i1' }] },
+        { id: 'o2', branchId: 'b1', items: [] },
+      ]);
+
+      const orders = await service.findByBranch('b1', 'ALL');
+
+      expect(orders.map((o) => o.id)).toEqual(['o1']);
     });
   });
 
