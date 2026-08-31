@@ -20,9 +20,19 @@ export default function HomeScreen() {
     queryKey: ['providers', selectedBranch!.id],
     queryFn: () => fetchProvidersForBranch(selectedBranch!.id),
   });
-  const { data: branchProducts, error: branchProductsError } = useQuery({
+  // Every product in the branch, needed only for searching by product name
+  // and for matching a scanned barcode. It is by far the largest payload the
+  // app fetches, so it is left until one of those two things is happening
+  // rather than downloaded on every visit to this screen.
+  const needsProducts = search.trim().length > 0 || isScannerVisible;
+  const {
+    data: branchProducts,
+    error: branchProductsError,
+    isLoading: isLoadingProducts,
+  } = useQuery({
     queryKey: ['branch-products', selectedBranch!.id],
     queryFn: () => fetchProductsForBranch(selectedBranch!.id),
+    enabled: needsProducts,
   });
 
   const searchResults = useMemo(
@@ -58,7 +68,16 @@ export default function HomeScreen() {
       showAlert({ title: 'שגיאה', message: 'לא ניתן לטעון את נתוני הספקים והמוצרים כרגע. יש לנסות שוב.' });
       return;
     }
-    const matches = resolveBarcodeMatches(providers ?? [], branchProducts ?? [], barcode);
+    if (!branchProducts) {
+      // The catalogue is still on its way. Saying "no matching product" here
+      // would be a lie that sends the user to add one that already exists.
+      showAlert({
+        title: 'רשימת המוצרים עדיין נטענת',
+        message: 'יש להמתין רגע ולסרוק שוב.',
+      });
+      return;
+    }
+    const matches = resolveBarcodeMatches(providers ?? [], branchProducts, barcode);
     if (matches.length === 0) {
       showAlert({ title: 'לא נמצא מוצר תואם', message: 'לא נמצא מוצר עם ברקוד זה אצל אף ספק בסניף.' });
       return;
@@ -114,6 +133,12 @@ export default function HomeScreen() {
       />
 
       {isLoading && <Text style={styles.statusText}>טוען ספקים…</Text>}
+      {/* Without this, typing a product name shows an empty result while the
+          catalogue is still downloading — indistinguishable from "no such
+          product". */}
+      {isLoadingProducts && search.trim().length > 0 && (
+        <Text style={styles.statusText}>מחפש גם במוצרים…</Text>
+      )}
       {error && <Text style={styles.statusText}>לא ניתן לטעון ספקים. יש למשוך לרענון.</Text>}
 
       <FlatList
