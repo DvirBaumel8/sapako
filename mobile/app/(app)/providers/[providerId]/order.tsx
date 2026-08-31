@@ -8,6 +8,7 @@ import { useBranch } from '../../../../src/branch/BranchContext';
 import { useAuth } from '../../../../src/auth/AuthContext';
 import type { Order, OrderItem, Product } from '../../../../src/api/types';
 import { PublishButton } from '../../../../src/order/PublishButton';
+import { createQuantityWriter } from '../../../../src/order/createQuantityWriter';
 import { BarcodeScannerModal } from '../../../../src/barcode/BarcodeScannerModal';
 import { AddUnknownProductModal } from '../../../../src/order/AddUnknownProductModal';
 import { findResumableDraft } from '../../../../src/order/findResumableDraft';
@@ -31,6 +32,24 @@ export default function OrderBuilderScreen() {
   const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const orderCreationRef = useRef<Promise<Order> | null>(null);
+  // What the user has chosen, ahead of the server agreeing. Rendering from
+  // the server's copy meant the number sat still for a whole round-trip after
+  // every tap, and two quick taps both read the same stale value so the
+  // second was lost.
+  const [pendingQuantities, setPendingQuantities] = useState<Record<string, number>>({});
+  // Authoritative for the write path and updated synchronously. Syncing this
+  // from render instead was the bug: a queued write starts the moment the
+  // previous one resolves, which is before React has re-rendered, so it read
+  // a stale map, failed to see the item just created, and created a second
+  // one for the same product.
+  const itemsByProductIdRef = useRef(itemsByProductId);
+
+  const applyItems = (next: Record<string, OrderItem>) => {
+    itemsByProductIdRef.current = next;
+    setItemsByProductId(next);
+  };
+  const pendingQuantitiesRef = useRef(pendingQuantities);
+  pendingQuantitiesRef.current = pendingQuantities;
   const listRef = useRef<FlatList<Product>>(null);
   const hasScrolledRef = useRef(false);
   const hasPromptedResumeRef = useRef(false);
@@ -65,7 +84,7 @@ export default function OrderBuilderScreen() {
     if (parsedSource?.status === 'DRAFT') {
       // Resume the existing draft as-is — no new order, reuse its items directly.
       setOrder(parsedSource);
-      setItemsByProductId(
+      applyItems(
         Object.fromEntries(parsedSource.items.map((item) => [item.productId, item])),
       );
       return;
@@ -84,7 +103,7 @@ export default function OrderBuilderScreen() {
             }),
           ),
         );
-        setItemsByProductId(
+        applyItems(
           Object.fromEntries(addedItems.filter((i) => i.productId).map((i) => [i.productId, i])),
         );
         setOrder(created);
@@ -109,7 +128,7 @@ export default function OrderBuilderScreen() {
           text: 'כן, המשך',
           onPress: () => {
             setOrder(resumable);
-            setItemsByProductId(
+            applyItems(
               Object.fromEntries(resumable.items.map((item) => [item.productId, item])),
             );
           },
@@ -132,27 +151,69 @@ export default function OrderBuilderScreen() {
     return orderCreationRef.current;
   };
 
-  const setQuantity = async (product: Product, quantity: number) => {
-    const existing = itemsByProductId[product.id];
+  // Performs the actual write for one product. Never called concurrently for
+  // the same product, and only with the latest value the user chose.
+  const writeQuantity = async (productId: string, quantity: number) => {
+    const existing = itemsByProductIdRef.current[productId];
     if (quantity <= 0) {
-      if (existing && order) {
-        await removeOrderItem(order.id, existing.id);
-        setItemsByProductId((prev) => {
-          const next = { ...prev };
-          delete next[product.id];
-          return next;
-        });
+      if (existing) {
+        const currentOrder = await ensureOrder();
+        await removeOrderItem(currentOrder.id, existing.id);
+        const withoutItem = { ...itemsByProductIdRef.current };
+        delete withoutItem[productId];
+        applyItems(withoutItem);
       }
       return;
     }
     const currentOrder = await ensureOrder();
     if (existing) {
       const updated = await updateOrderItemQuantity(currentOrder.id, existing.id, quantity);
-      setItemsByProductId((prev) => ({ ...prev, [product.id]: updated }));
+      applyItems({ ...itemsByProductIdRef.current, [productId]: updated });
     } else {
-      const created = await addOrderItem(currentOrder.id, { productId: product.id, quantity });
-      setItemsByProductId((prev) => ({ ...prev, [product.id]: created }));
+      const created = await addOrderItem(currentOrder.id, { productId, quantity });
+      applyItems({ ...itemsByProductIdRef.current, [productId]: created });
     }
+  };
+
+  const writeQuantityRef = useRef(writeQuantity);
+  writeQuantityRef.current = writeQuantity;
+
+  const quantityWriterRef = useRef<ReturnType<typeof createQuantityWriter> | null>(null);
+  if (!quantityWriterRef.current) {
+    quantityWriterRef.current = createQuantityWriter({
+      delayMs: 400,
+      write: (productId, quantity) => writeQuantityRef.current(productId, quantity),
+      onError: (productId) => {
+        // Drop back to whatever the server actually has, so the number on
+        // screen is never a quantity that was not saved.
+        setPendingQuantities((prev) => {
+          const next = { ...prev };
+          delete next[productId];
+          return next;
+        });
+        showAlert({
+          title: 'שגיאה',
+          message: 'עדכון הכמות נכשל. יש לבדוק את החיבור ולנסות שוב.',
+        });
+      },
+    });
+  }
+
+  const setQuantity = (product: Product, quantity: number) => {
+    const next = Math.max(0, quantity);
+    setPendingQuantities((prev) => ({ ...prev, [product.id]: next }));
+    quantityWriterRef.current!.set(product.id, next);
+  };
+
+  // Steps relative to the newest value rather than the one captured when this
+  // row last rendered. Two taps can land before React re-attaches the
+  // handler, and reading the stale copy silently dropped the second.
+  const adjustQuantity = (product: Product, delta: number) => {
+    const current =
+      pendingQuantitiesRef.current[product.id] ??
+      itemsByProductIdRef.current[product.id]?.quantity ??
+      0;
+    setQuantity(product, current + delta);
   };
 
   const handleBarcodeScanned = (barcode: string) => {
@@ -175,8 +236,7 @@ export default function OrderBuilderScreen() {
       });
       return;
     }
-    const currentQuantity = itemsByProductId[match.id]?.quantity ?? 0;
-    setQuantity(match, currentQuantity + 1);
+    adjustQuantity(match, 1);
   };
 
   const handleUnknownProductCreated = (product: Product) => {
@@ -242,7 +302,8 @@ export default function OrderBuilderScreen() {
           }, 50);
         }}
         renderItem={({ item: product }) => {
-          const currentQuantity = itemsByProductId[product.id]?.quantity ?? 0;
+          const currentQuantity =
+            pendingQuantities[product.id] ?? itemsByProductId[product.id]?.quantity ?? 0;
           const isHighlighted = product.id === highlightProductId;
           return (
             <View style={[styles.card, isHighlighted && styles.cardHighlighted]}>
@@ -275,7 +336,7 @@ export default function OrderBuilderScreen() {
                 <View style={styles.stepper}>
                   {/* RN mirrors flexDirection:'row' under RTL, so JSX order here is
                       reversed on purpose: this renders visually as [−] [qty] [+]. */}
-                  <Pressable onPress={() => setQuantity(product, currentQuantity + 1)} style={styles.stepperButton}>
+                  <Pressable onPress={() => adjustQuantity(product, 1)} style={styles.stepperButton}>
                     <Text style={styles.stepperButtonText}>+</Text>
                   </Pressable>
                   <TextInput
@@ -285,7 +346,7 @@ export default function OrderBuilderScreen() {
                     onChangeText={(text) => setQuantity(product, Number(text) || 0)}
                   />
                   <Pressable
-                    onPress={() => setQuantity(product, Math.max(0, currentQuantity - 1))}
+                    onPress={() => adjustQuantity(product, -1)}
                     style={styles.stepperButton}
                   >
                     <Text style={styles.stepperButtonText}>−</Text>
@@ -299,7 +360,13 @@ export default function OrderBuilderScreen() {
           products ? <Text style={styles.emptyText}>לא נמצאו מוצרים תואמים לחיפוש.</Text> : null
         }
       />
-      {order && <PublishButton order={order} items={Object.values(itemsByProductId)} />}
+      {order && (
+        <PublishButton
+          order={order}
+          items={Object.values(itemsByProductId)}
+          onBeforeMarkPublished={() => quantityWriterRef.current!.flush()}
+        />
+      )}
     </View>
   );
 }

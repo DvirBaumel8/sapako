@@ -11,9 +11,15 @@ import type { Order, OrderItem } from '../api/types';
 interface PublishButtonProps {
   order: Order;
   items: OrderItem[];
+  /**
+   * Awaited after WhatsApp is opened and before the order is marked
+   * published, so a quantity the user changed a moment ago is not still
+   * sitting in a queue when the order is closed off.
+   */
+  onBeforeMarkPublished?: () => Promise<void>;
 }
 
-export function PublishButton({ order, items }: PublishButtonProps) {
+export function PublishButton({ order, items, onBeforeMarkPublished }: PublishButtonProps) {
   const showAlert = useAlert();
   const [isPublishing, setIsPublishing] = useState(false);
   // The root layout's SafeAreaView only reserves the top edge, so nothing
@@ -54,6 +60,7 @@ export function PublishButton({ order, items }: PublishButtonProps) {
         window.location.href = url;
       }
       try {
+        await onBeforeMarkPublished?.();
         await publishOrder(order.id);
       } catch {
         showAlert({
