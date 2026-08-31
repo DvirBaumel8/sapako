@@ -175,7 +175,7 @@ export default function NewProductScreen() {
           </Text>
           <TextInput
             style={styles.input}
-            placeholder="חפש ספק…"
+            placeholder="חפש ספק"
             value={providerSearch}
             onChangeText={setProviderSearch}
           />

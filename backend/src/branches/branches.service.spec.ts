@@ -52,6 +52,7 @@ describe('BranchesService', () => {
     const branches = await service.findByIds(['b1']);
 
     expect(mockRepo.find).toHaveBeenCalledWith({
+      order: { createdAt: 'ASC' },
       where: { id: expect.anything() },
     });
     expect(branches).toHaveLength(1);
@@ -65,7 +66,7 @@ describe('BranchesService', () => {
 
     const branches = await service.findAll();
 
-    expect(mockRepo.find).toHaveBeenCalledWith();
+    expect(mockRepo.find).toHaveBeenCalledWith({ order: { createdAt: 'ASC' } });
     expect(branches).toHaveLength(2);
   });
 
@@ -93,6 +94,19 @@ describe('BranchesService', () => {
       await expect(service.findById('missing')).rejects.toThrow(
         'Branch not found',
       );
+    });
+  });
+
+  describe('ordering', () => {
+    it('returns branches oldest first, so screens do not reorder on rename', async () => {
+      // Without an explicit order Postgres returns heap order, which changes
+      // the moment a row is updated — renaming a branch moved it to the end
+      // of every list in the app.
+      mockRepo.find.mockResolvedValue([]);
+
+      await service.findAll();
+
+      expect(mockRepo.find).toHaveBeenCalledWith({ order: { createdAt: 'ASC' } });
     });
   });
 });

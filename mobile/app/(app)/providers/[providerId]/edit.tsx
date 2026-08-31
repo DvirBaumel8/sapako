@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -117,7 +117,11 @@ export default function EditProviderScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <TextInput
         style={styles.input}
         placeholder="שם הספק"
@@ -166,12 +170,16 @@ export default function EditProviderScreen() {
       <Pressable style={styles.deleteButton} onPress={confirmDelete} disabled={removeProvider.isPending}>
         <Text style={styles.deleteButtonText}>מחיקת ספק לצמיתות</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
+  screen: { flex: 1, backgroundColor: '#f5f5f5' },
+  // flexGrow, not flex: as a ScrollView's contentContainerStyle, flex: 1
+  // pins the content to the viewport height and nothing ever scrolls — which
+  // is the bug this ScrollView was added to fix.
+  container: { flexGrow: 1, padding: 16, gap: 12 },
   statusText: { textAlign: 'center', marginTop: 12, color: '#666' },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
   errorText: { color: '#c0392b', fontSize: 13, textAlign: 'right' },

@@ -22,12 +22,19 @@ export class BranchesService {
     return this.branchesRepo.save(entity);
   }
 
+  // Ordered explicitly: without it Postgres returns rows in heap order, which
+  // is insertion order right up until a row is updated and rewritten to the
+  // end. Renaming a branch silently reordered it on every screen that lists
+  // branches, which is five of them.
   findAll(): Promise<Branch[]> {
-    return this.branchesRepo.find();
+    return this.branchesRepo.find({ order: { createdAt: 'ASC' } });
   }
 
   findByIds(ids: string[]): Promise<Branch[]> {
-    return this.branchesRepo.find({ where: { id: In(ids) } });
+    return this.branchesRepo.find({
+      where: { id: In(ids) },
+      order: { createdAt: 'ASC' },
+    });
   }
 
   async findById(id: string): Promise<Branch> {

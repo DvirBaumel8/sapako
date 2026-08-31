@@ -49,7 +49,7 @@ export default function AddProviderToDepartmentScreen() {
       <Stack.Screen options={{ title: `הוספת ספק ל${departmentName ?? ''}` }} />
       <TextInput
         style={styles.search}
-        placeholder="חפש ספק…"
+        placeholder="חפש ספק"
         value={search}
         onChangeText={setSearch}
       />

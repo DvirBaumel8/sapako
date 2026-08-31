@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -15,6 +15,7 @@ import type { Branch } from '../../../../../src/api/types';
 import { useAlert } from '../../../../../src/ui/AlertProvider';
 import { common } from '../../../../../src/ui/commonStyles';
 import { colors, spacing } from '../../../../../src/ui/theme';
+import { Toggle } from '../../../../../src/ui/Toggle';
 
 function reasonLine(provider: AccessView['providers'][number]): string | null {
   if (provider.reason === 'DEPARTMENT' && provider.viaDepartmentName) {
@@ -33,6 +34,10 @@ export default function UserAccessScreen() {
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: fetchAccessibleBranches });
   const showAlert = useAlert();
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
+  // Both lists run to dozens of rows — 33 departments and 195 providers in the
+  // live catalogue — so reaching one section means scrolling past the other.
+  const [isDepartmentsOpen, setIsDepartmentsOpen] = useState(true);
+  const [isProvidersOpen, setIsProvidersOpen] = useState(true);
 
   const activeBranch = selectedBranch ?? branches?.[0] ?? null;
 
@@ -129,27 +134,29 @@ export default function UserAccessScreen() {
 
   return (
     <View style={common.screen}>
-      <FlatList
-        horizontal
-        style={styles.branchList}
-        contentContainerStyle={styles.branchListContent}
-        data={branches}
-        keyExtractor={(branch) => branch.id}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => setSelectedBranch(item)}
-            style={[common.chip, styles.branchChip, activeBranch?.id === item.id && styles.branchChipSelected]}
-          >
-            <Text style={[common.chipText, activeBranch?.id === item.id && styles.branchChipTextSelected]}>
-              {item.name}
-            </Text>
-          </Pressable>
-        )}
-      />
+      {/* A row rather than a horizontal FlatList: react-native-web mirrors
+          flexDirection under RTL, but a horizontal list keeps its own
+          left-to-right scroll axis, which put the first branch on the left. */}
+      <View style={styles.branchRow}>
+        {branches?.map((branch) => {
+          const isActive = activeBranch?.id === branch.id;
+          return (
+            <Pressable
+              key={branch.id}
+              onPress={() => setSelectedBranch(branch)}
+              style={[common.chip, isActive && styles.branchChipSelected]}
+            >
+              <Text style={[common.chipText, isActive && styles.branchChipTextSelected]}>
+                {branch.name}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
       {isLoading && <Text style={common.statusText}>טוען…</Text>}
       {activeBranch && access && (
         <FlatList
-          data={access.providers}
+          data={isProvidersOpen ? access.providers : []}
           keyExtractor={(provider) => provider.id}
           contentContainerStyle={[common.list, styles.listContent]}
           style={styles.providerList}
@@ -157,28 +164,43 @@ export default function UserAccessScreen() {
             <View style={styles.headerSections}>
               <View style={common.cardRow}>
                 <Text style={common.label}>הרשאה לכל הספקים בסניף</Text>
-                <Switch
+                <Toggle
                   value={allProvidersGranted}
                   disabled={branchPending}
                   onValueChange={(next) => toggleBranchAccess(activeBranch.id, next)}
                 />
               </View>
 
-              <Text style={common.title}>מחלקות</Text>
+              <Pressable
+                onPress={() => setIsDepartmentsOpen((open) => !open)}
+                style={styles.sectionHeader}
+                accessibilityRole="button"
+              >
+                <Text style={common.title}>מחלקות ({access.departments.length})</Text>
+                <Text style={styles.sectionChevron}>{isDepartmentsOpen ? '⌄' : '⌃'}</Text>
+              </Pressable>
               <View style={styles.section}>
-                {access.departments.map((department) => (
+                {isDepartmentsOpen &&
+                  access.departments.map((department) => (
                   <View key={department.id} style={common.cardRow}>
                     <Text style={common.label}>{department.name}</Text>
-                    <Switch
+                    <Toggle
                       value={department.isGranted}
                       disabled={!!departmentPending[department.id]}
                       onValueChange={() => toggleDepartmentAccess(department.id, department.isGranted)}
                     />
                   </View>
-                ))}
+                  ))}
               </View>
 
-              <Text style={common.title}>ספקים</Text>
+              <Pressable
+                onPress={() => setIsProvidersOpen((open) => !open)}
+                style={styles.sectionHeader}
+                accessibilityRole="button"
+              >
+                <Text style={common.title}>ספקים ({access.providers.length})</Text>
+                <Text style={styles.sectionChevron}>{isProvidersOpen ? '⌄' : '⌃'}</Text>
+              </Pressable>
             </View>
           }
           renderItem={({ item: provider }) => {
@@ -189,7 +211,7 @@ export default function UserAccessScreen() {
                   <Text style={common.label}>{provider.name}</Text>
                   {line && <Text style={styles.reasonText}>{line}</Text>}
                 </View>
-                <Switch
+                <Toggle
                   value={isProviderGranted(provider)}
                   onValueChange={() => toggleProviderAccess(provider.id, isProviderGranted(provider))}
                 />
@@ -203,12 +225,23 @@ export default function UserAccessScreen() {
 }
 
 const styles = StyleSheet.create({
-  branchList: { flexGrow: 0, borderBottomWidth: 1, borderBottomColor: colors.border },
-  branchListContent: { padding: spacing.md, gap: spacing.sm },
-  branchChip: { marginRight: spacing.sm },
+  branchRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
   branchChipSelected: { backgroundColor: colors.accent },
   branchChipTextSelected: { color: colors.surface },
   providerList: { flex: 1 },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+  },
+  sectionChevron: { fontSize: 18, color: colors.textMuted },
   listContent: { paddingHorizontal: spacing.lg },
   headerSections: { gap: spacing.sm, marginBottom: spacing.sm, marginTop: spacing.sm },
   section: { gap: spacing.sm },

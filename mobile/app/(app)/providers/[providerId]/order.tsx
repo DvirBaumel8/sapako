@@ -298,7 +298,7 @@ export default function OrderBuilderScreen() {
       <View style={styles.toolbar}>
         <TextInput
           style={styles.search}
-          placeholder="חפש מוצר…"
+          placeholder="חפש מוצר"
           value={search}
           onChangeText={setSearch}
         />

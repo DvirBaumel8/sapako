@@ -150,7 +150,7 @@ export default function HomeScreen() {
 
       <TextInput
         style={styles.search}
-        placeholder="חפש ספק, מוצר או ברקוד…"
+        placeholder="חפש ספק, מוצר או ברקוד"
         value={search}
         onChangeText={setSearch}
       />
