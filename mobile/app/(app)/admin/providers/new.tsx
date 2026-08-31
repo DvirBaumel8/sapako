@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchAccessibleBranches } from '../../../../src/api/branches';
@@ -107,22 +107,25 @@ export default function NewProviderScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.label}>סניפים</Text>
-      <FlatList
-        horizontal
-        style={styles.branchList}
-        data={branches}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
+      {/* Wrapped, not a horizontal scroller: the row hid options off the
+          screen edge while the space below sat empty. */}
+      <View style={styles.chipWrap}>
+        {branches?.map((branch) => (
           <Pressable
-            onPress={() => toggleBranch(item.id)}
-            style={[styles.branchChip, selectedBranchIds.has(item.id) && styles.branchChipSelected]}
+            key={branch.id}
+            onPress={() => toggleBranch(branch.id)}
+            style={[styles.branchChip, selectedBranchIds.has(branch.id) && styles.branchChipSelected]}
           >
-            <Text>{item.name}</Text>
+            <Text>{branch.name}</Text>
           </Pressable>
-        )}
-      />
+        ))}
+      </View>
       <TextInput
         style={styles.input}
         placeholder="שם הספק"
@@ -167,23 +170,20 @@ export default function NewProviderScreen() {
               </Pressable>
             </>
           )}
-          <FlatList
-            horizontal
-            style={styles.branchList}
-            data={departmentNameOptions}
-            keyExtractor={(item) => item}
-            renderItem={({ item }) => (
+          <View style={styles.chipWrap}>
+            {departmentNameOptions.map((departmentName) => (
               <Pressable
-                onPress={() => toggleDepartmentName(item)}
+                key={departmentName}
+                onPress={() => toggleDepartmentName(departmentName)}
                 style={[
                   styles.branchChip,
-                  selectedDepartmentNames.has(item) && styles.branchChipSelected,
+                  selectedDepartmentNames.has(departmentName) && styles.branchChipSelected,
                 ]}
               >
-                <Text>{item}</Text>
+                <Text>{departmentName}</Text>
               </Pressable>
-            )}
-          />
+            ))}
+          </View>
         </>
       )}
       <PrimaryButton
@@ -197,12 +197,14 @@ export default function NewProviderScreen() {
           !departmentsByBranch ||
           selectedDepartmentNames.size === 0 || isSubmitting}
       />
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
+  screen: { flex: 1, backgroundColor: '#f5f5f5' },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  container: { flexGrow: 1, padding: 16, gap: 12 },
   label: { fontWeight: '600' },
   branchList: { flexGrow: 0 },
   branchChip: {

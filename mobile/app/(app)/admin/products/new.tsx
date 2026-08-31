@@ -146,20 +146,19 @@ export default function NewProductScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.label}>סניפים</Text>
-      <FlatList
-        horizontal
-        style={styles.branchList}
-        data={selectableBranches}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
+      {/* Wrapped, not a horizontal scroller: the row hid options off the
+          screen edge while the space below sat empty. */}
+      <View style={styles.chipWrap}>
+        {selectableBranches?.map((branch) => (
           <Pressable
-            onPress={() => toggleBranch(item)}
-            style={[styles.chip, selectedBranchIds.has(item.id) && styles.chipSelected]}
+            key={branch.id}
+            onPress={() => toggleBranch(branch)}
+            style={[styles.chip, selectedBranchIds.has(branch.id) && styles.chipSelected]}
           >
-            <Text>{item.name}</Text>
+            <Text>{branch.name}</Text>
           </Pressable>
-        )}
-      />
+        ))}
+      </View>
 
       {primaryBranch && !provider && (
         <View style={styles.providerSection}>
@@ -228,6 +227,7 @@ export default function NewProductScreen() {
 }
 
 const styles = StyleSheet.create({
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   container: { flex: 1, padding: 16, gap: 12, backgroundColor: '#f5f5f5' },
   label: { fontWeight: '600' },
   branchList: { flexGrow: 0 },

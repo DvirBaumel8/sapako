@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchAccessibleBranches } from '../../../src/api/branches';
@@ -64,22 +64,25 @@ export default function NewDepartmentScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.label}>סניפים</Text>
-      <FlatList
-        horizontal
-        style={styles.branchList}
-        data={branches}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
+      {/* Wrapped, not a horizontal scroller: the row hid options off the
+          screen edge while the space below sat empty. */}
+      <View style={styles.chipWrap}>
+        {branches?.map((branch) => (
           <Pressable
-            onPress={() => toggleBranch(item.id)}
-            style={[styles.branchChip, selectedBranchIds.has(item.id) && styles.branchChipSelected]}
+            key={branch.id}
+            onPress={() => toggleBranch(branch.id)}
+            style={[styles.branchChip, selectedBranchIds.has(branch.id) && styles.branchChipSelected]}
           >
-            <Text>{item.name}</Text>
+            <Text>{branch.name}</Text>
           </Pressable>
-        )}
-      />
+        ))}
+      </View>
       <TextInput
         style={styles.input}
         placeholder="שם המחלקה"
@@ -98,12 +101,14 @@ export default function NewDepartmentScreen() {
         onPress={handleSubmit}
         disabled={selectedBranchIds.size === 0 || !name || !isNameValid || isSubmitting}
       />
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
+  screen: { flex: 1, backgroundColor: '#f5f5f5' },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  container: { flexGrow: 1, padding: 16, gap: 12 },
   label: { fontWeight: '600' },
   branchList: { flexGrow: 0 },
   branchChip: {
