@@ -51,7 +51,13 @@ export default function OrderBuilderScreen() {
   const pendingQuantitiesRef = useRef(pendingQuantities);
   pendingQuantitiesRef.current = pendingQuantities;
   const listRef = useRef<FlatList<Product>>(null);
-  const hasScrolledRef = useRef(false);
+  // The product to scroll to and highlight. Seeded from the deep-link param
+  // and re-set on every scan; the token makes rescanning the same product
+  // scroll to it again after the user has scrolled away.
+  const [scrollTarget, setScrollTarget] = useState<{ id: string; token: number } | null>(
+    highlightProductId ? { id: highlightProductId, token: 0 } : null,
+  );
+  const handledScrollTokenRef = useRef<number | null>(null);
   const hasPromptedResumeRef = useRef(false);
 
   const { data: products } = useQuery({
@@ -71,12 +77,13 @@ export default function OrderBuilderScreen() {
   }, [products, search]);
 
   useEffect(() => {
-    if (!highlightProductId || !filteredProducts || hasScrolledRef.current) return;
-    const index = filteredProducts.findIndex((product) => product.id === highlightProductId);
+    if (!scrollTarget || !filteredProducts) return;
+    if (handledScrollTokenRef.current === scrollTarget.token) return;
+    const index = filteredProducts.findIndex((product) => product.id === scrollTarget.id);
     if (index === -1) return;
     listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-    hasScrolledRef.current = true;
-  }, [filteredProducts, highlightProductId]);
+    handledScrollTokenRef.current = scrollTarget.token;
+  }, [filteredProducts, scrollTarget]);
 
   useEffect(() => {
     const parsedSource: Order | null = sourceOrder ? JSON.parse(sourceOrder) : null;
@@ -237,6 +244,10 @@ export default function OrderBuilderScreen() {
       return;
     }
     adjustQuantity(match, 1);
+    // Clear the filter first: a scanned product that the current search hides
+    // is not in the list, so there would be nothing to scroll to.
+    setSearch('');
+    setScrollTarget({ id: match.id, token: Date.now() });
   };
 
   const handleUnknownProductCreated = (product: Product) => {
@@ -304,7 +315,7 @@ export default function OrderBuilderScreen() {
         renderItem={({ item: product }) => {
           const currentQuantity =
             pendingQuantities[product.id] ?? itemsByProductId[product.id]?.quantity ?? 0;
-          const isHighlighted = product.id === highlightProductId;
+          const isHighlighted = product.id === scrollTarget?.id;
           return (
             <View style={[styles.card, isHighlighted && styles.cardHighlighted]}>
               <View style={styles.productNameRow}>
