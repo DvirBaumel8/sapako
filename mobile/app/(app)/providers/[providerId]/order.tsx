@@ -15,6 +15,13 @@ import { findResumableDraft } from '../../../../src/order/findResumableDraft';
 import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 import { useAlert } from '../../../../src/ui/AlertProvider';
 
+// Product rows are a fixed height, measured from the running app. Declaring
+// it lets the list jump straight to any row: without it, scrollToIndex cannot
+// reach a row outside the rendered window, and its own averageItemLength
+// estimate reads ~82 against a real pitch of 104 — so every retry recomputed
+// the same wrong offset and the scroll stopped ~80 rows short.
+const ROW_HEIGHT = 104;
+
 export default function OrderBuilderScreen() {
   const { providerId, providerName, sourceOrder, highlightProductId } = useLocalSearchParams<{
     providerId: string;
@@ -58,6 +65,7 @@ export default function OrderBuilderScreen() {
     highlightProductId ? { id: highlightProductId, token: 0 } : null,
   );
   const handledScrollTokenRef = useRef<number | null>(null);
+  const scrollAttemptsRef = useRef(0);
   const hasPromptedResumeRef = useRef(false);
 
   const { data: products } = useQuery({
@@ -81,6 +89,7 @@ export default function OrderBuilderScreen() {
     if (handledScrollTokenRef.current === scrollTarget.token) return;
     const index = filteredProducts.findIndex((product) => product.id === scrollTarget.id);
     if (index === -1) return;
+    scrollAttemptsRef.current = 0;
     listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
     handledScrollTokenRef.current = scrollTarget.token;
   }, [filteredProducts, scrollTarget]);
@@ -304,13 +313,33 @@ export default function OrderBuilderScreen() {
         data={filteredProducts}
         keyExtractor={(product) => product.id}
         contentContainerStyle={styles.list}
+        getItemLayout={(_data, index) => ({
+          length: ROW_HEIGHT,
+          offset: ROW_HEIGHT * index,
+          index,
+        })}
         onScrollToIndexFailed={(info) => {
+          // The row is outside the rendered window, so the list does not know
+          // its offset. Jumping to an estimate forces it to render, and only
+          // then can scrollToIndex place it accurately. Without the retry the
+          // list landed on the estimate — which is nowhere near the row when
+          // averageItemLength has not been measured yet, and exactly nowhere
+          // when it is still 0.
+          // Each attempt jumps to an estimate, which forces more rows to
+          // render and so improves averageItemLength for the next one. Two or
+          // three passes converge; the cap stops it looping forever if the
+          // row can never be reached.
+          if (scrollAttemptsRef.current >= 5) return;
+          scrollAttemptsRef.current += 1;
+          const rowHeight = ROW_HEIGHT;
+          listRef.current?.scrollToOffset({ offset: rowHeight * info.index, animated: false });
           setTimeout(() => {
-            listRef.current?.scrollToOffset({
-              offset: info.averageItemLength * info.index,
+            listRef.current?.scrollToIndex({
+              index: info.index,
               animated: true,
+              viewPosition: 0.5,
             });
-          }, 50);
+          }, 250);
         }}
         renderItem={({ item: product }) => {
           const currentQuantity =
