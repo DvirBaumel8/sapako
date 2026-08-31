@@ -1,4 +1,5 @@
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString } from 'class-validator';
+import { UNIT_TYPES } from '../unit-types';
 
 export class UpdateProductDto {
   @IsString()
@@ -7,6 +8,8 @@ export class UpdateProductDto {
 
   @IsString()
   @IsOptional()
+  // Constrained to the fixed list so the app can tell weight from count.
+  @IsIn(UNIT_TYPES)
   unitType?: string;
 
   @IsString()

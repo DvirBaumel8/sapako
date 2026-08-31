@@ -41,4 +41,22 @@ describe('buildOrderMessage', () => {
 
     expect(message).toBe('הזמנה עבור ירקות השדה:\n- עגבניות: 3 ארגז');
   });
+
+  it('writes a whole quantity without decimals', () => {
+    // The column is numeric(10,2), so an untouched value arrives as 3 — but a
+    // naive template would print "3.00 קרטון" the moment it arrives as such.
+    const message = buildOrderMessage({
+      provider: { name: 'אוסם' },
+      items: [{ productNameSnapshot: 'קמח', quantity: 3, unitType: 'קרטון' }],
+    } as never);
+    expect(message).toContain('- קמח: 3 קרטון');
+  });
+
+  it('writes a fractional weight as typed', () => {
+    const message = buildOrderMessage({
+      provider: { name: 'תנובה' },
+      items: [{ productNameSnapshot: 'גבינה', quantity: 2.5, unitType: 'ק"ג' }],
+    } as never);
+    expect(message).toContain('- גבינה: 2.5 ק"ג');
+  });
 });

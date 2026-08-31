@@ -6,6 +6,7 @@ import { deleteOrder, fetchOrdersForBranch } from '../../src/api/orders';
 import { useBranch } from '../../src/branch/BranchContext';
 import { useAlert } from '../../src/ui/AlertProvider';
 import type { Order } from '../../src/api/types';
+import { formatQuantity } from '../../src/products/unitTypes';
 
 const NAME_TRUNCATE_LENGTH = 22;
 
@@ -117,7 +118,7 @@ export default function ActivityScreen() {
                     onLongPress={() => showAlert({ title: item.productNameSnapshot })}
                   >
                     <Text style={styles.detailQuantity}>
-                      {item.quantity} {item.unitType}
+                      {formatQuantity(item.quantity)} {item.unitType}
                     </Text>
                     <Text style={styles.detailName}>{truncate(item.productNameSnapshot)}</Text>
                   </Pressable>

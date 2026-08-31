@@ -14,6 +14,7 @@ import { AddUnknownProductModal } from '../../../../src/order/AddUnknownProductM
 import { findResumableDraft } from '../../../../src/order/findResumableDraft';
 import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 import { useAlert } from '../../../../src/ui/AlertProvider';
+import { formatQuantity, isWeightUnit, quantityStep } from '../../../../src/products/unitTypes';
 
 // Product rows are a fixed height, measured from the running app. Declaring
 // it lets the list jump straight to any row: without it, scrollToIndex cannot
@@ -224,12 +225,16 @@ export default function OrderBuilderScreen() {
   // Steps relative to the newest value rather than the one captured when this
   // row last rendered. Two taps can land before React re-attaches the
   // handler, and reading the stale copy silently dropped the second.
-  const adjustQuantity = (product: Product, delta: number) => {
+  const adjustQuantity = (product: Product, direction: 1 | -1) => {
     const current =
       pendingQuantitiesRef.current[product.id] ??
       itemsByProductIdRef.current[product.id]?.quantity ??
       0;
-    setQuantity(product, current + delta);
+    const step = quantityStep(product.unitType);
+    // Rounded because repeatedly adding 0.5 to a float drifts, and the column
+    // only holds two decimals — 2.9999999 would be rejected outright.
+    const next = Math.round((current + direction * step) * 100) / 100;
+    setQuantity(product, next);
   };
 
   const handleBarcodeScanned = (barcode: string) => {
@@ -381,9 +386,16 @@ export default function OrderBuilderScreen() {
                   </Pressable>
                   <TextInput
                     style={styles.quantityInput}
-                    keyboardType="number-pad"
-                    value={String(currentQuantity)}
-                    onChangeText={(text) => setQuantity(product, Number(text) || 0)}
+                    keyboardType={isWeightUnit(product.unitType) ? 'decimal-pad' : 'number-pad'}
+                    value={formatQuantity(currentQuantity)}
+                    onChangeText={(text) => {
+                      const parsed = Number(text.replace(',', '.'));
+                      if (!Number.isFinite(parsed)) return;
+                      setQuantity(
+                        product,
+                        isWeightUnit(product.unitType) ? parsed : Math.trunc(parsed),
+                      );
+                    }}
                   />
                   <Pressable
                     onPress={() => adjustQuantity(product, -1)}

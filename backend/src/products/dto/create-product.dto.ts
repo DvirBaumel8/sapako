@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { UNIT_TYPES } from '../unit-types';
 
 export class CreateProductDto {
   @IsString()
@@ -7,6 +8,8 @@ export class CreateProductDto {
 
   @IsString()
   @IsNotEmpty()
+  // Constrained to the fixed list so the app can tell weight from count.
+  @IsIn(UNIT_TYPES)
   unitType: string;
 
   @IsString()

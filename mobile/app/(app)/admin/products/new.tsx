@@ -12,6 +12,8 @@ import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 import type { Branch, Provider } from '../../../../src/api/types';
 import { useAlert } from '../../../../src/ui/AlertProvider';
+import { UnitTypePicker } from '../../../../src/products/UnitTypePicker';
+import { DEFAULT_UNIT_TYPE } from '../../../../src/products/unitTypes';
 
 const DEFAULT_BRANCH_NAME = 'הילס';
 
@@ -29,7 +31,7 @@ export default function NewProductScreen() {
   const [provider, setProvider] = useState<Provider | null>(null);
   const [providerSearch, setProviderSearch] = useState('');
   const [name, setName] = useState('');
-  const [unitType, setUnitType] = useState('');
+  const [unitType, setUnitType] = useState<string>(DEFAULT_UNIT_TYPE);
   const [barcode, setBarcode] = useState('');
   const [isScannerVisible, setIsScannerVisible] = useState(false);
 
@@ -207,12 +209,8 @@ export default function NewProductScreen() {
             value={name}
             onChangeText={(text) => setName(sanitizeHebrewInput(text))}
           />
-          <TextInput
-            style={styles.input}
-            placeholder='סוג יחידה (לדוגמה: ק"ג, ארגז)'
-            value={unitType}
-            onChangeText={(text) => setUnitType(sanitizeHebrewInput(text))}
-          />
+          <Text style={styles.label}>יחידת מידה</Text>
+          <UnitTypePicker value={unitType} onChange={setUnitType} />
           <TextInput style={styles.input} placeholder="ברקוד (אופציונלי)" value={barcode} onChangeText={setBarcode} />
           <Pressable onPress={() => setIsScannerVisible(true)} style={styles.scanButton}>
             <Text>סריקת ברקוד</Text>

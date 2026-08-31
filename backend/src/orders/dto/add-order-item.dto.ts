@@ -1,5 +1,5 @@
 import {
-  IsInt,
+  IsNumber,
   IsOptional,
   IsPositive,
   IsString,
@@ -20,7 +20,9 @@ export class AddOrderItemDto {
   @IsString()
   unitType?: string;
 
-  @IsInt()
+  // Not IsInt: weight units are fractional. Two decimal places matches the
+  // column, and IsPositive still rejects zero and negatives.
+  @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   quantity: number;
 }

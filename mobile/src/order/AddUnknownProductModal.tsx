@@ -5,6 +5,8 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { hasLetter, sanitizeHebrewInput } from '../utils/hebrewInput';
 import { useAlert } from '../ui/AlertProvider';
 import type { Product } from '../api/types';
+import { UnitTypePicker } from '../products/UnitTypePicker';
+import { DEFAULT_UNIT_TYPE } from '../products/unitTypes';
 
 interface AddUnknownProductModalProps {
   visible: boolean;
@@ -29,7 +31,7 @@ export function AddUnknownProductModal({
 }: AddUnknownProductModalProps) {
   const showAlert = useAlert();
   const [name, setName] = useState('');
-  const [unitType, setUnitType] = useState('');
+  const [unitType, setUnitType] = useState<string>(DEFAULT_UNIT_TYPE);
   const [isSaving, setIsSaving] = useState(false);
   const isNameValid = hasLetter(name);
   const nameInputRef = useRef<TextInput>(null);
@@ -80,12 +82,7 @@ export function AddUnknownProductModal({
           {name.length > 0 && !isNameValid && (
             <Text style={styles.errorText}>שם המוצר חייב לכלול אותיות, לא רק מספרים.</Text>
           )}
-          <TextInput
-            style={styles.input}
-            placeholder='סוג יחידה (לדוגמה: ק"ג, ארגז)'
-            value={unitType}
-            onChangeText={(text) => setUnitType(sanitizeHebrewInput(text))}
-          />
+          <UnitTypePicker value={unitType} onChange={setUnitType} />
           <PrimaryButton
             title="הוספה והוספה להזמנה"
             onPress={handleSubmit}

@@ -7,6 +7,8 @@ import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { hasLetter, sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import { useAlert } from '../../../../src/ui/AlertProvider';
+import { UnitTypePicker } from '../../../../src/products/UnitTypePicker';
+import { DEFAULT_UNIT_TYPE } from '../../../../src/products/unitTypes';
 
 export default function EditProductScreen() {
   useRequireAdmin();
@@ -21,7 +23,7 @@ export default function EditProductScreen() {
   const queryClient = useQueryClient();
   const showAlert = useAlert();
   const [name, setName] = useState(productName ?? '');
-  const [unitType, setUnitType] = useState(initialUnitType ?? '');
+  const [unitType, setUnitType] = useState<string>(initialUnitType ?? DEFAULT_UNIT_TYPE);
   const [barcode, setBarcode] = useState(initialBarcode ?? '');
   const isNameValid = hasLetter(name);
 
@@ -76,12 +78,7 @@ export default function EditProductScreen() {
       {name.length > 0 && !isNameValid && (
         <Text style={styles.errorText}>שם המוצר חייב לכלול אותיות, לא רק מספרים.</Text>
       )}
-      <TextInput
-        style={styles.input}
-        placeholder='סוג יחידה (לדוגמה: ק"ג, ארגז)'
-        value={unitType}
-        onChangeText={(text) => setUnitType(sanitizeHebrewInput(text))}
-      />
+      <UnitTypePicker value={unitType} onChange={setUnitType} />
       <TextInput style={styles.input} placeholder="ברקוד (אופציונלי)" value={barcode} onChangeText={setBarcode} />
       <PrimaryButton title="שמירה" onPress={handleSubmit} disabled={!name || !isNameValid || !unitType} />
       <Pressable style={styles.deleteButton} onPress={confirmDelete} disabled={removeProduct.isPending}>
