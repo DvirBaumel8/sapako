@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchAccessibleBranches } from '../../../../src/api/branches';
 import { fetchProvidersForBranch } from '../../../../src/api/providers';
@@ -32,7 +32,10 @@ export default function NewProductScreen() {
   const [providerSearch, setProviderSearch] = useState('');
   const [name, setName] = useState('');
   const [unitType, setUnitType] = useState<string>(DEFAULT_UNIT_TYPE);
-  const [barcode, setBarcode] = useState('');
+  // Arriving from a scan that matched nothing: the number is already known,
+  // so it is carried over rather than typed in again.
+  const { barcode: scannedBarcode } = useLocalSearchParams<{ barcode?: string }>();
+  const [barcode, setBarcode] = useState(scannedBarcode ?? '');
   const [isScannerVisible, setIsScannerVisible] = useState(false);
 
   useEffect(() => {

@@ -142,13 +142,12 @@ export default function EditProviderScreen() {
         <Text style={styles.errorText}>{PHONE_VALIDATION_ERROR}</Text>
       )}
       <Text style={styles.label}>מחלקות</Text>
-      <FlatList
-        horizontal
-        style={styles.departmentList}
-        data={activeDepartments}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
+      {/* Wrapped rather than a horizontal list: a scrolling row silently hid
+          departments off the left edge with nothing to indicate more existed. */}
+      <View style={styles.departmentWrap}>
+        {activeDepartments?.map((item) => (
           <Pressable
+            key={item.id}
             onPress={() => toggleDepartment(item.id)}
             style={[
               styles.departmentChip,
@@ -157,8 +156,8 @@ export default function EditProviderScreen() {
           >
             <Text>{item.name}</Text>
           </Pressable>
-        )}
-      />
+        ))}
+      </View>
       <PrimaryButton
         title="שמירה"
         onPress={handleSubmit}
@@ -177,7 +176,7 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
   errorText: { color: '#c0392b', fontSize: 13, textAlign: 'right' },
   label: { fontWeight: '600' },
-  departmentList: { flexGrow: 0 },
+  departmentWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   departmentChip: {
     paddingHorizontal: 14,
     paddingVertical: 10,

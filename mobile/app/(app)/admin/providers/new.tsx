@@ -150,9 +150,22 @@ export default function NewProviderScreen() {
         <>
           <Text style={styles.label}>מחלקות</Text>
           {departmentsByBranch && departmentNameOptions.length === 0 && (
-            <Text style={styles.errorText}>
-              אין מחלקה משותפת לכל הסניפים שנבחרו. יש להוסיף מחלקה תואמת לפני יצירת הספק.
-            </Text>
+            <>
+              {/* The old wording said "no department shared by all selected
+                  branches" even when only one branch was selected, which reads
+                  as a bug rather than as "this branch has no departments yet". */}
+              <Text style={styles.errorText}>
+                {selectedBranchIds.size === 1
+                  ? 'לסניף שנבחר אין עדיין מחלקות. יש להוסיף מחלקה לפני יצירת הספק.'
+                  : 'אין מחלקה המשותפת לכל הסניפים שנבחרו. יש להוסיף מחלקה בשם זהה בכל אחד מהם.'}
+              </Text>
+              <Pressable
+                onPress={() => router.push('/departments/new')}
+                style={styles.addDepartmentButton}
+              >
+                <Text style={styles.addDepartmentText}>+ הוספת מחלקה</Text>
+              </Pressable>
+            </>
           )}
           <FlatList
             horizontal
@@ -202,5 +215,14 @@ const styles = StyleSheet.create({
   },
   branchChipSelected: { backgroundColor: '#dbeafe', borderColor: '#2563eb' },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
+  addDepartmentButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: '#eef2ff',
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  addDepartmentText: { color: '#2563eb', fontWeight: '600', fontSize: 14 },
   errorText: { color: '#c0392b', fontSize: 13, textAlign: 'right' },
 });

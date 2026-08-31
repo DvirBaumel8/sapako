@@ -9,9 +9,11 @@ import { BarcodeScannerModal } from '../../src/barcode/BarcodeScannerModal';
 import { resolveBarcodeMatches, type BarcodeMatch } from '../../src/providers/resolveBarcodeMatches';
 import { buildProviderSearchResults } from '../../src/providers/buildProviderSearchResults';
 import { useAlert } from '../../src/ui/AlertProvider';
+import { useAuth } from '../../src/auth/AuthContext';
 
 export default function HomeScreen() {
   const { selectedBranch } = useBranch();
+  const { role } = useAuth();
   const showAlert = useAlert();
   const [search, setSearch] = useState('');
   const [isScannerVisible, setIsScannerVisible] = useState(false);
@@ -79,7 +81,28 @@ export default function HomeScreen() {
     }
     const matches = resolveBarcodeMatches(providers ?? [], branchProducts, barcode);
     if (matches.length === 0) {
-      showAlert({ title: 'לא נמצא מוצר תואם', message: 'לא נמצא מוצר עם ברקוד זה אצל אף ספק בסניף.' });
+      if (role !== 'ADMIN') {
+        showAlert({
+          title: 'לא נמצא מוצר תואם',
+          message: 'לא נמצא מוצר עם ברקוד זה אצל אף ספק בסניף.',
+        });
+        return;
+      }
+      // Unlike the order screen, there is no provider in context here — the
+      // scan searched the whole branch — so this hands off to the add-product
+      // screen, where a provider is chosen, with the barcode carried across.
+      showAlert({
+        title: 'לא נמצא מוצר תואם',
+        message: `לא נמצא מוצר עם ברקוד ${barcode} אצל אף ספק בסניף. להוסיף אותו כמוצר חדש?`,
+        buttons: [
+          { text: 'ביטול', style: 'cancel' },
+          {
+            text: 'הוספת מוצר חדש',
+            onPress: () =>
+              router.push({ pathname: '/admin/products/new', params: { barcode } }),
+          },
+        ],
+      });
       return;
     }
     if (matches.length === 1) {

@@ -316,7 +316,7 @@ export default function OrderBuilderScreen() {
                 isEditingProducts && styles.editToggleTextActive,
               ]}
             >
-              {isEditingProducts ? 'סיום' : '✎'}
+              {isEditingProducts ? 'סיום' : 'עריכה'}
             </Text>
           </Pressable>
         )}
@@ -448,19 +448,24 @@ export default function OrderBuilderScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12 },
+  // A word rather than a pencil: the header already carries a pencil for
+  // editing the provider, and two stacked pencils meant two different things
+  // with the same icon.
   editToggle: {
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 10,
     backgroundColor: '#eef2ff',
-    minWidth: 46,
     alignItems: 'center',
   },
   editToggleActive: { backgroundColor: '#2563eb' },
-  editToggleText: { color: '#2563eb', fontWeight: '600', fontSize: 16 },
-  editToggleTextActive: { color: '#fff', fontSize: 14 },
+  editToggleText: { color: '#2563eb', fontWeight: '600', fontSize: 14 },
+  editToggleTextActive: { color: '#fff' },
   search: {
     flex: 1,
+    // Without a zero minimum a flex child refuses to shrink below its content,
+    // which pushed the toolbar's last control off the edge of the screen.
+    minWidth: 0,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#e0e0e0',

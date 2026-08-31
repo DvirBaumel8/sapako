@@ -15,7 +15,7 @@ if (!SUPPLIERS_CSV || !PRODUCTS_CSV) {
   );
   process.exit(1);
 }
-const BRANCH_NAME = 'Hills';
+const BRANCH_NAME = 'הילס';
 const PLACEHOLDER_PHONE = '0000000000';
 const DEFAULT_UNIT_TYPE = "יח'";
 const BATCH_SIZE = 500;

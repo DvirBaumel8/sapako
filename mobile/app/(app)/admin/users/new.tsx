@@ -5,9 +5,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createUser } from '../../../../src/api/users';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
-import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
+import { sanitizeUsername } from '../../../../src/utils/hebrewInput';
 import { isConflictError } from '../../../../src/api/errors';
 import { useAlert } from '../../../../src/ui/AlertProvider';
+
+// Matches the backend's rule; shown to the user rather than only enforced.
+const MIN_PASSWORD_LENGTH = 8;
 
 export default function NewUserScreen() {
   useRequireAdmin();
@@ -50,13 +53,22 @@ export default function NewUserScreen() {
         autoCapitalize="none"
         value={username}
         onChangeText={(text) => {
-          setUsername(sanitizeHebrewInput(text));
+          setUsername(sanitizeUsername(text));
           setUsernameError('');
         }}
       />
       {usernameError.length > 0 && <Text style={styles.errorText}>{usernameError}</Text>}
       <TextInput style={styles.input} placeholder="סיסמה זמנית" secureTextEntry value={password} onChangeText={setPassword} />
-      <PrimaryButton title="יצירת משתמש" onPress={handleSubmit} disabled={!username || password.length < 8 || isSubmitting} />
+      {/* A disabled button with no stated reason leaves the user guessing. */}
+      {password.length > 0 && password.length < MIN_PASSWORD_LENGTH && (
+        <Text style={styles.hintText}>
+          הסיסמה חייבת להכיל לפחות {MIN_PASSWORD_LENGTH} תווים.
+        </Text>
+      )}
+      {username.length === 0 && password.length >= MIN_PASSWORD_LENGTH && (
+        <Text style={styles.hintText}>יש להזין שם משתמש.</Text>
+      )}
+      <PrimaryButton title="יצירת משתמש" onPress={handleSubmit} disabled={!username || password.length < MIN_PASSWORD_LENGTH || isSubmitting} />
     </View>
   );
 }
@@ -64,5 +76,6 @@ export default function NewUserScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12 },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
+  hintText: { color: '#666', fontSize: 13, textAlign: 'right' },
   errorText: { color: '#c0392b', fontSize: 13, textAlign: 'right' },
 });

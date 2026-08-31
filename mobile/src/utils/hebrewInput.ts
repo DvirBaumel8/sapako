@@ -15,3 +15,15 @@ const LETTER = /[א-תa-zA-Z]/;
 export function hasLetter(text: string): boolean {
   return LETTER.test(text);
 }
+
+// Usernames are typed by an admin, often in English, and are never shown to
+// customers — so the Hebrew-only rule that suits product and supplier names
+// is wrong here. Latin letters, Hebrew, digits and a few separators only:
+// spaces and punctuation invite login trouble that is tedious to diagnose.
+const ALLOWED_USERNAME_CHAR = /[א-תa-zA-Z0-9._-]/;
+
+export function sanitizeUsername(text: string): string {
+  return Array.from(text)
+    .filter((char) => ALLOWED_USERNAME_CHAR.test(char))
+    .join('');
+}
