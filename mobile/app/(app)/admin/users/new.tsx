@@ -14,10 +14,16 @@ export default function NewUserScreen() {
   const showAlert = useAlert();
   const queryClient = useQueryClient();
   const [username, setUsername] = useState('');
+  // Guards against a second submit while the first is still in flight: on a
+  // slow connection the button looks inert, so it gets tapped again and the
+  // record is created twice.
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [password, setPassword] = useState('');
   const [usernameError, setUsernameError] = useState('');
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     setUsernameError('');
     try {
       await createUser({ username, password, role: 'STAFF' });
@@ -27,6 +33,7 @@ export default function NewUserScreen() {
       await queryClient.invalidateQueries({ queryKey: ['users'] });
       router.back();
     } catch (err) {
+      setIsSubmitting(false);
       if (isConflictError(err)) {
         setUsernameError('שם המשתמש כבר תפוס. יש לבחור שם אחר.');
       } else {
@@ -49,7 +56,7 @@ export default function NewUserScreen() {
       />
       {usernameError.length > 0 && <Text style={styles.errorText}>{usernameError}</Text>}
       <TextInput style={styles.input} placeholder="סיסמה זמנית" secureTextEntry value={password} onChangeText={setPassword} />
-      <PrimaryButton title="יצירת משתמש" onPress={handleSubmit} disabled={!username || password.length < 8} />
+      <PrimaryButton title="יצירת משתמש" onPress={handleSubmit} disabled={!username || password.length < 8 || isSubmitting} />
     </View>
   );
 }

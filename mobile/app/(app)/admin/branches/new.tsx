@@ -14,10 +14,16 @@ export default function NewBranchScreen() {
   const showAlert = useAlert();
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
+  // Guards against a second submit while the first is still in flight: on a
+  // slow connection the button looks inert, so it gets tapped again and the
+  // record is created twice.
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [nameError, setNameError] = useState('');
   const isNameValid = hasLetter(name);
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     setNameError('');
     try {
       await createBranch({ name });
@@ -27,6 +33,7 @@ export default function NewBranchScreen() {
       await queryClient.invalidateQueries({ queryKey: ['branches'] });
       router.back();
     } catch (err) {
+      setIsSubmitting(false);
       if (isConflictError(err)) {
         setNameError('כבר קיים סניף בשם זה. יש לבחור שם אחר.');
       } else {
@@ -50,7 +57,7 @@ export default function NewBranchScreen() {
         <Text style={styles.errorText}>שם הסניף חייב לכלול אותיות, לא רק מספרים.</Text>
       )}
       {nameError.length > 0 && <Text style={styles.errorText}>{nameError}</Text>}
-      <PrimaryButton title="יצירת סניף" onPress={handleSubmit} disabled={!name || !isNameValid} />
+      <PrimaryButton title="יצירת סניף" onPress={handleSubmit} disabled={!name || !isNameValid || isSubmitting} />
     </View>
   );
 }

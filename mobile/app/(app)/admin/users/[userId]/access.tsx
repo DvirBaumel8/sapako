@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -7,6 +7,7 @@ import { fetchAccessibleBranches } from '../../../../../src/api/branches';
 import { fetchProvidersForBranch } from '../../../../../src/api/providers';
 import { useRequireAdmin } from '../../../../../src/auth/useRequireAdmin';
 import type { Branch } from '../../../../../src/api/types';
+import { useAlert } from '../../../../../src/ui/AlertProvider';
 
 export default function UserAccessScreen() {
   useRequireAdmin();
@@ -14,19 +15,50 @@ export default function UserAccessScreen() {
   const queryClient = useQueryClient();
   const { data: users } = useQuery({ queryKey: ['users'], queryFn: fetchUsers });
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: fetchAccessibleBranches });
+  const showAlert = useAlert();
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
   const user = users?.find((candidate) => candidate.id === userId);
   const grantedProviderIds = new Set(user?.providerAccess.map((access) => access.providerId));
 
   const activeBranch = selectedBranch ?? branches?.[0] ?? null;
 
+  // The switch used to wait for the write AND the users list to refetch before
+  // it moved — two round-trips of nothing happening, with no guard against
+  // being tapped again in the meantime. It now flips immediately and reverts
+  // if the write fails.
+  const [pendingAccess, setPendingAccess] = useState<Record<string, boolean>>({});
+  const inFlightRef = useRef<Set<string>>(new Set());
+
   const toggleAccess = async (providerId: string, isCurrentlyGranted: boolean) => {
-    if (isCurrentlyGranted) {
-      await revokeProviderAccess(userId, providerId);
-    } else {
-      await grantProviderAccess(userId, providerId);
+    if (inFlightRef.current.has(providerId)) return;
+    inFlightRef.current.add(providerId);
+    const next = !isCurrentlyGranted;
+    setPendingAccess((prev) => ({ ...prev, [providerId]: next }));
+    try {
+      if (isCurrentlyGranted) {
+        await revokeProviderAccess(userId, providerId);
+      } else {
+        await grantProviderAccess(userId, providerId);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      setPendingAccess((prev) => {
+        const updated = { ...prev };
+        delete updated[providerId];
+        return updated;
+      });
+    } catch {
+      setPendingAccess((prev) => {
+        const updated = { ...prev };
+        delete updated[providerId];
+        return updated;
+      });
+      showAlert({
+        title: 'שגיאה',
+        message: 'עדכון ההרשאה נכשל. יש לבדוק את החיבור ולנסות שוב.',
+      });
+    } finally {
+      inFlightRef.current.delete(providerId);
     }
-    queryClient.invalidateQueries({ queryKey: ['users'] });
   };
 
   return (
@@ -49,7 +81,9 @@ export default function UserAccessScreen() {
       {activeBranch && (
         <ProviderToggles
           branchId={activeBranch.id}
-          grantedProviderIds={grantedProviderIds}
+          isGranted={(providerId) =>
+            pendingAccess[providerId] ?? grantedProviderIds.has(providerId)
+          }
           onToggle={toggleAccess}
         />
       )}
@@ -59,11 +93,11 @@ export default function UserAccessScreen() {
 
 function ProviderToggles({
   branchId,
-  grantedProviderIds,
+  isGranted,
   onToggle,
 }: {
   branchId: string;
-  grantedProviderIds: Set<string>;
+  isGranted: (providerId: string) => boolean;
   onToggle: (providerId: string, isCurrentlyGranted: boolean) => void;
 }) {
   const { data: providers } = useQuery({
@@ -80,8 +114,8 @@ function ProviderToggles({
         <View style={styles.providerRow}>
           <Text style={styles.providerName}>{provider.name}</Text>
           <Switch
-            value={grantedProviderIds.has(provider.id)}
-            onValueChange={() => onToggle(provider.id, grantedProviderIds.has(provider.id))}
+            value={isGranted(provider.id)}
+            onValueChange={() => onToggle(provider.id, isGranted(provider.id))}
           />
         </View>
       )}

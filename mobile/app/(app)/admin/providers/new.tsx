@@ -19,6 +19,10 @@ export default function NewProviderScreen() {
   const queryClient = useQueryClient();
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: fetchAccessibleBranches });
   const [selectedBranchIds, setSelectedBranchIds] = useState<Set<string>>(new Set());
+  // Guards against a second submit while the first is still in flight: on a
+  // slow connection the button looks inert, so it gets tapped again and the
+  // record is created twice.
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [selectedDepartmentNames, setSelectedDepartmentNames] = useState<Set<string>>(new Set());
@@ -71,6 +75,8 @@ export default function NewProviderScreen() {
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     if (!departmentsByBranch) return;
     setNameError('');
     try {
@@ -91,6 +97,7 @@ export default function NewProviderScreen() {
       await queryClient.invalidateQueries({ queryKey: ['matching-provider-branches'] });
       router.back();
     } catch (err) {
+      setIsSubmitting(false);
       if (isConflictError(err)) {
         setNameError('כבר קיים ספק בשם זה באחד הסניפים שנבחרו. יש לבחור שם אחר.');
       } else {
@@ -175,8 +182,7 @@ export default function NewProviderScreen() {
           !isNameValid ||
           !isPhoneValid ||
           !departmentsByBranch ||
-          selectedDepartmentNames.size === 0
-        }
+          selectedDepartmentNames.size === 0 || isSubmitting}
       />
     </View>
   );

@@ -11,14 +11,20 @@ import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 import type { Branch, Provider } from '../../../../src/api/types';
+import { useAlert } from '../../../../src/ui/AlertProvider';
 
 const DEFAULT_BRANCH_NAME = 'הילס';
 
 export default function NewProductScreen() {
   useRequireAdmin();
   const queryClient = useQueryClient();
+  const showAlert = useAlert();
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: fetchAccessibleBranches });
   const [selectedBranchIds, setSelectedBranchIds] = useState<Set<string>>(new Set());
+  // Guards against a second submit while the first is still in flight: on a
+  // slow connection the button looks inert, so it gets tapped again and the
+  // record is created twice.
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [primaryBranch, setPrimaryBranch] = useState<Branch | null>(null);
   const [provider, setProvider] = useState<Provider | null>(null);
   const [providerSearch, setProviderSearch] = useState('');
@@ -99,21 +105,37 @@ export default function NewProductScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!provider) return;
-    const otherBranchIds = Array.from(selectedBranchIds).filter((id) => id !== primaryBranch?.id);
-    const matchingProviderIds = await Promise.all(
-      otherBranchIds.map(async (branchId) => {
-        const branchProviders = await fetchProvidersForBranch(branchId);
-        return branchProviders.find((p) => p.name === provider.name)?.id ?? null;
-      }),
-    );
-    const targetProviderIds = [provider.id, ...matchingProviderIds.filter((id): id is string => !!id)];
-    await Promise.all(
-      targetProviderIds.map((providerId) =>
-        createProduct(providerId, { name, unitType, barcode: barcode || undefined }),
-      ),
-    );
-    router.back();
+    if (isSubmitting || !provider) return;
+    setIsSubmitting(true);
+    try {
+      const otherBranchIds = Array.from(selectedBranchIds).filter((id) => id !== primaryBranch?.id);
+      const matchingProviderIds = await Promise.all(
+        otherBranchIds.map(async (branchId) => {
+          const branchProviders = await fetchProvidersForBranch(branchId);
+          return branchProviders.find((p) => p.name === provider.name)?.id ?? null;
+        }),
+      );
+      const targetProviderIds = [
+        provider.id,
+        ...matchingProviderIds.filter((id): id is string => !!id),
+      ];
+      await Promise.all(
+        targetProviderIds.map((providerId) =>
+          createProduct(providerId, { name, unitType, barcode: barcode || undefined }),
+        ),
+      );
+      // Refresh the lists this product belongs to before returning to them.
+      await queryClient.invalidateQueries({ queryKey: ['products'] });
+      await queryClient.invalidateQueries({ queryKey: ['branch-products'] });
+      router.back();
+    } catch {
+      // Previously unhandled: a failed create left the screen silently doing
+      // nothing, which on a slow connection is indistinguishable from the app
+      // having ignored the tap.
+      showAlert({ title: 'שגיאה', message: 'יצירת המוצר נכשלה. יש לנסות שוב.' });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -196,7 +218,7 @@ export default function NewProductScreen() {
             <Text>סריקת ברקוד</Text>
           </Pressable>
           <BarcodeScannerModal visible={isScannerVisible} onScanned={setBarcode} onClose={() => setIsScannerVisible(false)} />
-          <PrimaryButton title="יצירת מוצר" onPress={handleSubmit} disabled={!name || !unitType} />
+          <PrimaryButton title="יצירת מוצר" onPress={handleSubmit} disabled={!name || !unitType || isSubmitting} />
         </>
       )}
     </View>

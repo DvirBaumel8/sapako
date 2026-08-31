@@ -20,6 +20,10 @@ export default function NewDepartmentScreen() {
   const [selectedBranchIds, setSelectedBranchIds] = useState<Set<string>>(
     new Set(selectedBranch ? [selectedBranch.id] : []),
   );
+  // Guards against a second submit while the first is still in flight: on a
+  // slow connection the button looks inert, so it gets tapped again and the
+  // record is created twice.
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
   const isNameValid = hasLetter(name);
@@ -37,6 +41,8 @@ export default function NewDepartmentScreen() {
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     setNameError('');
     try {
       await Promise.all(
@@ -48,6 +54,7 @@ export default function NewDepartmentScreen() {
       await queryClient.invalidateQueries({ queryKey: ['departments'] });
       router.back();
     } catch (err) {
+      setIsSubmitting(false);
       if (isConflictError(err)) {
         setNameError('כבר קיימת מחלקה בשם זה באחד הסניפים שנבחרו. יש לבחור שם אחר.');
       } else {
@@ -89,7 +96,7 @@ export default function NewDepartmentScreen() {
       <PrimaryButton
         title="יצירת מחלקה"
         onPress={handleSubmit}
-        disabled={selectedBranchIds.size === 0 || !name || !isNameValid}
+        disabled={selectedBranchIds.size === 0 || !name || !isNameValid || isSubmitting}
       />
     </View>
   );
