@@ -77,6 +77,7 @@ describe('PermissionsService', () => {
 
     it('grants STAFF access when a matching direct access row exists', async () => {
       directRepo.find.mockResolvedValue([{ userId: 'u1', providerId: 'p1' }]);
+      providerRepo.findOne.mockResolvedValue({ id: 'p1', departments: [] });
 
       const allowed = await service.hasProviderAccess(
         { userId: 'u1', role: Role.STAFF },
@@ -87,6 +88,10 @@ describe('PermissionsService', () => {
     });
 
     it('denies STAFF access when no access row exists', async () => {
+      // The provider exists; it is the absence of a rule that denies, not a
+      // missing row.
+      providerRepo.findOne.mockResolvedValue({ id: 'p1', departments: [] });
+
       const allowed = await service.hasProviderAccess(
         { userId: 'u1', role: Role.STAFF },
         'p1',
@@ -98,6 +103,8 @@ describe('PermissionsService', () => {
     it('denies STAFF access to a provider granted to a different user', async () => {
       // The mock does not itself filter by userId, so this only proves the
       // service scopes the query correctly, not that a real join does too.
+      providerRepo.findOne.mockResolvedValue({ id: 'p1', departments: [] });
+
       const allowed = await service.hasProviderAccess(
         { userId: 'u2', role: Role.STAFF },
         'p1',
@@ -108,9 +115,11 @@ describe('PermissionsService', () => {
     });
 
     it('grants access to a provider reachable only through a granted department', () => {
-      providerRepo.find.mockResolvedValue([
-        { id: 'p1', branchId: 'b1', departments: [{ id: 'd1', name: 'חלב' }] },
-      ]);
+      providerRepo.findOne.mockResolvedValue({
+        id: 'p1',
+        branchId: 'b1',
+        departments: [{ id: 'd1', name: 'חלב' }],
+      });
       departmentAccessRepo.find.mockResolvedValue([
         { userId: 'u1', departmentId: 'd1' },
       ]);
@@ -179,6 +188,8 @@ describe('PermissionsService', () => {
     });
 
     it('includes a branch reachable only via a department grant', async () => {
+      // Plural find: unlike the single-provider guard, this genuinely needs
+      // every provider in order to collect the branches they sit in.
       providerRepo.find.mockResolvedValue([
         { id: 'p1', branchId: 'b1', departments: [{ id: 'd1', name: 'חלב' }] },
       ]);
@@ -332,6 +343,44 @@ describe('PermissionsService', () => {
         userId: 'u1',
         providerId: 'p1',
       });
+    });
+  });
+
+  describe('hasProviderAccess cost', () => {
+    it('reads only the provider being asked about', async () => {
+      // This runs in a guard, on every provider-scoped request. Resolving one
+      // provider by loading every provider in the branch — with its
+      // departments joined — put a full scan on the authorisation path.
+      directRepo.find.mockResolvedValue([]);
+      departmentAccessRepo.find.mockResolvedValue([{ departmentId: 'd1' }]);
+      blockRepo.find.mockResolvedValue([]);
+      providerRepo.findOne.mockResolvedValue({
+        id: 'p1',
+        departments: [{ id: 'd1', name: 'חלב' }],
+      });
+
+      const allowed = await service.hasProviderAccess(
+        { userId: 'u1', role: Role.STAFF } as never,
+        'p1',
+      );
+
+      expect(allowed).toBe(true);
+      expect(providerRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        relations: { departments: true },
+      });
+      expect(providerRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('denies a provider that does not exist', async () => {
+      directRepo.find.mockResolvedValue([]);
+      departmentAccessRepo.find.mockResolvedValue([]);
+      blockRepo.find.mockResolvedValue([]);
+      providerRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.hasProviderAccess({ userId: 'u1', role: Role.STAFF } as never, 'nope'),
+      ).resolves.toBe(false);
     });
   });
 });

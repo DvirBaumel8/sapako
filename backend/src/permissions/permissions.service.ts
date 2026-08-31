@@ -79,8 +79,33 @@ export class PermissionsService {
     if (user.role === Role.ADMIN) {
       return true;
     }
-    const { input } = await this.buildAccessInput(user.userId);
-    return resolveAccess(providerId, input).isGranted;
+    // Deliberately not buildAccessInput: this runs in a guard on every
+    // provider-scoped request, and that helper loads every provider in the
+    // system with its departments joined. Only the provider being asked
+    // about is needed to answer the question.
+    const [direct, departmentGrants, blocks, provider] = await Promise.all([
+      this.accessRepo.find({ where: { userId: user.userId } }),
+      this.departmentAccessRepo.find({ where: { userId: user.userId } }),
+      this.blockRepo.find({ where: { userId: user.userId } }),
+      this.providerRepo.findOne({
+        where: { id: providerId },
+        relations: { departments: true },
+      }),
+    ]);
+    if (!provider) {
+      return false;
+    }
+    return resolveAccess(providerId, {
+      directProviderIds: direct.map((row) => row.providerId),
+      blockedProviderIds: blocks.map((row) => row.providerId),
+      grantedDepartmentIds: departmentGrants.map((row) => row.departmentId),
+      departmentsByProviderId: {
+        [provider.id]: (provider.departments ?? []).map((department) => ({
+          id: department.id,
+          name: department.name,
+        })),
+      },
+    }).isGranted;
   }
 
   async hasBranchAccess(
