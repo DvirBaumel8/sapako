@@ -8,6 +8,7 @@ import { OrderAccessGuard } from './order-access.guard';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { ProvidersModule } from '../providers/providers.module';
 import { ProductsModule } from '../products/products.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { ProductsModule } from '../products/products.module';
     PermissionsModule,
     ProvidersModule,
     ProductsModule,
+    NotificationsModule,
   ],
   providers: [OrdersService, OrderAccessGuard],
   controllers: [OrdersController, BranchOrdersController],

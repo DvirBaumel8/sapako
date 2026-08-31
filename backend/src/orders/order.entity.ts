@@ -45,8 +45,28 @@ export class Order {
   @CreateDateColumn()
   createdAt: Date;
 
+  /**
+   * When the user confirmed the message was actually sent.
+   *
+   * Deliberately not set at handoff: it is the time the supplier was
+   * contacted, and an order the user opened WhatsApp for and then abandoned
+   * never reaches this state at all.
+   */
   @Column({ type: 'timestamptz', nullable: true })
   publishedAt?: Date;
+
+  /** When WhatsApp was opened, which is all the app can observe by itself. */
+  @Column({ type: 'timestamptz', nullable: true })
+  handedOffAt?: Date;
+
+  /**
+   * When the record email went out. Null after a confirmed send means the
+   * email failed — it is never allowed to fail the confirmation itself, so
+   * without this column an outage would show up only as mail quietly
+   * ceasing to arrive.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  notificationSentAt?: Date;
 
   @OneToMany(() => OrderItem, (item) => item.order, { cascade: true })
   items: OrderItem[];

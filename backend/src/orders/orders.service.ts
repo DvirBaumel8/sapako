@@ -9,8 +9,10 @@ import { EntityManager, FindOptionsWhere, In, Repository } from 'typeorm';
 import { Order } from './order.entity';
 import { OrderItem } from './order-item.entity';
 import { OrderStatus } from './order-status.enum';
+import { isWeightUnit } from '../products/unit-types';
 import { ProvidersService } from '../providers/providers.service';
 import { ProductsService } from '../products/products.service';
+import { OrderNotifierService } from '../notifications/order-notifier.service';
 
 /**
  * How many recent orders the activity list returns.
@@ -31,6 +33,7 @@ export class OrdersService {
     @InjectRepository(Order) private readonly orderRepo: Repository<Order>,
     private readonly providersService: ProvidersService,
     private readonly productsService: ProductsService,
+    private readonly orderNotifier: OrderNotifierService,
   ) {}
 
   async createDraft(
@@ -126,18 +129,42 @@ export class OrdersService {
     });
   }
 
-  async updateItemQuantity(
+  /**
+   * Changes the quantity, the unit, or both, for one line of a draft order.
+   *
+   * The unit is held per item rather than per product: ordering one delivery
+   * of something by weight is a decision about that order, and must not
+   * rewrite the catalogue for every branch and every future order.
+   */
+  async updateItem(
     orderId: string,
     itemId: string,
-    quantity: number,
+    changes: { quantity?: number; unitType?: string },
   ): Promise<OrderItem> {
+    if (changes.quantity === undefined && changes.unitType === undefined) {
+      throw new BadRequestException('Provide a quantity, a unitType, or both');
+    }
     return this.withDraftOrder(orderId, async (_order, manager) => {
       const itemRepo = manager.getRepository(OrderItem);
       const item = await itemRepo.findOne({ where: { id: itemId, orderId } });
       if (!item) {
         throw new NotFoundException('Order item not found');
       }
-      item.quantity = quantity;
+      if (changes.unitType !== undefined) {
+        item.unitType = changes.unitType;
+      }
+      if (changes.quantity !== undefined) {
+        item.quantity = changes.quantity;
+      }
+
+      // A counted unit cannot hold a fraction: 2.5 kg switched to cartons has
+      // to resolve to whole ones. Rounds rather than truncates, and never to
+      // zero, so switching the unit can neither shrink an order to nothing
+      // nor write a quantity the add/update endpoints would reject.
+      if (!isWeightUnit(item.unitType) && !Number.isInteger(item.quantity)) {
+        item.quantity = Math.max(1, Math.round(item.quantity));
+      }
+
       return itemRepo.save(item);
     });
   }
@@ -159,6 +186,115 @@ export class OrdersService {
     const result = await this.orderRepo.delete({ id: orderId });
     if (result.affected === 0) {
       throw new NotFoundException('Order not found');
+    }
+  }
+
+  /**
+   * DRAFT -> AWAITING_CONFIRMATION, recording that WhatsApp was opened.
+   *
+   * This is as far as the app can get on its own. Whether the message left
+   * the device is something only the user can report, via confirmSent() or
+   * revertToDraft().
+   */
+  async handOff(orderId: string): Promise<Order> {
+    const order = await this.orderRepo.findOne({ where: { id: orderId } });
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Same atomic conditional UPDATE as publish(): only a row still in DRAFT
+    // matches, so a double-tap cannot hand off twice.
+    const result = await this.orderRepo.update(
+      { id: orderId, status: OrderStatus.DRAFT },
+      { status: OrderStatus.AWAITING_CONFIRMATION, handedOffAt: new Date() },
+    );
+    if (result.affected === 0) {
+      throw new ConflictException('Order is no longer a draft');
+    }
+
+    return this.findById(orderId);
+  }
+
+  /** AWAITING_CONFIRMATION -> PUBLISHED, on the user's word that it was sent. */
+  async confirmSent(orderId: string): Promise<Order> {
+    const order = await this.orderRepo.findOne({ where: { id: orderId } });
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const result = await this.orderRepo.update(
+      { id: orderId, status: OrderStatus.AWAITING_CONFIRMATION },
+      { status: OrderStatus.PUBLISHED, publishedAt: new Date() },
+    );
+    if (result.affected === 0) {
+      throw new ConflictException('Order is not awaiting confirmation');
+    }
+
+    const confirmed = await this.findById(orderId);
+    await this.sendRecordEmail(confirmed);
+    return this.findById(orderId);
+  }
+
+  /**
+   * AWAITING_CONFIRMATION -> DRAFT, when the user says the message never
+   * went out. Clears the handoff time so a later, real send is not recorded
+   * as having happened earlier.
+   */
+  async revertToDraft(orderId: string): Promise<Order> {
+    const order = await this.orderRepo.findOne({ where: { id: orderId } });
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const result = await this.orderRepo.update(
+      { id: orderId, status: OrderStatus.AWAITING_CONFIRMATION },
+      { status: OrderStatus.DRAFT, handedOffAt: null },
+    );
+    if (result.affected === 0) {
+      throw new ConflictException('Order is not awaiting confirmation');
+    }
+
+    return this.findById(orderId);
+  }
+
+  /** Returns the orders this branch is still waiting to hear about. */
+  async findAwaitingConfirmation(
+    branchId: string,
+    accessibleProviderIds: string[] | 'ALL',
+  ): Promise<Order[]> {
+    const where: FindOptionsWhere<Order> = {
+      branchId,
+      status: OrderStatus.AWAITING_CONFIRMATION,
+    };
+    if (accessibleProviderIds !== 'ALL') {
+      where.providerId = In(accessibleProviderIds);
+    }
+    return this.orderRepo.find({
+      where,
+      relations: { items: true, provider: true },
+      order: { handedOffAt: 'ASC' },
+    });
+  }
+
+  /**
+   * Emails the confirmed order as a record, then notes that it went.
+   *
+   * Deliberately swallows every failure. The message has already reached the
+   * supplier by the time this runs, so turning a mail outage into a failed
+   * confirmation would leave the user staring at an error for something that
+   * worked, and tempt them to send the order twice.
+   */
+  private async sendRecordEmail(order: Order): Promise<void> {
+    try {
+      const sent = await this.orderNotifier.sendOrderPublished(order);
+      if (sent) {
+        await this.orderRepo.update(
+          { id: order.id },
+          { notificationSentAt: new Date() },
+        );
+      }
+    } catch {
+      // notificationSentAt stays null, which is the signal that it failed.
     }
   }
 

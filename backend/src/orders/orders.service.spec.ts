@@ -12,13 +12,14 @@ import { OrderItem } from './order-item.entity';
 import { OrderStatus } from './order-status.enum';
 import { ProvidersService } from '../providers/providers.service';
 import { ProductsService } from '../products/products.service';
+import { OrderNotifierService } from '../notifications/order-notifier.service';
 
 describe('OrdersService', () => {
   let service: OrdersService;
 
   // Fake repository handed out by `manager.getRepository(OrderItem)` inside
   // a transaction — stands in for the item writes that addItem/
-  // updateItemQuantity/removeItem perform once they hold the order lock.
+  // updateItem/removeItem perform once they hold the order lock.
   const managerOrderItemRepo = {
     create: jest.fn(),
     save: jest.fn(),
@@ -52,6 +53,8 @@ describe('OrdersService', () => {
   };
   const providersService = { findById: jest.fn() };
   const productsService = { findById: jest.fn() };
+  // Returns false by default: "not configured", the state CI runs in.
+  const orderNotifier = { sendOrderPublished: jest.fn() };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -69,6 +72,7 @@ describe('OrdersService', () => {
         { provide: getRepositoryToken(Order), useValue: orderRepo },
         { provide: ProvidersService, useValue: providersService },
         { provide: ProductsService, useValue: productsService },
+        { provide: OrderNotifierService, useValue: orderNotifier },
       ],
     }).compile();
     service = module.get(OrdersService);
@@ -258,7 +262,7 @@ describe('OrdersService', () => {
     });
   });
 
-  describe('updateItemQuantity', () => {
+  describe('updateItem', () => {
     it('updates the quantity of an item on a DRAFT order', async () => {
       manager.findOne.mockResolvedValue({
         id: 'o1',
@@ -273,7 +277,7 @@ describe('OrdersService', () => {
         Promise.resolve(data),
       );
 
-      const item = await service.updateItemQuantity('o1', 'oi1', 5);
+      const item = await service.updateItem('o1', 'oi1', { quantity: 5 });
 
       expect(item).toMatchObject({ id: 'oi1', quantity: 5 });
     });
@@ -284,9 +288,9 @@ describe('OrdersService', () => {
         status: OrderStatus.PUBLISHED,
       });
 
-      await expect(service.updateItemQuantity('o1', 'oi1', 5)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.updateItem('o1', 'oi1', { quantity: 5 }),
+      ).rejects.toThrow(ConflictException);
       expect(managerOrderItemRepo.findOne).not.toHaveBeenCalled();
     });
 
@@ -298,7 +302,7 @@ describe('OrdersService', () => {
       managerOrderItemRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.updateItemQuantity('o1', 'missing', 5),
+        service.updateItem('o1', 'missing', { quantity: 5 }),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -422,6 +426,297 @@ describe('OrdersService', () => {
       expect(orderRepo.update).toHaveBeenCalledWith(
         { id: 'o1', status: OrderStatus.DRAFT },
         expect.objectContaining({ status: OrderStatus.PUBLISHED }),
+      );
+    });
+  });
+
+  describe('changing an item unit', () => {
+    const draftWithItem = (item: Record<string, unknown>) => {
+      manager.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.DRAFT,
+      });
+      managerOrderItemRepo.findOne.mockResolvedValue({
+        id: 'oi1',
+        orderId: 'o1',
+        ...item,
+      });
+      managerOrderItemRepo.save.mockImplementation((data) =>
+        Promise.resolve(data),
+      );
+    };
+
+    it('changes the unit without touching the quantity', async () => {
+      draftWithItem({ unitType: 'קרטון', quantity: 3 });
+
+      const item = await service.updateItem('o1', 'oi1', { unitType: 'ק"ג' });
+
+      expect(item).toMatchObject({ unitType: 'ק"ג', quantity: 3 });
+    });
+
+    it('changes the unit and the quantity together', async () => {
+      draftWithItem({ unitType: 'קרטון', quantity: 3 });
+
+      const item = await service.updateItem('o1', 'oi1', {
+        unitType: 'ק"ג',
+        quantity: 2.5,
+      });
+
+      expect(item).toMatchObject({ unitType: 'ק"ג', quantity: 2.5 });
+    });
+
+    it('keeps a fraction when the new unit is a weight', async () => {
+      draftWithItem({ unitType: 'קרטון', quantity: 1 });
+
+      const item = await service.updateItem('o1', 'oi1', {
+        unitType: 'ק"ג',
+        quantity: 1.5,
+      });
+
+      expect(item).toMatchObject({ quantity: 1.5 });
+    });
+
+    it('rounds a fraction away when switching to a counted unit', async () => {
+      // 2.5 kg cannot become 2.5 cartons. Rounds rather than truncates, so
+      // the order is not quietly shrunk.
+      draftWithItem({ unitType: 'ק"ג', quantity: 2.5 });
+
+      const item = await service.updateItem('o1', 'oi1', { unitType: 'קרטון' });
+
+      expect(item).toMatchObject({ unitType: 'קרטון', quantity: 3 });
+    });
+
+    it('never rounds a counted quantity down to zero', async () => {
+      // 0.4 kg would round to 0, and a zero-quantity line is one the add and
+      // update endpoints both reject — the order would hold a row it could
+      // not otherwise create.
+      draftWithItem({ unitType: 'ק"ג', quantity: 0.4 });
+
+      const item = await service.updateItem('o1', 'oi1', { unitType: 'יחידה' });
+
+      expect(item).toMatchObject({ quantity: 1 });
+    });
+
+    it('leaves a whole quantity alone when switching to a counted unit', async () => {
+      draftWithItem({ unitType: 'ק"ג', quantity: 4 });
+
+      const item = await service.updateItem('o1', 'oi1', { unitType: 'קרטון' });
+
+      expect(item).toMatchObject({ quantity: 4 });
+    });
+
+    it('rejects a request that changes nothing', async () => {
+      await expect(service.updateItem('o1', 'oi1', {})).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('refuses a unit change once the order has been handed to WhatsApp', async () => {
+      // AWAITING_CONFIRMATION means a message carrying these lines may
+      // already be with the supplier; the record must not drift from it.
+      manager.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.AWAITING_CONFIRMATION,
+      });
+
+      await expect(
+        service.updateItem('o1', 'oi1', { unitType: 'ק"ג' }),
+      ).rejects.toThrow(ConflictException);
+      expect(managerOrderItemRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handOff', () => {
+    it('moves a draft to AWAITING_CONFIRMATION and stamps the handoff time', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.DRAFT,
+      });
+      orderRepo.update.mockResolvedValue({ affected: 1 });
+
+      await service.handOff('o1');
+
+      expect(orderRepo.update).toHaveBeenCalledWith(
+        { id: 'o1', status: OrderStatus.DRAFT },
+        expect.objectContaining({ status: OrderStatus.AWAITING_CONFIRMATION }),
+      );
+      const [, changes] = orderRepo.update.mock.calls[0];
+      expect(changes.handedOffAt).toBeInstanceOf(Date);
+    });
+
+    it('does not set publishedAt, since nothing has been sent yet', async () => {
+      // The whole point of the state: publishedAt must mean "the supplier was
+      // contacted", not "WhatsApp was opened".
+      orderRepo.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.DRAFT,
+      });
+      orderRepo.update.mockResolvedValue({ affected: 1 });
+
+      await service.handOff('o1');
+
+      const [, changes] = orderRepo.update.mock.calls[0];
+      expect(changes.publishedAt).toBeUndefined();
+    });
+
+    it('rejects a second handoff of the same order', async () => {
+      // A double-tap must not re-stamp the handoff time.
+      orderRepo.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.AWAITING_CONFIRMATION,
+      });
+      orderRepo.update.mockResolvedValue({ affected: 0 });
+
+      await expect(service.handOff('o1')).rejects.toThrow(ConflictException);
+    });
+
+    it('throws NotFoundException for an order that does not exist', async () => {
+      orderRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.handOff('missing')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('confirmSent', () => {
+    const awaiting = () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.AWAITING_CONFIRMATION,
+      });
+      orderRepo.update.mockResolvedValue({ affected: 1 });
+      orderRepo.find.mockResolvedValue([]);
+    };
+
+    it('publishes the order and stamps publishedAt', async () => {
+      awaiting();
+
+      await service.confirmSent('o1');
+
+      expect(orderRepo.update).toHaveBeenCalledWith(
+        { id: 'o1', status: OrderStatus.AWAITING_CONFIRMATION },
+        expect.objectContaining({ status: OrderStatus.PUBLISHED }),
+      );
+      const [, changes] = orderRepo.update.mock.calls[0];
+      expect(changes.publishedAt).toBeInstanceOf(Date);
+    });
+
+    it('emails the confirmed order', async () => {
+      awaiting();
+      orderNotifier.sendOrderPublished.mockResolvedValue(true);
+
+      await service.confirmSent('o1');
+
+      expect(orderNotifier.sendOrderPublished).toHaveBeenCalled();
+    });
+
+    it('records that the email went out', async () => {
+      awaiting();
+      orderNotifier.sendOrderPublished.mockResolvedValue(true);
+
+      await service.confirmSent('o1');
+
+      const notified = orderRepo.update.mock.calls.find(
+        ([, changes]) => changes.notificationSentAt instanceof Date,
+      );
+      expect(notified).toBeDefined();
+    });
+
+    it('leaves notificationSentAt unset when email is not configured', async () => {
+      // The normal state locally and in CI. Not an error, and not something
+      // to record as a sent email.
+      awaiting();
+      orderNotifier.sendOrderPublished.mockResolvedValue(false);
+
+      await service.confirmSent('o1');
+
+      const notified = orderRepo.update.mock.calls.find(
+        ([, changes]) => changes.notificationSentAt instanceof Date,
+      );
+      expect(notified).toBeUndefined();
+    });
+
+    it('still confirms the order when the email fails', async () => {
+      // The message is already with the supplier by now. Failing here would
+      // show an error for something that worked and invite a second send.
+      awaiting();
+      orderNotifier.sendOrderPublished.mockRejectedValue(
+        new Error('Resend is down'),
+      );
+
+      await expect(service.confirmSent('o1')).resolves.toBeDefined();
+      expect(orderRepo.update).toHaveBeenCalledWith(
+        { id: 'o1', status: OrderStatus.AWAITING_CONFIRMATION },
+        expect.objectContaining({ status: OrderStatus.PUBLISHED }),
+      );
+    });
+
+    it('rejects confirming an order that was never handed off', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.DRAFT,
+      });
+      orderRepo.update.mockResolvedValue({ affected: 0 });
+
+      await expect(service.confirmSent('o1')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('rejects confirming the same order twice, so no duplicate email goes out', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.PUBLISHED,
+      });
+      orderRepo.update.mockResolvedValue({ affected: 0 });
+
+      await expect(service.confirmSent('o1')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(orderNotifier.sendOrderPublished).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('revertToDraft', () => {
+    it('returns an awaiting order to DRAFT and clears the handoff time', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.AWAITING_CONFIRMATION,
+      });
+      orderRepo.update.mockResolvedValue({ affected: 1 });
+
+      await service.revertToDraft('o1');
+
+      expect(orderRepo.update).toHaveBeenCalledWith(
+        { id: 'o1', status: OrderStatus.AWAITING_CONFIRMATION },
+        { status: OrderStatus.DRAFT, handedOffAt: null },
+      );
+    });
+
+    it('sends no email, because nothing was sent', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.AWAITING_CONFIRMATION,
+      });
+      orderRepo.update.mockResolvedValue({ affected: 1 });
+
+      await service.revertToDraft('o1');
+
+      expect(orderNotifier.sendOrderPublished).not.toHaveBeenCalled();
+    });
+
+    it('rejects reverting an order that is already published', async () => {
+      // Once confirmed, the supplier has it. Reverting would let the items
+      // be edited underneath an order that was really placed.
+      orderRepo.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.PUBLISHED,
+      });
+      orderRepo.update.mockResolvedValue({ affected: 0 });
+
+      await expect(service.revertToDraft('o1')).rejects.toThrow(
+        ConflictException,
       );
     });
   });

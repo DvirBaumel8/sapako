@@ -2,6 +2,7 @@ import { Redirect, Stack, usePathname } from 'expo-router';
 import { HeaderBackButton } from '../../src/ui/HeaderBackButton';
 import { useAuth } from '../../src/auth/AuthContext';
 import { BranchProvider, useBranch } from '../../src/branch/BranchContext';
+import { SendConfirmationPrompt } from '../../src/order/SendConfirmationPrompt';
 
 function Gate() {
   const { selectedBranch, isRestoring } = useBranch();
@@ -67,6 +68,12 @@ export default function AppLayout() {
   return (
     <BranchProvider>
       <Gate />
+      {/*
+        Mounted at the layout, not on a screen: the user returns from WhatsApp
+        to whatever screen they left, and an order nobody answered for must
+        keep asking wherever they are.
+      */}
+      <SendConfirmationPrompt />
     </BranchProvider>
   );
 }

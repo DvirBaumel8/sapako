@@ -20,6 +20,7 @@ export function UnitTypePicker({ value, onChange }: UnitTypePickerProps) {
         return (
           <Pressable
             key={unitType}
+            testID={`unit-option-${unitType}`}
             onPress={() => onChange(unitType)}
             accessibilityRole="radio"
             accessibilityState={{ selected: isSelected }}

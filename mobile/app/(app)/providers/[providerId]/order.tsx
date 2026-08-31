@@ -3,7 +3,14 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchProductsForProvider } from '../../../../src/api/products';
-import { createDraftOrder, addOrderItem, updateOrderItemQuantity, removeOrderItem, fetchOrdersForBranch } from '../../../../src/api/orders';
+import {
+  createDraftOrder,
+  addOrderItem,
+  updateOrderItemQuantity,
+  updateOrderItemUnit,
+  removeOrderItem,
+  fetchOrdersForBranch,
+} from '../../../../src/api/orders';
 import { useBranch } from '../../../../src/branch/BranchContext';
 import { useAuth } from '../../../../src/auth/AuthContext';
 import type { Order, OrderItem, Product } from '../../../../src/api/types';
@@ -15,6 +22,7 @@ import { findResumableDraft } from '../../../../src/order/findResumableDraft';
 import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 import { useAlert } from '../../../../src/ui/AlertProvider';
 import { formatQuantity, isWeightUnit, quantityStep } from '../../../../src/products/unitTypes';
+import { UnitPickerSheet } from '../../../../src/order/UnitPickerSheet';
 
 // Product rows are a fixed height, measured from the running app. Declaring
 // it lets the list jump straight to any row: without it, scrollToIndex cannot
@@ -37,6 +45,13 @@ export default function OrderBuilderScreen() {
   const [order, setOrder] = useState<Order | null>(null);
   const [itemsByProductId, setItemsByProductId] = useState<Record<string, OrderItem>>({});
   const [isScannerVisible, setIsScannerVisible] = useState(false);
+  // Units chosen for this order, keyed by product. Held separately from the
+  // saved items because a row can have a unit before it has a quantity —
+  // there is no order item to write to until the first "+" is pressed, and
+  // the choice has to survive until then so it can be sent with the create.
+  const [pendingUnits, setPendingUnits] = useState<Record<string, string>>({});
+  const pendingUnitsRef = useRef<Record<string, string>>({});
+  const [unitPickerProduct, setUnitPickerProduct] = useState<Product | null>(null);
   // Editing a product from here is rare; a pencil on every row is permanent
   // clutter on a screen whose job is setting quantities. Same toggle as the
   // departments list.
@@ -55,6 +70,20 @@ export default function OrderBuilderScreen() {
   // a stale map, failed to see the item just created, and created a second
   // one for the same product.
   const itemsByProductIdRef = useRef(itemsByProductId);
+
+  // Mirrors applyItems: the write path reads this synchronously, before a
+  // re-render has happened, so a ref rather than the state value.
+  const applyUnits = (next: Record<string, string>) => {
+    pendingUnitsRef.current = next;
+    setPendingUnits(next);
+  };
+
+  /**
+   * The unit this row is ordered in: the override chosen for this order, then
+   * whatever the saved item holds, then the product's catalogue unit.
+   */
+  const unitFor = (product: Product): string =>
+    pendingUnits[product.id] ?? itemsByProductId[product.id]?.unitType ?? product.unitType;
 
   const applyItems = (next: Record<string, OrderItem>) => {
     itemsByProductIdRef.current = next;
@@ -191,7 +220,13 @@ export default function OrderBuilderScreen() {
       const updated = await updateOrderItemQuantity(currentOrder.id, existing.id, quantity);
       applyItems({ ...itemsByProductIdRef.current, [productId]: updated });
     } else {
-      const created = await addOrderItem(currentOrder.id, { productId, quantity });
+      const created = await addOrderItem(currentOrder.id, {
+        productId,
+        quantity,
+        // Sent on create so a unit chosen before the first "+" is not lost;
+        // the API falls back to the catalogue unit when this is undefined.
+        unitType: pendingUnitsRef.current[productId],
+      });
       applyItems({ ...itemsByProductIdRef.current, [productId]: created });
     }
   };
@@ -234,11 +269,56 @@ export default function OrderBuilderScreen() {
       pendingQuantitiesRef.current[product.id] ??
       itemsByProductIdRef.current[product.id]?.quantity ??
       0;
-    const step = quantityStep(product.unitType);
+    const step = quantityStep(
+      pendingUnitsRef.current[product.id] ??
+        itemsByProductIdRef.current[product.id]?.unitType ??
+        product.unitType,
+    );
     // Rounded because repeatedly adding 0.5 to a float drifts, and the column
     // only holds two decimals — 2.9999999 would be rejected outright.
     const next = Math.round((current + direction * step) * 100) / 100;
     setQuantity(product, next);
+  };
+
+  /**
+   * Applies a unit change to this order's line for the product.
+   *
+   * Written straight through rather than through the debounced quantity
+   * writer: a unit is picked once from a sheet, not tapped repeatedly, so
+   * there is nothing to coalesce. If no item exists yet the choice is only
+   * held locally — writeQuantity sends it when the line is created.
+   */
+  const changeUnit = async (product: Product, unitType: string) => {
+    const previous = pendingUnitsRef.current;
+    applyUnits({ ...previous, [product.id]: unitType });
+
+    const existing = itemsByProductIdRef.current[product.id];
+    // Nothing to write to until the row has a line. writeQuantity sends the
+    // held choice when it creates one.
+    if (!existing) return;
+
+    try {
+      // Through ensureOrder, like the quantity path: reading the `order`
+      // state here would be a closure from the render this handler was built
+      // in, which can predate the order's creation.
+      const currentOrder = await ensureOrder();
+      const updated = await updateOrderItemUnit(currentOrder.id, existing.id, unitType);
+      applyItems({ ...itemsByProductIdRef.current, [product.id]: updated });
+      // The server rounds a fraction away when the unit stops being a weight,
+      // so the number on screen has to follow rather than keep showing a
+      // quantity that was not saved.
+      setPendingQuantities((prev) => {
+        const next = { ...prev };
+        delete next[product.id];
+        return next;
+      });
+    } catch {
+      applyUnits(previous);
+      showAlert({
+        title: 'שינוי יחידת המידה נכשל',
+        message: 'לא ניתן היה לשמור את השינוי. יש לנסות שוב.',
+      });
+    }
   };
 
   const handleBarcodeScanned = (barcode: string) => {
@@ -338,6 +418,15 @@ export default function OrderBuilderScreen() {
           onCreated={handleUnknownProductCreated}
         />
       )}
+      {unitPickerProduct && (
+        <UnitPickerSheet
+          visible
+          productName={unitPickerProduct.name}
+          value={unitFor(unitPickerProduct)}
+          onChange={(unitType) => changeUnit(unitPickerProduct, unitType)}
+          onClose={() => setUnitPickerProduct(null)}
+        />
+      )}
       <FlatList
         ref={listRef}
         data={filteredProducts}
@@ -375,6 +464,7 @@ export default function OrderBuilderScreen() {
           const currentQuantity =
             pendingQuantities[product.id] ?? itemsByProductId[product.id]?.quantity ?? 0;
           const isHighlighted = product.id === scrollTarget?.id;
+          const unit = unitFor(product);
           return (
             <View style={[styles.card, isHighlighted && styles.cardHighlighted]}>
               <View style={styles.productNameRow}>
@@ -400,9 +490,19 @@ export default function OrderBuilderScreen() {
                 )}
               </View>
               <View style={styles.rowBottom}>
-                <View style={styles.unitBadge}>
-                  <Text style={styles.unitBadgeText}>{product.unitType}</Text>
-                </View>
+                <Pressable
+                  testID={`unit-${product.id}`}
+                  style={styles.unitBadge}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`יחידת מידה: ${unit}. לשינוי`}
+                  onPress={() => setUnitPickerProduct(product)}
+                >
+                  <Text testID={`unit-label-${product.id}`} style={styles.unitBadgeText}>
+                    {unit}
+                  </Text>
+                  <Text style={styles.unitBadgeCaret}>▾</Text>
+                </Pressable>
                 <View style={styles.stepper}>
                   {/* RN mirrors flexDirection:'row' under RTL, so JSX order here is
                       reversed on purpose: this renders visually as [−] [qty] [+]. */}
@@ -416,14 +516,14 @@ export default function OrderBuilderScreen() {
                   <TextInput
                     testID={`quantity-${product.id}`}
                     style={styles.quantityInput}
-                    keyboardType={isWeightUnit(product.unitType) ? 'decimal-pad' : 'number-pad'}
+                    keyboardType={isWeightUnit(unit) ? 'decimal-pad' : 'number-pad'}
                     value={formatQuantity(currentQuantity)}
                     onChangeText={(text) => {
                       const parsed = Number(text.replace(',', '.'));
                       if (!Number.isFinite(parsed)) return;
                       setQuantity(
                         product,
-                        isWeightUnit(product.unitType) ? parsed : Math.trunc(parsed),
+                        isWeightUnit(unit) ? parsed : Math.trunc(parsed),
                       );
                     }}
                   />
@@ -518,8 +618,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    // Now a control rather than a label: the caret sits beside the text to
+    // say so, and gap keeps them apart under RTL mirroring.
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   unitBadgeText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  unitBadgeCaret: { color: '#fff', fontSize: 11, marginTop: 1 },
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -29,3 +29,15 @@ export function isWeightUnit(unitType: string): boolean {
 export function quantityStep(unitType: string): number {
   return isWeightUnit(unitType) ? 0.5 : 1;
 }
+
+/**
+ * Renders a quantity without trailing zeros: 2 stays "2", 2.5 stays "2.5",
+ * and the "2.50" that numeric columns hand back becomes "2.5".
+ *
+ * Mirrored in mobile/src/products/unitTypes.ts.
+ */
+export function formatQuantity(quantity: number): string {
+  return Number.isInteger(quantity)
+    ? String(quantity)
+    : String(Number(quantity.toFixed(2)));
+}

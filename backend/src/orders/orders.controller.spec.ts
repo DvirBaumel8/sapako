@@ -20,7 +20,10 @@ describe('OrdersController', () => {
   const mockOrdersService = {
     createDraft: jest.fn(),
     addItem: jest.fn(),
-    updateItemQuantity: jest.fn(),
+    updateItem: jest.fn(),
+    handOff: jest.fn(),
+    confirmSent: jest.fn(),
+    revertToDraft: jest.fn(),
     removeItem: jest.fn(),
     publish: jest.fn(),
     remove: jest.fn(),
@@ -88,19 +91,55 @@ describe('OrdersController', () => {
   });
 
   describe('updateItem', () => {
-    it('delegates to the service with the order id, item id and quantity', async () => {
+    it('delegates to the service with the order id, item id and changes', async () => {
       const dto: UpdateOrderItemDto = { quantity: 3 };
       const updated = { id: 'i1', quantity: 3 };
-      mockOrdersService.updateItemQuantity.mockResolvedValue(updated);
+      mockOrdersService.updateItem.mockResolvedValue(updated);
 
       const result = await controller.updateItem('o1', 'i1', dto);
 
-      expect(mockOrdersService.updateItemQuantity).toHaveBeenCalledWith(
+      expect(mockOrdersService.updateItem).toHaveBeenCalledWith(
         'o1',
         'i1',
-        3,
+        dto,
       );
       expect(result).toBe(updated);
+    });
+
+    it('passes a unit-only change through, without inventing a quantity', async () => {
+      const dto: UpdateOrderItemDto = { unitType: 'ק"ג' };
+      mockOrdersService.updateItem.mockResolvedValue({ id: 'i1' });
+
+      await controller.updateItem('o1', 'i1', dto);
+
+      expect(mockOrdersService.updateItem).toHaveBeenCalledWith('o1', 'i1', {
+        unitType: 'ק"ג',
+      });
+    });
+  });
+
+  describe('send confirmation routes', () => {
+    it.each([
+      ['handOff', 'handOff'],
+      ['confirmSent', 'confirmSent'],
+      ['revertToDraft', 'revertToDraft'],
+    ])(
+      '%s delegates to the service with the order id',
+      async (route, method) => {
+        const returned = { id: 'o1' };
+        mockOrdersService[method].mockResolvedValue(returned);
+
+        const result = await controller[route]('o1');
+
+        expect(mockOrdersService[method]).toHaveBeenCalledWith('o1');
+        expect(result).toBe(returned);
+      },
+    );
+
+    it('keeps the deprecated publish route, for clients on a cached shell', () => {
+      // The app is a PWA behind a service worker: a phone can still be
+      // running the pre-handoff bundle, and it calls this route.
+      expect(typeof controller.publish).toBe('function');
     });
   });
 

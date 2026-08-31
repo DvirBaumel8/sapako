@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { publishOrder } from '../api/orders';
+import { handOffOrder } from '../api/orders';
 import { buildOrderMessage } from './buildOrderMessage';
 import { toWhatsAppPhoneNumber } from '../utils/whatsappPhone';
 import { useAlert } from '../ui/AlertProvider';
@@ -12,9 +12,9 @@ interface PublishButtonProps {
   order: Order;
   items: OrderItem[];
   /**
-   * Awaited after WhatsApp is opened and before the order is marked
-   * published, so a quantity the user changed a moment ago is not still
-   * sitting in a queue when the order is closed off.
+   * Awaited after WhatsApp is opened and before the order is handed off, so a
+   * quantity the user changed a moment ago is not still sitting in a queue
+   * when the order stops accepting edits.
    */
   onBeforeMarkPublished?: () => Promise<void>;
 }
@@ -33,18 +33,16 @@ export function PublishButton({ order, items, onBeforeMarkPublished }: PublishBu
     if (items.length === 0) return;
     setIsPublishing(true);
     try {
-      // Open WhatsApp *before* marking the order published — everything the
-      // message needs (provider name/phone, item snapshots) is already in
-      // local state, so there's no need to round-trip through publish() just
-      // to build it. This way a failed/cancelled WhatsApp launch leaves the
-      // order in DRAFT (still editable, safe to retry) instead of silently
-      // marking it as sent when it never actually reached WhatsApp.
+      // Open WhatsApp *before* recording anything — everything the message
+      // needs (provider name/phone, item snapshots) is already in local
+      // state, so there's no need to round-trip first. A failed or cancelled
+      // launch leaves the order in DRAFT, still editable and safe to retry.
       const message = buildOrderMessage({ ...order, items });
       const phoneDigitsOnly = toWhatsAppPhoneNumber(order.provider.phone);
       const url = `https://wa.me/${phoneDigitsOnly}?text=${encodeURIComponent(message)}`;
       // Hand off in a separate browsing context rather than navigating this
       // one. Assigning location.href would begin unloading the page, and the
-      // browser cancels in-flight requests on unload — so the publishOrder
+      // browser cancels in-flight requests on unload — so the handOffOrder
       // call below would never complete and the order would stay a draft
       // even though the message was sent, inviting a duplicate send.
       //
@@ -56,16 +54,19 @@ export function PublishButton({ order, items, onBeforeMarkPublished }: PublishBu
       const handedOff = window.open(url, '_blank');
       if (!handedOff) {
         // Blocked anyway. Navigating this tab always works, at the cost of
-        // losing the publishOrder call — better than not sending the order.
+        // losing the handOffOrder call — better than not sending the order.
         window.location.href = url;
       }
       try {
         await onBeforeMarkPublished?.();
-        await publishOrder(order.id);
+        // Records only that WhatsApp was opened. Whether the message was
+        // actually sent is something the app cannot see, so it is asked on
+        // return rather than assumed here.
+        await handOffOrder(order.id);
       } catch {
         showAlert({
-          title: 'ההודעה נשלחה, אך סימון ההזמנה נכשל',
-          message: 'ההודעה כבר נפתחה ב-WhatsApp. אם ההזמנה עדיין מופיעה כטיוטה, אין צורך לשלוח שוב — יש לפנות לתמיכה אם הבעיה חוזרת.',
+          title: 'ההודעה נפתחה, אך סימון ההזמנה נכשל',
+          message: 'ההודעה כבר נפתחה ב-WhatsApp. ההזמנה נשארה כטיוטה — אם ההודעה נשלחה, אין צורך לשלוח שוב.',
         });
       }
       router.replace('/');

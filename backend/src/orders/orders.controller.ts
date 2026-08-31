@@ -48,7 +48,7 @@ export class OrdersController {
     @Param('itemId') itemId: string,
     @Body() dto: UpdateOrderItemDto,
   ): Promise<OrderItem> {
-    return this.ordersService.updateItemQuantity(orderId, itemId, dto.quantity);
+    return this.ordersService.updateItem(orderId, itemId, dto);
   }
 
   @Delete(':id/items/:itemId')
@@ -60,6 +60,33 @@ export class OrdersController {
     return this.ordersService.removeItem(orderId, itemId);
   }
 
+  /**
+   * Records that WhatsApp was opened for this order.
+   *
+   * Superseded /publish, which is kept below because the app is a PWA served
+   * by a service worker: a client running a cached shell from before this
+   * deploy still calls the old route, and removing it would break their
+   * ordering the moment the backend shipped.
+   */
+  @Post(':id/handoff')
+  @UseGuards(OrderAccessGuard)
+  handOff(@Param('id') orderId: string): Promise<Order> {
+    return this.ordersService.handOff(orderId);
+  }
+
+  @Post(':id/confirm')
+  @UseGuards(OrderAccessGuard)
+  confirmSent(@Param('id') orderId: string): Promise<Order> {
+    return this.ordersService.confirmSent(orderId);
+  }
+
+  @Post(':id/revert')
+  @UseGuards(OrderAccessGuard)
+  revertToDraft(@Param('id') orderId: string): Promise<Order> {
+    return this.ordersService.revertToDraft(orderId);
+  }
+
+  /** @deprecated Superseded by handoff + confirm. See handOff() above. */
   @Post(':id/publish')
   @UseGuards(OrderAccessGuard)
   publish(@Param('id') orderId: string): Promise<Order> {
@@ -89,5 +116,25 @@ export class BranchOrdersController {
     const accessibleProviderIds =
       await this.permissionsService.getAccessibleProviderIds(req.user);
     return this.ordersService.findByBranch(branchId, accessibleProviderIds);
+  }
+
+  /**
+   * The orders this branch handed to WhatsApp and has not answered for yet.
+   *
+   * Served from the database rather than remembered on the device: the user
+   * may confirm from a different phone, after a reload, or after the service
+   * worker updated, and an order nobody answered for must keep asking.
+   */
+  @Get('awaiting-confirmation')
+  async findAwaiting(
+    @Req() req: any,
+    @Param('branchId') branchId: string,
+  ): Promise<Order[]> {
+    const accessibleProviderIds =
+      await this.permissionsService.getAccessibleProviderIds(req.user);
+    return this.ordersService.findAwaitingConfirmation(
+      branchId,
+      accessibleProviderIds,
+    );
   }
 }

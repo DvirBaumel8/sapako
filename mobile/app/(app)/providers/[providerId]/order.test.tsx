@@ -56,8 +56,9 @@ jest.mock('../../../../src/api/orders', () => ({
   createDraftOrder: jest.fn(),
   addOrderItem: jest.fn(),
   updateOrderItemQuantity: jest.fn(),
+  updateOrderItemUnit: jest.fn(),
   removeOrderItem: jest.fn(),
-  publishOrder: jest.fn(),
+  handOffOrder: jest.fn(),
   fetchOrdersForBranch: jest.fn(),
   deleteOrder: jest.fn(),
 }));
@@ -67,6 +68,7 @@ import {
   createDraftOrder,
   addOrderItem,
   updateOrderItemQuantity,
+  updateOrderItemUnit,
   removeOrderItem,
   fetchOrdersForBranch,
 } from '../../../../src/api/orders';
@@ -129,6 +131,14 @@ beforeEach(() => {
     }),
   );
   (removeOrderItem as jest.Mock).mockResolvedValue(undefined);
+  (updateOrderItemUnit as jest.Mock).mockImplementation(
+    async (_orderId: string, itemId: string, unitType: string) => ({
+      id: itemId,
+      productNameSnapshot: 'מוצר',
+      unitType,
+      quantity: 1,
+    }),
+  );
 });
 
 let activeQueryClient: QueryClient | null = null;
@@ -234,5 +244,147 @@ it('reverts the displayed quantity when the write fails', async () => {
 
   await waitFor(() => {
     expect(screen.getByTestId(`quantity-${CARTON_PRODUCT.id}`).props.value).toBe('0');
+  });
+});
+
+describe('changing the unit for this order', () => {
+  it('shows the product’s catalogue unit before anything is changed', async () => {
+    await renderScreen();
+
+    expect(screen.getByTestId(`unit-label-${CARTON_PRODUCT.id}`)).toHaveTextContent('קרטון');
+    expect(screen.getByTestId(`unit-label-${WEIGHT_PRODUCT.id}`)).toHaveTextContent('ק"ג');
+  });
+
+  it('opens a picker when the unit badge is tapped', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId(`unit-${CARTON_PRODUCT.id}`));
+
+    expect(screen.getByText('יחידת מידה')).toBeTruthy();
+  });
+
+  it('states that the change applies to this order only', async () => {
+    // The product keeps its catalogue unit, and the sheet has to say so —
+    // otherwise the user reasonably assumes they just edited the product.
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId(`unit-${CARTON_PRODUCT.id}`));
+
+    expect(screen.getByText('השינוי חל על הזמנה זו בלבד')).toBeTruthy();
+  });
+
+  it('shows the newly chosen unit on the row', async () => {
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId(`unit-${CARTON_PRODUCT.id}`));
+
+    await fireEvent.press(screen.getByTestId('unit-option-ק"ג'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`unit-label-${CARTON_PRODUCT.id}`)).toHaveTextContent('ק"ג');
+    });
+  });
+
+  it('writes nothing when the row has no quantity yet', async () => {
+    // There is no order item to update until the first "+", so a write here
+    // would have nothing to address. The choice is held and sent on create.
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId(`unit-${CARTON_PRODUCT.id}`));
+
+    await fireEvent.press(screen.getByTestId('unit-option-ק"ג'));
+
+    expect(updateOrderItemUnit).not.toHaveBeenCalled();
+  });
+
+  it('sends the chosen unit when the line is first created', async () => {
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId(`unit-${CARTON_PRODUCT.id}`));
+    await fireEvent.press(screen.getByTestId('unit-option-ק"ג'));
+
+    await fireEvent.press(screen.getByTestId(`increment-${CARTON_PRODUCT.id}`));
+
+    await waitFor(() => {
+      expect(addOrderItem).toHaveBeenCalledWith(
+        'order-1',
+        expect.objectContaining({ productId: CARTON_PRODUCT.id, unitType: 'ק"ג' }),
+      );
+    });
+  });
+
+  it('steps by a half once the row is a weight, not by a whole', async () => {
+    // quantityStep reads the unit. Taking it from the catalogue rather than
+    // the order would step this row by 1 while displaying kilograms.
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId(`unit-${CARTON_PRODUCT.id}`));
+    await fireEvent.press(screen.getByTestId('unit-option-ק"ג'));
+
+    await fireEvent.press(screen.getByTestId(`increment-${CARTON_PRODUCT.id}`));
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`quantity-${CARTON_PRODUCT.id}`).props.value).toBe('0.5');
+    });
+  });
+
+  it('shows the saved line’s unit, not the catalogue’s, once a line exists', async () => {
+    // The server is the authority once a line exists: it may have rounded or
+    // otherwise adjusted what was sent.
+    (addOrderItem as jest.Mock).mockResolvedValue({
+      id: `item-${CARTON_PRODUCT.id}`,
+      productId: CARTON_PRODUCT.id,
+      productNameSnapshot: 'מוצר',
+      unitType: 'יחידה',
+      quantity: 1,
+    });
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId(`increment-${CARTON_PRODUCT.id}`));
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`unit-label-${CARTON_PRODUCT.id}`)).toHaveTextContent(
+        'יחידה',
+      );
+    });
+  });
+
+  it('updates the existing line when the row already has a quantity', async () => {
+    // Resolves with a unit the catalogue does not have, so the assertion
+    // below waits for the line to be *applied* rather than merely requested —
+    // tapping before then finds no line to update, and the write is skipped.
+    (addOrderItem as jest.Mock).mockResolvedValue({
+      id: `item-${CARTON_PRODUCT.id}`,
+      productId: CARTON_PRODUCT.id,
+      productNameSnapshot: 'מוצר',
+      unitType: 'יחידה',
+      quantity: 1,
+    });
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId(`increment-${CARTON_PRODUCT.id}`));
+    await waitFor(() => {
+      expect(screen.getByTestId(`unit-label-${CARTON_PRODUCT.id}`)).toHaveTextContent(
+        'יחידה',
+      );
+    });
+
+    await fireEvent.press(screen.getByTestId(`unit-${CARTON_PRODUCT.id}`));
+    await fireEvent.press(screen.getByTestId('unit-option-ק"ג'));
+
+    await waitFor(() => {
+      expect(updateOrderItemUnit).toHaveBeenCalledWith(
+        'order-1',
+        `item-${CARTON_PRODUCT.id}`,
+        'ק"ג',
+      );
+    });
+  });
+
+  it('leaves other rows on their own units', async () => {
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId(`unit-${CARTON_PRODUCT.id}`));
+
+    await fireEvent.press(screen.getByTestId('unit-option-יחידה'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`unit-label-${CARTON_PRODUCT.id}`)).toHaveTextContent('יחידה');
+    });
+    expect(screen.getByTestId(`unit-label-${WEIGHT_PRODUCT.id}`)).toHaveTextContent('ק"ג');
   });
 });

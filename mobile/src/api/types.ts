@@ -38,7 +38,12 @@ export interface Product {
 
 export type ProviderProductSummary = Pick<Product, 'id' | 'name' | 'providerId' | 'barcode'>;
 
-export type OrderStatus = 'DRAFT' | 'PUBLISHED';
+/**
+ * AWAITING_CONFIRMATION: WhatsApp was opened for this order, but nobody has
+ * said whether the message was actually sent. wa.me gives no receipt, so
+ * this is as much as the app can know on its own.
+ */
+export type OrderStatus = 'DRAFT' | 'AWAITING_CONFIRMATION' | 'PUBLISHED';
 
 export interface OrderItem {
   id: string;
@@ -56,6 +61,8 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   publishedAt?: string;
+  handedOffAt?: string;
+  notificationSentAt?: string;
   items: OrderItem[];
   provider: Pick<Provider, 'id' | 'name' | 'phone'>;
 }
