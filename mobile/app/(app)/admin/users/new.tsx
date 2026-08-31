@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { createUser } from '../../../../src/api/users';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
@@ -11,6 +12,7 @@ import { useAlert } from '../../../../src/ui/AlertProvider';
 export default function NewUserScreen() {
   useRequireAdmin();
   const showAlert = useAlert();
+  const queryClient = useQueryClient();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [usernameError, setUsernameError] = useState('');
@@ -19,6 +21,10 @@ export default function NewUserScreen() {
     setUsernameError('');
     try {
       await createUser({ username, password, role: 'STAFF' });
+      // Refresh the list this row belongs to before returning to it —
+      // otherwise the screen renders its cached copy and the new record
+      // appears only after navigating away and back.
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
       router.back();
     } catch (err) {
       if (isConflictError(err)) {

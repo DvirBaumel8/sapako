@@ -72,6 +72,7 @@ export default function EditProviderScreen() {
       // list, so re-opening this screen right after saving shows the old
       // department selection instead of what was just saved.
       await queryClient.invalidateQueries({ queryKey: ['providers', selectedBranch!.id] });
+      await queryClient.invalidateQueries({ queryKey: ['branch-products'] });
       router.back();
     } catch (err) {
       if (isConflictError(err)) {
@@ -84,8 +85,11 @@ export default function EditProviderScreen() {
 
   const removeProvider = useMutation({
     mutationFn: () => deleteProvider(providerId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['providers', selectedBranch!.id] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['providers', selectedBranch!.id] });
+      // Deleting a provider deletes its products, which the home screen's
+      // search reads from a separate branch-wide list.
+      await queryClient.invalidateQueries({ queryKey: ['branch-products'] });
       router.back();
     },
     onError: () => {

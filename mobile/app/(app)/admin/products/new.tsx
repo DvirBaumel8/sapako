@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchAccessibleBranches } from '../../../../src/api/branches';
 import { fetchProvidersForBranch } from '../../../../src/api/providers';
 import { createProduct } from '../../../../src/api/products';
@@ -16,6 +16,7 @@ const DEFAULT_BRANCH_NAME = 'הילס';
 
 export default function NewProductScreen() {
   useRequireAdmin();
+  const queryClient = useQueryClient();
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: fetchAccessibleBranches });
   const [selectedBranchIds, setSelectedBranchIds] = useState<Set<string>>(new Set());
   const [primaryBranch, setPrimaryBranch] = useState<Branch | null>(null);

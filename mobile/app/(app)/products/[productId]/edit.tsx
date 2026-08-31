@@ -25,8 +25,13 @@ export default function EditProductScreen() {
   const [barcode, setBarcode] = useState(initialBarcode ?? '');
   const isNameValid = hasLetter(name);
 
-  const invalidateProducts = () =>
-    queryClient.invalidateQueries({ queryKey: ['products', providerId] });
+  const invalidateProducts = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['products', providerId] });
+    // The home screen searches a branch-wide product list under its own key.
+    // Without this, a renamed or deleted product still appears in search
+    // results until the app is fully reloaded.
+    await queryClient.invalidateQueries({ queryKey: ['branch-products'] });
+  };
 
   const handleSubmit = async () => {
     try {

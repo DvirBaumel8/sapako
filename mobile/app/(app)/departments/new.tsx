@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchAccessibleBranches } from '../../../src/api/branches';
 import { createDepartment } from '../../../src/api/departments';
 import { PrimaryButton } from '../../../src/components/PrimaryButton';
@@ -14,6 +14,7 @@ import { useAlert } from '../../../src/ui/AlertProvider';
 export default function NewDepartmentScreen() {
   useRequireAdmin();
   const showAlert = useAlert();
+  const queryClient = useQueryClient();
   const { selectedBranch } = useBranch();
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: fetchAccessibleBranches });
   const [selectedBranchIds, setSelectedBranchIds] = useState<Set<string>>(
@@ -41,6 +42,10 @@ export default function NewDepartmentScreen() {
       await Promise.all(
         Array.from(selectedBranchIds).map((branchId) => createDepartment(branchId, { name })),
       );
+      // Refresh the lists this record belongs to before returning to them —
+      // otherwise the screen renders its cached copy and the new record
+      // appears only after navigating away and back.
+      await queryClient.invalidateQueries({ queryKey: ['departments'] });
       router.back();
     } catch (err) {
       if (isConflictError(err)) {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { createBranch } from '../../../../src/api/branches';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
@@ -11,6 +12,7 @@ import { useAlert } from '../../../../src/ui/AlertProvider';
 export default function NewBranchScreen() {
   useRequireAdmin();
   const showAlert = useAlert();
+  const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
   const isNameValid = hasLetter(name);
@@ -19,6 +21,10 @@ export default function NewBranchScreen() {
     setNameError('');
     try {
       await createBranch({ name });
+      // Refresh the list this row belongs to before returning to it —
+      // otherwise the screen renders its cached copy and the new record
+      // appears only after navigating away and back.
+      await queryClient.invalidateQueries({ queryKey: ['branches'] });
       router.back();
     } catch (err) {
       if (isConflictError(err)) {

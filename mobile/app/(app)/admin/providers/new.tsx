@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchAccessibleBranches } from '../../../../src/api/branches';
 import { fetchDepartments } from '../../../../src/api/departments';
 import { createProvider } from '../../../../src/api/providers';
@@ -16,6 +16,7 @@ import { useAlert } from '../../../../src/ui/AlertProvider';
 export default function NewProviderScreen() {
   useRequireAdmin();
   const showAlert = useAlert();
+  const queryClient = useQueryClient();
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: fetchAccessibleBranches });
   const [selectedBranchIds, setSelectedBranchIds] = useState<Set<string>>(new Set());
   const [name, setName] = useState('');
@@ -81,6 +82,13 @@ export default function NewProviderScreen() {
           return createProvider(branchId, { name, phone, departmentIds });
         }),
       );
+      // Refresh the lists this record belongs to before returning to them —
+      // otherwise the screen renders its cached copy and the new record
+      // appears only after navigating away and back.
+      await queryClient.invalidateQueries({ queryKey: ['providers'] });
+      await queryClient.invalidateQueries({ queryKey: ['departments-for-branches'] });
+      // Which branches have a same-named provider is derived from this list.
+      await queryClient.invalidateQueries({ queryKey: ['matching-provider-branches'] });
       router.back();
     } catch (err) {
       if (isConflictError(err)) {
