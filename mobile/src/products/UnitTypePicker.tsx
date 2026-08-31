@@ -37,7 +37,9 @@ export function UnitTypePicker({ value, onChange }: UnitTypePickerProps) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 8 },
+  // Wraps because the list outgrew a single phone-width row when the measured
+  // units were added; without this the last chips are simply unreachable.
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     paddingVertical: 10,
     paddingHorizontal: 16,

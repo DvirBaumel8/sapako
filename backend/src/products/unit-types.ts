@@ -8,13 +8,25 @@
  * Mirrored in mobile/src/products/unitTypes.ts. There is no shared package
  * between the two, so the lists must be changed together.
  */
-export const UNIT_TYPES = ['קרטון', 'יחידה', 'ק"ג'] as const;
+export const UNIT_TYPES = [
+  'קרטון',
+  'יחידה',
+  'ק"ג',
+  'ליטר',
+  'גרם',
+  'מיליליטר',
+] as const;
 
 export type UnitType = (typeof UNIT_TYPES)[number];
 
 export const DEFAULT_UNIT_TYPE: UnitType = 'קרטון';
 
-const WEIGHT_UNITS: readonly string[] = ['ק"ג'];
+/**
+ * The units that may carry a fraction. A kilo and a litre are ordered in
+ * halves; a gram and a millilitre are already fine enough that half of one is
+ * never what somebody meant, so they are counted whole.
+ */
+const WEIGHT_UNITS: readonly string[] = ['ק"ג', 'ליטר'];
 
 /** Whether this unit is measured rather than counted, and so may be fractional. */
 export function isWeightUnit(unitType: string): boolean {
