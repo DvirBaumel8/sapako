@@ -48,3 +48,10 @@ services:
       # nothing here: the database is new, so there are no sessions to break.
       - key: JWT_SECRET
         generateValue: true
+      # Emails a copy of each confirmed order to the owner. Both are optional:
+      # with either unset the notifier no-ops, orders still confirm, and no
+      # mail is attempted — which is also what keeps CI from sending any.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ORDER_NOTIFICATION_EMAIL
+        sync: false

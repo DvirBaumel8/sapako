@@ -116,12 +116,44 @@ against an endpoint that does query the database.
 - It does not help the database: Neon's free tier also scales to zero, but it
   wakes in well under a second, which nobody notices.
 
-**Do not use a GitHub Actions cron for this.** A 10-minute schedule is ~4,300
-runs a month, and each bills a minimum of one minute against the 2,000 free
-minutes a private repo gets — it would cost more than Render's paid tier.
+**Do not use a GitHub Actions cron for this.** This repo is public, so Actions
+minutes are free and unlimited — the problem is timing, not cost. GitHub makes
+no guarantee about when a `schedule` event fires and routinely delays them by
+10-30 minutes under load, which is longer than the 15-minute sleep window this
+is meant to prevent. GitHub also disables scheduled workflows automatically
+after 60 days without repository activity.
 
 If the cold start still proves annoying in practice, Fly.io wakes a stopped
 machine in about a second rather than fifty, for a small monthly cost.
+
+## 6. Order notification email (optional)
+
+Each order the user confirms as sent is emailed to the owner as a record. It
+is sent on **confirmation**, not when WhatsApp is opened — an order composed
+and abandoned produces no mail.
+
+1. Sign up at resend.com with the address that should receive the mail.
+   Without a verified domain, Resend delivers only to the account's own signup
+   address, which is exactly this case.
+2. Create an API key with sending permission.
+3. In Render, set:
+   - `RESEND_API_KEY` — the key
+   - `ORDER_NOTIFICATION_EMAIL` — the recipient
+
+With either variable unset the notifier no-ops: orders confirm normally and no
+mail is attempted. That is also what keeps CI and local development from
+sending real email, so neither needs these set.
+
+A send failure never fails a confirmation — the WhatsApp message has already
+reached the supplier by then, and erroring there would invite a duplicate
+send. `orders.notificationSentAt` records that the mail went out, so a run of
+confirmed orders with that column null is the signal that Resend is broken:
+
+```sql
+SELECT id, "publishedAt" FROM orders
+WHERE status = 'PUBLISHED' AND "notificationSentAt" IS NULL
+ORDER BY "publishedAt" DESC LIMIT 20;
+```
 
 ## Environments
 
