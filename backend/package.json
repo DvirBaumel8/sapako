@@ -24,7 +24,8 @@
     "migration:run": "ts-node src/database/migrate.ts",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
-    "catalog:ingest": "ts-node scripts/ingest-price-catalog.ts"
+    "catalog:ingest": "ts-node scripts/ingest-price-catalog.ts",
+    "report:unscannable": "ts-node scripts/report-unscannable-products.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

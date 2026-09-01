@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { gunzipSync } from 'zlib';
 import { Client } from 'pg';
 import { parsePriceFeed, CatalogRow } from '../src/catalog/parsePriceFeed';
+import { describeTarget } from '../src/database/describeTarget';
 
 /**
  * Fills catalog_items from Israel's retail price-transparency feeds.
@@ -107,6 +108,10 @@ async function upsert(client: Client, rows: CatalogRow[]): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // Printed before any work, because DATABASE_URL falls back to .env: a
+  // forgotten prefix sends a production import to localhost without a word.
+  console.log(`writing to ${describeTarget(process.env.DATABASE_URL)}`);
+
   const links = await fetchPriceFullLinks();
   console.log(`found ${links.length} catalogue files`);
 
