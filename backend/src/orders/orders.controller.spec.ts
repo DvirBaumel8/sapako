@@ -1,8 +1,10 @@
+import { Logger } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { OrdersController, BranchOrdersController } from './orders.controller';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { AddOrderItemDto } from './dto/add-order-item.dto';
 import { UpdateOrderItemDto } from './dto/update-order-item.dto';
+import { WhatsAppAttemptDto } from './dto/whatsapp-attempt.dto';
 import { Role } from '../users/role.enum';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BranchAccessGuard } from '../permissions/branch-access.guard';
@@ -17,6 +19,7 @@ import { OrderAccessGuard } from './order-access.guard';
 // regardless of role).
 describe('OrdersController', () => {
   let controller: OrdersController;
+  let logSpy: jest.SpyInstance;
   const mockOrdersService = {
     createDraft: jest.fn(),
     addItem: jest.fn(),
@@ -31,7 +34,12 @@ describe('OrdersController', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
     controller = new OrdersController(mockOrdersService as any);
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
   });
 
   describe('guards', () => {
@@ -52,6 +60,7 @@ describe('OrdersController', () => {
       'addItem',
       'updateItem',
       'removeItem',
+      'recordWhatsAppAttempt',
       'publish',
       'remove',
     ] as const)('requires order access for %s', (method) => {
@@ -140,6 +149,42 @@ describe('OrdersController', () => {
       // The app is a PWA behind a service worker: a phone can still be
       // running the pre-handoff bundle, and it calls this route.
       expect(typeof controller.publish).toBe('function');
+    });
+  });
+
+  describe('WhatsApp attempt telemetry', () => {
+    it('writes a privacy-safe structured event for the authenticated order', () => {
+      const dto: WhatsAppAttemptDto = {
+        attemptId: 'wa-m1k9y2-abc123',
+        stage: 'launch-blocked',
+        clientMode: 'ios-pwa',
+      };
+
+      const result = controller.recordWhatsAppAttempt('o1', dto);
+
+      expect(result).toEqual({ attemptId: dto.attemptId });
+      expect(logSpy).toHaveBeenCalledWith(
+        JSON.stringify({
+          event: 'whatsapp_handoff',
+          orderId: 'o1',
+          attemptId: dto.attemptId,
+          stage: dto.stage,
+          clientMode: dto.clientMode,
+        }),
+      );
+    });
+
+    it('accepts only recognized telemetry fields', async () => {
+      const dto = new WhatsAppAttemptDto();
+      Object.assign(dto, {
+        attemptId: 'wa-m1k9y2-abc123',
+        stage: 'handoff-failed',
+        clientMode: 'ios-browser',
+      });
+
+      const { validate } = await import('class-validator');
+
+      expect(await validate(dto)).toHaveLength(0);
     });
   });
 

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Logger,
   Param,
   Post,
   Delete,
@@ -18,12 +19,15 @@ import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { AddOrderItemDto } from './dto/add-order-item.dto';
 import { UpdateOrderItemDto } from './dto/update-order-item.dto';
+import { WhatsAppAttemptDto } from './dto/whatsapp-attempt.dto';
 import { Order } from './order.entity';
 import { OrderItem } from './order-item.entity';
 
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
 export class OrdersController {
+  private readonly logger = new Logger(OrdersController.name);
+
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
@@ -72,6 +76,29 @@ export class OrdersController {
   @UseGuards(OrderAccessGuard)
   handOff(@Param('id') orderId: string): Promise<Order> {
     return this.ordersService.handOff(orderId);
+  }
+
+  /**
+   * Privacy-safe client telemetry for the browser-to-WhatsApp handoff.
+   * Render retains this structured record without receiving order text or a
+   * supplier phone number, both of which would be unnecessary sensitive data.
+   */
+  @Post(':id/whatsapp-attempt')
+  @UseGuards(OrderAccessGuard)
+  recordWhatsAppAttempt(
+    @Param('id') orderId: string,
+    @Body() dto: WhatsAppAttemptDto,
+  ): { attemptId: string } {
+    this.logger.log(
+      JSON.stringify({
+        event: 'whatsapp_handoff',
+        orderId,
+        attemptId: dto.attemptId,
+        stage: dto.stage,
+        clientMode: dto.clientMode,
+      }),
+    );
+    return { attemptId: dto.attemptId };
   }
 
   @Post(':id/confirm')

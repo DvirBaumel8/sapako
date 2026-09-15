@@ -1,6 +1,22 @@
 import { apiClient } from './client';
 import type { Order, OrderItem } from './types';
 
+export type WhatsAppAttemptStage =
+  | 'launch-attempted'
+  | 'launch-opened'
+  | 'launch-blocked'
+  | 'launch-failed'
+  | 'handoff-succeeded'
+  | 'handoff-failed'
+  | 'returned-to-app'
+  | 'navigation-failed';
+
+export type WhatsAppClientMode =
+  | 'ios-pwa'
+  | 'ios-browser'
+  | 'android-browser'
+  | 'other-browser';
+
 export async function createDraftOrder(branchId: string, providerId: string): Promise<Order> {
   const response = await apiClient.post<Order>('/orders', { branchId, providerId });
   return response.data;
@@ -47,6 +63,17 @@ export async function removeOrderItem(orderId: string, itemId: string): Promise<
 export async function handOffOrder(orderId: string): Promise<Order> {
   const response = await apiClient.post<Order>(`/orders/${orderId}/handoff`);
   return response.data;
+}
+
+export async function reportWhatsAppAttempt(
+  orderId: string,
+  input: {
+    attemptId: string;
+    stage: WhatsAppAttemptStage;
+    clientMode: WhatsAppClientMode;
+  },
+): Promise<void> {
+  await apiClient.post(`/orders/${orderId}/whatsapp-attempt`, input);
 }
 
 /** The user confirmed the WhatsApp message actually went out. */

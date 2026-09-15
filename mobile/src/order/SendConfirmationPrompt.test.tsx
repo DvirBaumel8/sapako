@@ -20,13 +20,16 @@ jest.mock('../api/orders', () => ({
   fetchOrdersAwaitingConfirmation: jest.fn(),
   confirmOrderSent: jest.fn(),
   revertOrderToDraft: jest.fn(),
+  reportWhatsAppAttempt: jest.fn(),
 }));
 
 import {
   fetchOrdersAwaitingConfirmation,
   confirmOrderSent,
   revertOrderToDraft,
+  reportWhatsAppAttempt,
 } from '../api/orders';
+import { beginWhatsAppAttempt } from './whatsappAttempt';
 
 const awaitingOrder: Order = {
   id: 'order-1',
@@ -169,5 +172,21 @@ describe('SendConfirmationPrompt', () => {
     await waitFor(() =>
       expect(fetchOrdersAwaitingConfirmation).toHaveBeenCalledTimes(2),
     );
+  });
+
+  it('records a return from WhatsApp against the original attempt', async () => {
+    const attempt = beginWhatsAppAttempt('order-1');
+    await renderPrompt();
+    await waitFor(() => expect(fetchOrdersAwaitingConfirmation).toHaveBeenCalled());
+
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    await waitFor(() => {
+      expect(reportWhatsAppAttempt).toHaveBeenCalledWith('order-1', {
+        attemptId: attempt.attemptId,
+        clientMode: attempt.clientMode,
+        stage: 'returned-to-app',
+      });
+    });
   });
 });

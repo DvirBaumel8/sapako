@@ -6,14 +6,18 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import type { Order, OrderItem } from '../api/types';
 import { AlertProvider } from '../ui/AlertProvider';
 import { PublishButton } from './PublishButton';
+import { router } from 'expo-router';
 
 jest.mock('expo-router', () => ({ router: { replace: jest.fn(), push: jest.fn() } }));
 jest.mock('react-native-safe-area-context', () =>
   require('react-native-safe-area-context/jest/mock').default,
 );
-jest.mock('../api/orders', () => ({ handOffOrder: jest.fn() }));
+jest.mock('../api/orders', () => ({
+  handOffOrder: jest.fn(),
+  reportWhatsAppAttempt: jest.fn(),
+}));
 
-import { handOffOrder } from '../api/orders';
+import { handOffOrder, reportWhatsAppAttempt } from '../api/orders';
 
 const order: Order = {
   id: 'order-1',
@@ -81,6 +85,26 @@ describe('PublishButton', () => {
     expect(openSpy).toHaveBeenCalled();
   });
 
+  it('records when the browser blocks the WhatsApp popup', async () => {
+    const consoleError = jest.spyOn(console, 'error').mockImplementation();
+    openSpy.mockReturnValue(null);
+    await renderButton();
+
+    await fireEvent.press(screen.getByText('פרסום לוואטסאפ'));
+
+    await waitFor(() => {
+      expect(reportWhatsAppAttempt).toHaveBeenCalledWith(
+        'order-1',
+        expect.objectContaining({
+          stage: 'launch-blocked',
+          attemptId: expect.any(String),
+        }),
+      );
+    });
+    expect(handOffOrder).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
   it('flushes pending quantity writes before handing off', async () => {
     // A quantity changed a moment ago may still be queued; handing off first
     // would lock the order with that change unsaved.
@@ -122,6 +146,27 @@ describe('PublishButton', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/אין צורך לשלוח שוב/)).toBeTruthy();
+    });
+    expect(reportWhatsAppAttempt).toHaveBeenCalledWith(
+      'order-1',
+      expect.objectContaining({ stage: 'handoff-failed' }),
+    );
+  });
+
+  it('reports a navigation failure without blaming the WhatsApp launch', async () => {
+    (router.replace as jest.Mock).mockImplementationOnce(() => {
+      throw new Error('router failed');
+    });
+    await renderButton();
+
+    await fireEvent.press(screen.getByText('פרסום לוואטסאפ'));
+
+    await waitFor(() => {
+      expect(reportWhatsAppAttempt).toHaveBeenCalledWith(
+        'order-1',
+        expect.objectContaining({ stage: 'navigation-failed' }),
+      );
+      expect(screen.getByText(/WhatsApp נפתח/)).toBeTruthy();
     });
   });
 });

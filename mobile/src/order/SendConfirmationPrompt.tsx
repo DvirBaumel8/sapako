@@ -5,10 +5,12 @@ import {
   confirmOrderSent,
   fetchOrdersAwaitingConfirmation,
   revertOrderToDraft,
+  reportWhatsAppAttempt,
 } from '../api/orders';
 import { useBranch } from '../branch/BranchContext';
 import { formatTimeAgo } from './timeAgo';
 import { colors, radius, spacing } from '../ui/theme';
+import { takePendingWhatsAppAttempt } from './whatsappAttempt';
 
 /**
  * Asks whether a WhatsApp message was actually sent.
@@ -42,6 +44,16 @@ export function SendConfirmationPrompt() {
     if (typeof document === 'undefined') return;
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        const attempt = takePendingWhatsAppAttempt();
+        if (attempt) {
+          void Promise.resolve(
+            reportWhatsAppAttempt(attempt.orderId, {
+              attemptId: attempt.attemptId,
+              clientMode: attempt.clientMode,
+              stage: 'returned-to-app',
+            }),
+          ).catch(() => undefined);
+        }
         refetch();
       }
     };

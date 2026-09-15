@@ -2,11 +2,16 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { handOffOrder } from '../api/orders';
+import {
+  handOffOrder,
+  reportWhatsAppAttempt,
+  type WhatsAppAttemptStage,
+} from '../api/orders';
 import { buildOrderMessage } from './buildOrderMessage';
 import { toWhatsAppPhoneNumber } from '../utils/whatsappPhone';
 import { useAlert } from '../ui/AlertProvider';
 import type { Order, OrderItem } from '../api/types';
+import { beginWhatsAppAttempt } from './whatsappAttempt';
 
 interface PublishButtonProps {
   order: Order;
@@ -32,6 +37,17 @@ export function PublishButton({ order, items, onBeforeMarkPublished }: PublishBu
   const handlePublish = async () => {
     if (items.length === 0) return;
     setIsPublishing(true);
+    const attempt = beginWhatsAppAttempt(order.id);
+    const reportStage = (stage: WhatsAppAttemptStage) => {
+      // Telemetry is deliberately fire-and-forget: awaiting a network call
+      // before window.open would break Safari's user-gesture requirement.
+      void Promise.resolve(
+        reportWhatsAppAttempt(order.id, { ...attempt, stage }),
+      ).catch(() => undefined);
+    };
+    reportStage('launch-attempted');
+
+    let url: string;
     try {
       // Open WhatsApp *before* recording anything — everything the message
       // needs (provider name/phone, item snapshots) is already in local
@@ -39,7 +55,7 @@ export function PublishButton({ order, items, onBeforeMarkPublished }: PublishBu
       // launch leaves the order in DRAFT, still editable and safe to retry.
       const message = buildOrderMessage({ ...order, items });
       const phoneDigitsOnly = toWhatsAppPhoneNumber(order.provider.phone);
-      const url = `https://wa.me/${phoneDigitsOnly}?text=${encodeURIComponent(message)}`;
+      url = `https://wa.me/${phoneDigitsOnly}?text=${encodeURIComponent(message)}`;
       // Hand off in a separate browsing context rather than navigating this
       // one. Assigning location.href would begin unloading the page, and the
       // browser cancels in-flight requests on unload — so the handOffOrder
@@ -53,25 +69,44 @@ export function PublishButton({ order, items, onBeforeMarkPublished }: PublishBu
       // is nothing left to feature-detect.
       const handedOff = window.open(url, '_blank');
       if (!handedOff) {
+        reportStage('launch-blocked');
         // Blocked anyway. Navigating this tab always works, at the cost of
-        // losing the handOffOrder call — better than not sending the order.
+        // losing the handOffOrder call. Stop here: continuing to mark an
+        // order as handed off would report a success we cannot observe.
         window.location.href = url;
+        return;
       }
+      reportStage('launch-opened');
       try {
         await onBeforeMarkPublished?.();
         // Records only that WhatsApp was opened. Whether the message was
         // actually sent is something the app cannot see, so it is asked on
         // return rather than assumed here.
         await handOffOrder(order.id);
+        reportStage('handoff-succeeded');
       } catch {
+        reportStage('handoff-failed');
         showAlert({
           title: 'ההודעה נפתחה, אך סימון ההזמנה נכשל',
-          message: 'ההודעה כבר נפתחה ב-WhatsApp. ההזמנה נשארה כטיוטה — אם ההודעה נשלחה, אין צורך לשלוח שוב.',
+          message: `ההודעה כבר נפתחה ב-WhatsApp. ההזמנה נשארה כטיוטה — אם ההודעה נשלחה, אין צורך לשלוח שוב. קוד דיווח: ${attempt.attemptId}`,
+        });
+        return;
+      }
+      try {
+        router.replace('/');
+      } catch {
+        reportStage('navigation-failed');
+        showAlert({
+          title: 'WhatsApp נפתח, אך לא ניתן היה לחזור למסך הספקים',
+          message: `ההזמנה הועברה ל-WhatsApp. קוד דיווח: ${attempt.attemptId}`,
         });
       }
-      router.replace('/');
     } catch {
-      showAlert({ title: 'לא ניתן היה לפתוח את WhatsApp', message: 'ההזמנה נשמרה כטיוטה. ניתן לנסות שוב.' });
+      reportStage('launch-failed');
+      showAlert({
+        title: 'לא ניתן היה לפתוח את WhatsApp',
+        message: `ההזמנה נשמרה כטיוטה. ניתן לנסות שוב. קוד דיווח: ${attempt.attemptId}`,
+      });
     } finally {
       setIsPublishing(false);
     }
