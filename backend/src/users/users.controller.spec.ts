@@ -3,6 +3,7 @@ import { validate } from 'class-validator';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { UsersController } from './users.controller';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { Role } from './role.enum';
 import { ROLES_KEY } from '../auth/roles.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -16,6 +17,7 @@ describe('UsersController', () => {
     create: jest.fn(),
     findById: jest.fn(),
     remove: jest.fn(),
+    update: jest.fn(),
   };
   const mockPermissionsService = {
     getAccessForBranch: jest.fn(),
@@ -92,6 +94,22 @@ describe('UsersController', () => {
       controller.remove('u1');
 
       expect(mockUsersService.remove).toHaveBeenCalledWith('u1');
+    });
+  });
+
+  describe('update', () => {
+    it('delegates the partial update and returns a safe user', async () => {
+      const dto: UpdateUserDto = { username: 'new-name', password: 'new-password' };
+      const updated = { id: 'u1', username: 'new-name' };
+      const safeUser = { id: 'u1', username: 'new-name', safe: true };
+      mockUsersService.update.mockResolvedValue(updated);
+      mockUsersService.toSafeUser.mockReturnValue(safeUser);
+
+      const result = await controller.update('u1', dto);
+
+      expect(mockUsersService.update).toHaveBeenCalledWith('u1', dto);
+      expect(mockUsersService.toSafeUser).toHaveBeenCalledWith(updated);
+      expect(result).toBe(safeUser);
     });
   });
 
@@ -216,6 +234,28 @@ describe('UsersController', () => {
       const errors = await validate(dto);
 
       expect(errors.map((error) => error.property)).toContain('role');
+    });
+  });
+
+  describe('UpdateUserDto validation', () => {
+    it('accepts a username-only update', async () => {
+      const dto = plainToInstance(UpdateUserDto, { username: 'new-name' });
+
+      expect(await validate(dto)).toHaveLength(0);
+    });
+
+    it('accepts a password-only update', async () => {
+      const dto = plainToInstance(UpdateUserDto, { password: 'new-password' });
+
+      expect(await validate(dto)).toHaveLength(0);
+    });
+
+    it('rejects a supplied password under eight characters', async () => {
+      const dto = plainToInstance(UpdateUserDto, { password: 'short1' });
+
+      const errors = await validate(dto);
+
+      expect(errors.find((error) => error.property === 'password')?.constraints).toHaveProperty('minLength');
     });
   });
 });

@@ -49,6 +49,27 @@ export class UsersService {
     return this.usersRepo.save(entity);
   }
 
+  async update(
+    id: string,
+    input: { username?: string; password?: string },
+  ): Promise<User> {
+    const user = await this.findById(id);
+
+    if (input.username && input.username !== user.username) {
+      const existing = await this.findByUsername(input.username);
+      if (existing && existing.id !== id) {
+        throw new ConflictException('Username is already taken');
+      }
+      user.username = input.username;
+    }
+
+    if (input.password) {
+      user.passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
+    }
+
+    return this.usersRepo.save(user);
+  }
+
   findByUsername(username: string): Promise<User | null> {
     return this.usersRepo.findOne({ where: { username } });
   }

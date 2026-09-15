@@ -160,6 +160,67 @@ describe('UsersService', () => {
     });
   });
 
+  describe('update', () => {
+    it('updates the username without changing the password when no password is provided', async () => {
+      const user = {
+        id: 'u1',
+        username: 'old-name',
+        passwordHash: 'existing-hash',
+        role: Role.STAFF,
+      } as User;
+      mockRepo.findOneBy.mockResolvedValue(user);
+      mockRepo.findOne.mockResolvedValue(null);
+      mockRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+      const updated = await service.update('u1', { username: 'new-name' });
+
+      expect(updated.username).toBe('new-name');
+      expect(updated.passwordHash).toBe('existing-hash');
+      expect(mockRepo.save).toHaveBeenCalledWith(user);
+    });
+
+    it('hashes a replacement password before saving', async () => {
+      const user = {
+        id: 'u1',
+        username: 'danny',
+        passwordHash: 'existing-hash',
+        role: Role.STAFF,
+      } as User;
+      mockRepo.findOneBy.mockResolvedValue(user);
+      mockRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+      const updated = await service.update('u1', { password: 'new-password' });
+
+      expect(updated.passwordHash).not.toBe('new-password');
+      expect(updated.passwordHash).not.toBe('existing-hash');
+      expect(mockRepo.save).toHaveBeenCalledWith(user);
+    });
+
+    it('rejects changing to another user\'s username', async () => {
+      mockRepo.findOneBy.mockResolvedValue({
+        id: 'u1',
+        username: 'danny',
+        passwordHash: 'existing-hash',
+        role: Role.STAFF,
+      });
+      mockRepo.findOne.mockResolvedValue({ id: 'u2', username: 'taken' });
+
+      await expect(
+        service.update('u1', { username: 'taken' }),
+      ).rejects.toThrow(ConflictException);
+      expect(mockRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects updating a user that does not exist', async () => {
+      mockRepo.findOneBy.mockResolvedValue(null);
+
+      await expect(
+        service.update('missing', { username: 'new-name' }),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
   describe('findAllWithAccess', () => {
     it('returns users with their granted provider ids', async () => {
       mockRepo.find.mockResolvedValue([

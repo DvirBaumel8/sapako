@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Patch,
   Param,
   Post,
   Put,
@@ -15,6 +16,7 @@ import { Roles } from '../auth/roles.decorator';
 import { Role } from './role.enum';
 import { UsersService, SafeUser } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { SetAccessDto } from './dto/set-access.dto';
 import { PermissionsService } from '../permissions/permissions.service';
 
@@ -42,6 +44,15 @@ export class UsersController {
   @Delete(':id')
   remove(@Param('id') id: string): Promise<void> {
     return this.usersService.remove(id);
+  }
+
+  @Patch(':id')
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+  ): Promise<SafeUser> {
+    const user = await this.usersService.update(id, dto);
+    return this.usersService.toSafeUser(user);
   }
 
   @Get(':id/access')

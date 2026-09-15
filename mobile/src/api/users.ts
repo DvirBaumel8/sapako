@@ -11,6 +11,14 @@ export async function createUser(input: { username: string; password: string; ro
   return response.data;
 }
 
+export async function updateUser(
+  userId: string,
+  input: { username?: string; password?: string },
+): Promise<UserWithAccess> {
+  const response = await apiClient.patch<UserWithAccess>(`/users/${userId}`, input);
+  return response.data;
+}
+
 export async function deleteUser(userId: string): Promise<void> {
   await apiClient.delete(`/users/${userId}`);
 }
