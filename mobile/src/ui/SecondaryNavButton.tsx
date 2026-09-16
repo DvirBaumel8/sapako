@@ -13,8 +13,15 @@ interface SecondaryNavButtonProps {
  * shadow. Multi-color emoji icons were tried here first and dropped — full-
  * color pictographs (a beige-and-red folder, a grey-and-white clock) read as
  * visually noisy against one flat blue tint, which was the actual "ugly"
- * complaint. Text-only, evenly sized, is both cleaner and narrower, which is
- * what let three of these share one row instead of wrapping.
+ * complaint.
+ *
+ * Always sized to its own text (no numberOfLines truncation): an equal-width
+ * flex layout was tried next to force three of these onto one row, but
+ * WebKit renders Hebrew noticeably wider than the Chrome build this was
+ * tested in, so on a real phone the longest label ran out of room and
+ * ellipsized into "פעילות אחרו…" — unreadable, and worse than just wrapping.
+ * The caller is responsible for giving this room (e.g. a horizontally
+ * scrolling row) rather than squeezing it.
  */
 export function SecondaryNavButton({ label, onPress, style }: SecondaryNavButtonProps) {
   return (
@@ -23,9 +30,7 @@ export function SecondaryNavButton({ label, onPress, style }: SecondaryNavButton
       accessibilityRole="button"
       style={({ pressed }) => [styles.button, pressed && styles.pressed, style]}
     >
-      <Text style={styles.label} numberOfLines={1}>
-        {label}
-      </Text>
+      <Text style={styles.label}>{label}</Text>
     </Pressable>
   );
 }

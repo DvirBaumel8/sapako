@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProvidersForBranch } from '../../src/api/providers';
@@ -132,23 +132,15 @@ export default function HomeScreen() {
       <Pressable onPress={() => router.push('/select-branch')} style={styles.branchRow}>
         <Text style={styles.branchName}>{selectedBranch!.name} ▾</Text>
       </Pressable>
-      <View style={styles.secondaryButtonRow}>
-        <SecondaryNavButton
-          label="פעילות אחרונה"
-          onPress={() => router.push('/activity')}
-          style={styles.secondaryButtonFlex}
-        />
-        <SecondaryNavButton
-          label="מחלקות"
-          onPress={() => router.push('/departments')}
-          style={styles.secondaryButtonFlex}
-        />
-        <SecondaryNavButton
-          label="סריקת ברקוד"
-          onPress={() => setIsScannerVisible(true)}
-          style={styles.secondaryButtonFlex}
-        />
-      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.secondaryButtonRow}
+      >
+        <SecondaryNavButton label="פעילות אחרונה" onPress={() => router.push('/activity')} />
+        <SecondaryNavButton label="מחלקות" onPress={() => router.push('/departments')} />
+        <SecondaryNavButton label="סריקת ברקוד" onPress={() => setIsScannerVisible(true)} />
+      </ScrollView>
       <BarcodeScannerModal
         visible={isScannerVisible}
         onScanned={handleBarcodeScanned}
@@ -251,13 +243,12 @@ const styles = StyleSheet.create({
   secondaryButtonRow: {
     flexDirection: 'row',
     gap: 8,
-    marginHorizontal: 16,
+    // paddingHorizontal, not marginHorizontal: this is a ScrollView's
+    // contentContainerStyle now, and padding is what gives a horizontally
+    // scrolling row correct edge insets that scroll with the content.
+    paddingHorizontal: 16,
     marginBottom: 12,
   },
-  // Equal thirds rather than intrinsic (label-driven) widths, so the row
-  // always fits in one line regardless of device width — the longest label
-  // no longer determines whether the row wraps.
-  secondaryButtonFlex: { flex: 1 },
   search: {
     marginHorizontal: 16,
     marginBottom: 12,
