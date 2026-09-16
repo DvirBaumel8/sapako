@@ -6,7 +6,10 @@ export interface OrderSection {
 }
 
 /**
- * Splits the activity list into "טיוטות" (drafts) and "נשלחו" (sent).
+ * Splits the activity list into "נשלחו" (sent) and "טיוטות" (drafts),
+ * sent first: finished orders are what most visits to this screen are
+ * actually looking for (checking a supplier's order history), while
+ * drafts are usually the same few in-progress ones the user just saw.
  *
  * AWAITING_CONFIRMATION sorts inside "טיוטות", above plain drafts: the
  * order has already been handed to WhatsApp, but nobody has answered
@@ -22,9 +25,9 @@ export function groupOrdersForActivity(orders: Order[]): OrderSection[] {
   const sent = orders.filter((order) => order.status === 'PUBLISHED');
 
   return [
+    ...(sent.length > 0 ? [{ title: 'נשלחו', data: sent }] : []),
     ...(awaiting.length + draft.length > 0
       ? [{ title: 'טיוטות', data: [...awaiting, ...draft] }]
       : []),
-    ...(sent.length > 0 ? [{ title: 'נשלחו', data: sent }] : []),
   ];
 }

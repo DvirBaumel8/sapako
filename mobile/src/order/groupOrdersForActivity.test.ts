@@ -13,14 +13,14 @@ const order = (id: string, status: Order['status']): Order => ({
 });
 
 describe('groupOrdersForActivity', () => {
-  it('puts DRAFT and AWAITING_CONFIRMATION together under "טיוטות", and PUBLISHED under "נשלחו"', () => {
+  it('puts PUBLISHED under "נשלחו" first, then DRAFT and AWAITING_CONFIRMATION together under "טיוטות"', () => {
     const orders = [order('d1', 'DRAFT'), order('a1', 'AWAITING_CONFIRMATION'), order('s1', 'PUBLISHED')];
 
     const sections = groupOrdersForActivity(orders);
 
-    expect(sections.map((section) => section.title)).toEqual(['טיוטות', 'נשלחו']);
-    expect(sections[0].data.map((o) => o.id)).toEqual(['a1', 'd1']);
-    expect(sections[1].data.map((o) => o.id)).toEqual(['s1']);
+    expect(sections.map((section) => section.title)).toEqual(['נשלחו', 'טיוטות']);
+    expect(sections[0].data.map((o) => o.id)).toEqual(['s1']);
+    expect(sections[1].data.map((o) => o.id)).toEqual(['a1', 'd1']);
   });
 
   it('sorts awaiting-confirmation orders above plain drafts within "טיוטות"', () => {

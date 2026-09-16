@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { SectionList, StyleSheet, Text, View } from 'react-native';
+import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteOrder, fetchOrdersForBranch } from '../../src/api/orders';
@@ -15,6 +15,7 @@ export default function ActivityScreen() {
   const queryClient = useQueryClient();
   const showAlert = useAlert();
   const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(new Set());
+  const [collapsedSectionTitles, setCollapsedSectionTitles] = useState<Set<string>>(new Set());
   const { data: orders, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['orders', selectedBranch!.id],
     queryFn: () => fetchOrdersForBranch(selectedBranch!.id),
@@ -35,6 +36,20 @@ export default function ActivityScreen() {
   const sections = useMemo(
     () => (visibleOrders ? groupOrdersForActivity(visibleOrders) : []),
     [visibleOrders],
+  );
+
+  // A collapsed section keeps its real count in the header but its data
+  // swapped for [] — SectionList itself only knows how to render or not
+  // render rows, not to fold a whole section away while still showing its
+  // header and count.
+  const sectionsForList = useMemo(
+    () =>
+      sections.map((section) => ({
+        ...section,
+        count: section.data.length,
+        data: collapsedSectionTitles.has(section.title) ? [] : section.data,
+      })),
+    [sections, collapsedSectionTitles],
   );
 
   const removeOrder = useMutation({
@@ -70,6 +85,18 @@ export default function ActivityScreen() {
     });
   };
 
+  const toggleSectionCollapsed = (title: string) => {
+    setCollapsedSectionTitles((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) {
+        next.delete(title);
+      } else {
+        next.add(title);
+      }
+      return next;
+    });
+  };
+
   const confirmDelete = (order: Order) => {
     showAlert({
       title: 'מחיקת הזמנה',
@@ -86,15 +113,26 @@ export default function ActivityScreen() {
       contentContainerStyle={styles.list}
       refreshing={isRefetching}
       onRefresh={refetch}
-      sections={sections}
+      sections={sectionsForList}
       keyExtractor={(order) => order.id}
       stickySectionHeadersEnabled
-      renderSectionHeader={({ section }) => (
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionHeaderText}>{section.title}</Text>
-          <Text style={styles.sectionHeaderCount}>{section.data.length}</Text>
-        </View>
-      )}
+      renderSectionHeader={({ section }) => {
+        const isCollapsed = collapsedSectionTitles.has(section.title);
+        return (
+          <Pressable
+            style={styles.sectionHeader}
+            onPress={() => toggleSectionCollapsed(section.title)}
+            accessibilityRole="button"
+            accessibilityLabel={`${section.title}, ${isCollapsed ? 'מוסתר' : 'מוצג'}`}
+          >
+            <Text style={styles.sectionHeaderText}>{section.title}</Text>
+            <View style={styles.sectionHeaderRight}>
+              <Text style={styles.sectionHeaderCount}>{section.count}</Text>
+              <Text style={styles.sectionChevron}>{isCollapsed ? '▸' : '▾'}</Text>
+            </View>
+          </Pressable>
+        );
+      }}
       renderItem={({ item: order }) => (
         <OrderActivityRow
           order={order}
@@ -104,7 +142,11 @@ export default function ActivityScreen() {
           onResolve={(wasSent) => resolveOrder.mutate({ order, wasSent })}
         />
       )}
-      ListEmptyComponent={!isLoading ? <Text>אין הזמנות עדיין.</Text> : null}
+      // Based on sections (pre-collapse), not the SectionList's own flattened
+      // item count: if every section is collapsed that count is 0 too, and
+      // without this check that would show "no orders yet" while there are
+      // some, just folded away.
+      ListEmptyComponent={!isLoading && sections.length === 0 ? <Text>אין הזמנות עדיין.</Text> : null}
     />
   );
 }
@@ -123,6 +165,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sectionHeaderText: { fontSize: 14, fontWeight: '700', color: '#1a1a1a', textAlign: 'right' },
+  sectionHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   sectionHeaderCount: {
     fontSize: 12,
     fontWeight: '700',
@@ -134,4 +177,5 @@ const styles = StyleSheet.create({
     minWidth: 22,
     textAlign: 'center',
   },
+  sectionChevron: { fontSize: 14, color: '#999' },
 });
