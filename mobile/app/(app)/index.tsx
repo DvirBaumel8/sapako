@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProvidersForBranch } from '../../src/api/providers';
@@ -132,15 +132,11 @@ export default function HomeScreen() {
       <Pressable onPress={() => router.push('/select-branch')} style={styles.branchRow}>
         <Text style={styles.branchName}>{selectedBranch!.name} ▾</Text>
       </Pressable>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.secondaryButtonRow}
-      >
+      <View style={styles.secondaryButtonRow}>
         <SecondaryNavButton label="פעילות אחרונה" onPress={() => router.push('/activity')} />
         <SecondaryNavButton label="מחלקות" onPress={() => router.push('/departments')} />
         <SecondaryNavButton label="סריקת ברקוד" onPress={() => setIsScannerVisible(true)} />
-      </ScrollView>
+      </View>
       <BarcodeScannerModal
         visible={isScannerVisible}
         onScanned={handleBarcodeScanned}
@@ -242,11 +238,15 @@ const styles = StyleSheet.create({
   branchName: { fontSize: 20, fontWeight: '700' },
   secondaryButtonRow: {
     flexDirection: 'row',
+    // Wraps rather than scrolling horizontally — a horizontal scroller here
+    // was tried and reverted: this app's RTL layout hits a real Safari/
+    // WebKit-vs-Chrome disagreement about where such a container starts
+    // scrolled to, which showed as the row simply not being there at all
+    // rather than needing a swipe. The same tradeoff (wrap over horizontal
+    // scroll) was already made for department chips elsewhere in this app.
+    flexWrap: 'wrap',
     gap: 8,
-    // paddingHorizontal, not marginHorizontal: this is a ScrollView's
-    // contentContainerStyle now, and padding is what gives a horizontally
-    // scrolling row correct edge insets that scroll with the content.
-    paddingHorizontal: 16,
+    marginHorizontal: 16,
     marginBottom: 12,
   },
   search: {
