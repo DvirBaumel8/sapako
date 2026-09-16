@@ -146,6 +146,22 @@ export class PermissionsService {
       .map((provider) => provider.id);
   }
 
+  /**
+   * How many providers a user can actually reach — the same resolveAccess
+   * rule a real request is checked against, unlike counting
+   * `user_provider_access` rows directly (what the admin users list showed
+   * before this), which is silently wrong for anyone reachable through a
+   * department grant instead of a direct one.
+   */
+  async countAccessibleProviders(user: AuthenticatedUser): Promise<number> {
+    if (user.role === Role.ADMIN) {
+      return this.providerRepo.count();
+    }
+    const { input, providers } = await this.buildAccessInput(user.userId);
+    return providers.filter((provider) => resolveAccess(provider.id, input).isGranted)
+      .length;
+  }
+
   async getAccessForBranch(userId: string, branchId: string) {
     const [direct, departmentGrants, blocks, providers, departments] =
       await Promise.all([

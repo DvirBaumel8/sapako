@@ -36,6 +36,7 @@ describe('PermissionsService', () => {
   const providerRepo = {
     findOne: jest.fn(),
     find: jest.fn(),
+    count: jest.fn(),
   };
   const departmentRepo = {
     findOne: jest.fn(),
@@ -48,6 +49,7 @@ describe('PermissionsService', () => {
     departmentAccessRepo.find.mockResolvedValue([]);
     blockRepo.find.mockResolvedValue([]);
     providerRepo.find.mockResolvedValue([]);
+    providerRepo.count.mockResolvedValue(0);
     departmentRepo.find.mockResolvedValue([]);
 
     const module = await Test.createTestingModule({
@@ -314,6 +316,57 @@ describe('PermissionsService', () => {
       });
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('countAccessibleProviders', () => {
+    it('counts every provider in the system for ADMIN, without a grant lookup', async () => {
+      providerRepo.count.mockResolvedValue(196);
+
+      const result = await service.countAccessibleProviders({
+        userId: 'u1',
+        role: Role.ADMIN,
+      });
+
+      expect(result).toBe(196);
+      expect(directRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('counts a provider reached only through a department grant, not just direct rows', async () => {
+      // This is the exact gap the admin users list had: reading
+      // providerAccess.length (direct rows only) undercounted anyone
+      // reachable through a department instead. This method must not repeat
+      // that mistake.
+      departmentAccessRepo.find.mockResolvedValue([
+        { userId: 'u1', departmentId: 'd1' },
+      ]);
+      providerRepo.find.mockResolvedValue([
+        { id: 'p1', branchId: 'b1', departments: [{ id: 'd1', name: 'Dept' }] },
+      ]);
+
+      const result = await service.countAccessibleProviders({
+        userId: 'u1',
+        role: Role.STAFF,
+      });
+
+      expect(result).toBe(1);
+    });
+
+    it('excludes a blocked provider even though a department would otherwise reach it', async () => {
+      departmentAccessRepo.find.mockResolvedValue([
+        { userId: 'u1', departmentId: 'd1' },
+      ]);
+      blockRepo.find.mockResolvedValue([{ userId: 'u1', providerId: 'p1' }]);
+      providerRepo.find.mockResolvedValue([
+        { id: 'p1', branchId: 'b1', departments: [{ id: 'd1', name: 'Dept' }] },
+      ]);
+
+      const result = await service.countAccessibleProviders({
+        userId: 'u1',
+        role: Role.STAFF,
+      });
+
+      expect(result).toBe(0);
     });
   });
 

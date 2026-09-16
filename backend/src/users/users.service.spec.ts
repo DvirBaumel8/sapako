@@ -221,29 +221,6 @@ describe('UsersService', () => {
     });
   });
 
-  describe('findAllWithAccess', () => {
-    it('returns users with their granted provider ids', async () => {
-      mockRepo.find.mockResolvedValue([
-        {
-          id: 'u1',
-          username: 'danny',
-          role: Role.STAFF,
-          providerAccess: [{ providerId: 'p1' }, { providerId: 'p2' }],
-        },
-      ]);
-
-      const users = await service.findAllWithAccess();
-
-      expect(mockRepo.find).toHaveBeenCalledWith({
-        relations: { providerAccess: true },
-      });
-      expect(users[0].providerAccess.map((a: any) => a.providerId)).toEqual([
-        'p1',
-        'p2',
-      ]);
-    });
-  });
-
   describe('toSafeUser', () => {
     it('strips passwordHash from the returned object', () => {
       const user = {
@@ -254,7 +231,7 @@ describe('UsersService', () => {
         createdAt: new Date(),
       } as any;
 
-      const safeUser = service.toSafeUser(user);
+      const safeUser = service.toSafeUser(user, 2);
 
       expect(safeUser).not.toHaveProperty('passwordHash');
       expect(safeUser.username).toBe('danny');
@@ -270,24 +247,27 @@ describe('UsersService', () => {
         createdAt: new Date(),
       } as any;
 
-      service.toSafeUser(user);
+      service.toSafeUser(user, 2);
 
       expect(user.passwordHash).toBe('super-secret-hash');
     });
 
-    it('preserves providerAccess when present', () => {
+    it('carries the resolved provider access count, not a raw grant-row count', () => {
+      // The caller resolves this via PermissionsService.countAccessibleProviders
+      // (direct grants AND department grants) — toSafeUser just carries it
+      // through. Passing a plain number here, unrelated to any grant rows on
+      // `user`, keeps this test from silently coupling to that resolution.
       const user = {
         id: 'u1',
         username: 'danny',
         passwordHash: 'super-secret-hash',
         role: Role.STAFF,
         createdAt: new Date(),
-        providerAccess: [{ providerId: 'p1' }],
       } as any;
 
-      const safeUser = service.toSafeUser(user);
+      const safeUser = service.toSafeUser(user, 42);
 
-      expect(safeUser.providerAccess).toEqual([{ providerId: 'p1' }]);
+      expect(safeUser.providerAccessCount).toBe(42);
     });
   });
 });

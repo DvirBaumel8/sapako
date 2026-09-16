@@ -8,7 +8,6 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './user.entity';
 import { Role } from './role.enum';
-import { UserProviderAccess } from '../permissions/user-provider-access.entity';
 
 const SALT_ROUNDS = 12;
 
@@ -19,9 +18,15 @@ const SALT_ROUNDS = 12;
  * variable, an unbranded `Omit<User, 'passwordHash'>` would let a raw
  * `User` (with `passwordHash` still attached) be returned from a
  * `Promise<SafeUser>`-typed function without any compiler error.
+ *
+ * providerAccessCount is the resolved count (direct grants AND department
+ * grants, the same rule a real request is checked against) — not
+ * `providerAccess.length`, which is only direct grants and understates
+ * anyone reachable through a department, silently and with no indication
+ * in the UI that it's happening.
  */
 export type SafeUser = Omit<User, 'passwordHash' | 'providerAccess'> & {
-  providerAccess?: UserProviderAccess[];
+  providerAccessCount: number;
   readonly __brand: 'SafeUser';
 };
 
@@ -86,13 +91,6 @@ export class UsersService {
     return this.usersRepo.find();
   }
 
-  findAllWithAccess(): Promise<User[]> {
-    // This project's installed TypeORM version types `relations` as an
-    // object map (matching the existing pattern in PermissionsService),
-    // not the string-array form — see users.service.spec.ts for coverage.
-    return this.usersRepo.find({ relations: { providerAccess: true } });
-  }
-
   countAll(): Promise<number> {
     return this.usersRepo.count();
   }
@@ -118,13 +116,13 @@ export class UsersService {
    * the only place allowed to produce a `SafeUser` — the cast below is the
    * one authorized escape hatch for the brand.
    */
-  toSafeUser(user: User): SafeUser {
+  toSafeUser(user: User, providerAccessCount: number): SafeUser {
     return {
       id: user.id,
       username: user.username,
       role: user.role,
       createdAt: user.createdAt,
-      providerAccess: user.providerAccess,
+      providerAccessCount,
     } as SafeUser;
   }
 }

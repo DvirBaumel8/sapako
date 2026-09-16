@@ -50,7 +50,7 @@ export default function UsersScreen() {
           <View style={styles.row}>
             <Pressable style={styles.rowMain} onPress={() => router.push(`/admin/users/${item.id}/edit`)}>
               <Text style={styles.username}>{item.username}</Text>
-              <Text style={styles.meta}>{item.role} · {item.providerAccess.length} ספקים</Text>
+              <Text style={styles.meta}>{item.role} · {item.providerAccessCount} ספקים</Text>
             </Pressable>
             <Pressable style={styles.editButton} onPress={() => router.push(`/admin/users/${item.id}/edit`)}>
               <Text style={styles.editIcon}>✎</Text>

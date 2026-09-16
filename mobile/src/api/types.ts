@@ -71,5 +71,9 @@ export interface UserWithAccess {
   id: string;
   username: string;
   role: Role;
-  providerAccess: { providerId: string }[];
+  // The resolved count (direct grants AND department grants) — the same
+  // rule a real request is checked against. Not a count of raw grant rows,
+  // which understates anyone reachable through a department instead of a
+  // direct grant.
+  providerAccessCount: number;
 }

@@ -12,7 +12,7 @@ import { RolesGuard } from '../auth/roles.guard';
 describe('UsersController', () => {
   let controller: UsersController;
   const mockUsersService = {
-    findAllWithAccess: jest.fn(),
+    findAll: jest.fn(),
     toSafeUser: jest.fn(),
     create: jest.fn(),
     findById: jest.fn(),
@@ -25,10 +25,12 @@ describe('UsersController', () => {
     setDepartmentAccess: jest.fn(),
     setBranchAccess: jest.fn(),
     setAllDepartmentsAccess: jest.fn(),
+    countAccessibleProviders: jest.fn(),
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPermissionsService.countAccessibleProviders.mockResolvedValue(0);
     controller = new UsersController(
       mockUsersService as any,
       mockPermissionsService as any,
@@ -49,13 +51,19 @@ describe('UsersController', () => {
   });
 
   describe('findAll', () => {
-    it('delegates to the users service and maps each user through toSafeUser', async () => {
-      const rawUsers = [{ id: 'u1' }, { id: 'u2' }];
-      const safeUsers = [
-        { id: 'u1', safe: true },
-        { id: 'u2', safe: true },
+    it('delegates to the users service and maps each user through toSafeUser with its resolved access count', async () => {
+      const rawUsers = [
+        { id: 'u1', role: Role.STAFF },
+        { id: 'u2', role: Role.ADMIN },
       ];
-      mockUsersService.findAllWithAccess.mockResolvedValue(rawUsers);
+      const safeUsers = [
+        { id: 'u1', role: Role.STAFF, safe: true },
+        { id: 'u2', role: Role.ADMIN, safe: true },
+      ];
+      mockUsersService.findAll.mockResolvedValue(rawUsers);
+      mockPermissionsService.countAccessibleProviders.mockImplementation(
+        async (user: any) => (user.userId === 'u1' ? 5 : 10),
+      );
       mockUsersService.toSafeUser.mockImplementation((user: any) => ({
         ...user,
         safe: true,
@@ -63,28 +71,39 @@ describe('UsersController', () => {
 
       const result = await controller.findAll();
 
-      expect(mockUsersService.findAllWithAccess).toHaveBeenCalledTimes(1);
-      expect(mockUsersService.toSafeUser).toHaveBeenCalledTimes(2);
+      expect(mockUsersService.findAll).toHaveBeenCalledTimes(1);
+      expect(mockPermissionsService.countAccessibleProviders).toHaveBeenCalledWith(
+        { userId: 'u1', role: Role.STAFF },
+      );
+      expect(mockPermissionsService.countAccessibleProviders).toHaveBeenCalledWith(
+        { userId: 'u2', role: Role.ADMIN },
+      );
+      expect(mockUsersService.toSafeUser).toHaveBeenCalledWith(rawUsers[0], 5);
+      expect(mockUsersService.toSafeUser).toHaveBeenCalledWith(rawUsers[1], 10);
       expect(result).toEqual(safeUsers);
     });
   });
 
   describe('create', () => {
-    it('delegates to the users service and returns it through toSafeUser', async () => {
+    it('delegates to the users service and returns it through toSafeUser with a resolved access count', async () => {
       const dto: CreateUserDto = {
         username: 'staff1',
         password: 'password123',
         role: Role.STAFF,
       };
-      const created = { id: 'u1', username: 'staff1' };
+      const created = { id: 'u1', username: 'staff1', role: Role.STAFF };
       const safeUser = { id: 'u1', username: 'staff1', safe: true };
       mockUsersService.create.mockResolvedValue(created);
+      mockPermissionsService.countAccessibleProviders.mockResolvedValue(0);
       mockUsersService.toSafeUser.mockReturnValue(safeUser);
 
       const result = await controller.create(dto);
 
       expect(mockUsersService.create).toHaveBeenCalledWith(dto);
-      expect(mockUsersService.toSafeUser).toHaveBeenCalledWith(created);
+      expect(mockPermissionsService.countAccessibleProviders).toHaveBeenCalledWith(
+        { userId: 'u1', role: Role.STAFF },
+      );
+      expect(mockUsersService.toSafeUser).toHaveBeenCalledWith(created, 0);
       expect(result).toBe(safeUser);
     });
   });
@@ -98,17 +117,21 @@ describe('UsersController', () => {
   });
 
   describe('update', () => {
-    it('delegates the partial update and returns a safe user', async () => {
+    it('delegates the partial update and returns a safe user with a resolved access count', async () => {
       const dto: UpdateUserDto = { username: 'new-name', password: 'new-password' };
-      const updated = { id: 'u1', username: 'new-name' };
+      const updated = { id: 'u1', username: 'new-name', role: Role.STAFF };
       const safeUser = { id: 'u1', username: 'new-name', safe: true };
       mockUsersService.update.mockResolvedValue(updated);
+      mockPermissionsService.countAccessibleProviders.mockResolvedValue(3);
       mockUsersService.toSafeUser.mockReturnValue(safeUser);
 
       const result = await controller.update('u1', dto);
 
       expect(mockUsersService.update).toHaveBeenCalledWith('u1', dto);
-      expect(mockUsersService.toSafeUser).toHaveBeenCalledWith(updated);
+      expect(mockPermissionsService.countAccessibleProviders).toHaveBeenCalledWith(
+        { userId: 'u1', role: Role.STAFF },
+      );
+      expect(mockUsersService.toSafeUser).toHaveBeenCalledWith(updated, 3);
       expect(result).toBe(safeUser);
     });
   });

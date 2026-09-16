@@ -31,14 +31,28 @@ export class UsersController {
 
   @Get()
   async findAll(): Promise<SafeUser[]> {
-    const users = await this.usersService.findAllWithAccess();
-    return users.map((user) => this.usersService.toSafeUser(user));
+    const users = await this.usersService.findAll();
+    return Promise.all(
+      users.map(async (user) => {
+        const providerAccessCount =
+          await this.permissionsService.countAccessibleProviders({
+            userId: user.id,
+            role: user.role,
+          });
+        return this.usersService.toSafeUser(user, providerAccessCount);
+      }),
+    );
   }
 
   @Post()
   async create(@Body() dto: CreateUserDto): Promise<SafeUser> {
     const user = await this.usersService.create(dto);
-    return this.usersService.toSafeUser(user);
+    const providerAccessCount =
+      await this.permissionsService.countAccessibleProviders({
+        userId: user.id,
+        role: user.role,
+      });
+    return this.usersService.toSafeUser(user, providerAccessCount);
   }
 
   @Delete(':id')
@@ -52,7 +66,12 @@ export class UsersController {
     @Body() dto: UpdateUserDto,
   ): Promise<SafeUser> {
     const user = await this.usersService.update(id, dto);
-    return this.usersService.toSafeUser(user);
+    const providerAccessCount =
+      await this.permissionsService.countAccessibleProviders({
+        userId: user.id,
+        role: user.role,
+      });
+    return this.usersService.toSafeUser(user, providerAccessCount);
   }
 
   @Get(':id/access')
