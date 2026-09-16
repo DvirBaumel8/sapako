@@ -13,7 +13,7 @@ export async function fetchProductsForBranch(branchId: string): Promise<Provider
 
 export async function createProduct(
   providerId: string,
-  input: { name: string; unitType: string; barcode?: string },
+  input: { name: string; unitType: string; barcode?: string; categoryId?: string },
 ): Promise<Product> {
   const response = await apiClient.post<Product>(`/providers/${providerId}/products`, input);
   return response.data;
@@ -21,7 +21,14 @@ export async function createProduct(
 
 export async function updateProduct(
   id: string,
-  input: { name?: string; unitType?: string; barcode?: string },
+  // categoryId: undefined leaves it untouched, a string assigns it, null
+  // un-assigns it — the bulk-assign toggle screen needs that third state.
+  input: {
+    name?: string;
+    unitType?: string;
+    barcode?: string;
+    categoryId?: string | null;
+  },
 ): Promise<Product> {
   const response = await apiClient.patch<Product>(`/products/${id}`, input);
   return response.data;

@@ -7,6 +7,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Provider } from '../providers/provider.entity';
+import { Category } from '../categories/category.entity';
 
 @Entity('products')
 export class Product {
@@ -31,6 +32,13 @@ export class Product {
 
   @Column({ nullable: true })
   imageUrl?: string;
+
+  @Column({ nullable: true })
+  categoryId?: string;
+
+  @ManyToOne(() => Category, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'categoryId' })
+  category?: Category;
 
   @Column({ default: true })
   isActive: boolean;

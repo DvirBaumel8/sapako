@@ -25,6 +25,13 @@ export interface Provider {
   createdAt: string;
 }
 
+export interface Category {
+  id: string;
+  providerId: string;
+  name: string;
+  createdAt: string;
+}
+
 export interface Product {
   id: string;
   providerId: string;
@@ -32,6 +39,9 @@ export interface Product {
   unitType: string;
   barcode?: string;
   imageUrl?: string;
+  // Undefined/null both mean "uncategorized" — the order screen groups
+  // either into the same "ללא קטגוריה" bucket.
+  categoryId?: string | null;
   isActive: boolean;
   createdAt: string;
 }

@@ -52,6 +52,13 @@ jest.mock('../../../../src/api/products', () => ({
   deleteProduct: jest.fn(),
 }));
 
+jest.mock('../../../../src/api/categories', () => ({
+  fetchCategoriesForProvider: jest.fn(),
+  createCategory: jest.fn(),
+  updateCategory: jest.fn(),
+  deleteCategory: jest.fn(),
+}));
+
 jest.mock('../../../../src/api/orders', () => ({
   createDraftOrder: jest.fn(),
   addOrderItem: jest.fn(),
@@ -64,6 +71,7 @@ jest.mock('../../../../src/api/orders', () => ({
 }));
 
 import { fetchProductsForProvider } from '../../../../src/api/products';
+import { fetchCategoriesForProvider } from '../../../../src/api/categories';
 import {
   createDraftOrder,
   addOrderItem,
@@ -111,6 +119,7 @@ beforeEach(() => {
     providerName: 'ספק בדיקה',
   });
   (fetchProductsForProvider as jest.Mock).mockResolvedValue([CARTON_PRODUCT, WEIGHT_PRODUCT]);
+  (fetchCategoriesForProvider as jest.Mock).mockResolvedValue([]);
   (fetchOrdersForBranch as jest.Mock).mockResolvedValue([]);
   (createDraftOrder as jest.Mock).mockResolvedValue(FIXTURE_ORDER);
   (addOrderItem as jest.Mock).mockImplementation(

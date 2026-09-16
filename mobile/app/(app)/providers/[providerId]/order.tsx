@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchProductsForProvider } from '../../../../src/api/products';
+import { fetchCategoriesForProvider } from '../../../../src/api/categories';
+import { groupProductsByCategory } from '../../../../src/products/groupProductsByCategory';
 import {
   createDraftOrder,
   addOrderItem,
@@ -32,6 +34,11 @@ import { NotificationBell } from '../../../../src/notifications/NotificationBell
 // estimate reads ~82 against a real pitch of 104 — so every retry recomputed
 // the same wrong offset and the scroll stopped ~80 rows short.
 const ROW_HEIGHT = 104;
+
+// Same reasoning as ROW_HEIGHT: an exact height lets the category SectionList
+// jump straight to any row (via a getItemLayout that treats headers+rows as
+// one flat sequence) instead of guessing from an unmeasured average.
+const SECTION_HEADER_HEIGHT = 44;
 
 export default function OrderBuilderScreen() {
   const { providerId, providerName, sourceOrder, highlightProductId } = useLocalSearchParams<{
@@ -109,6 +116,11 @@ export default function OrderBuilderScreen() {
     queryFn: () => fetchProductsForProvider(providerId),
   });
 
+  const { data: categories } = useQuery({
+    queryKey: ['categories', providerId],
+    queryFn: () => fetchCategoriesForProvider(providerId),
+  });
+
   const { data: branchOrders } = useQuery({
     queryKey: ['orders', selectedBranch?.id],
     queryFn: () => fetchOrdersForBranch(selectedBranch!.id),
@@ -120,15 +132,123 @@ export default function OrderBuilderScreen() {
     return fuzzySearch(products, search, (product) => product.name);
   }, [products, search]);
 
+  // Grouping only makes sense as a default browsing view. Mid-search it would
+  // scatter matches for the same query across several collapsed-looking
+  // sections instead of one flat, scannable list — so search always falls
+  // back to the plain FlatList below, unchanged from before categories existed.
+  const isSearching = search.trim().length > 0;
+
+  const sections = useMemo(
+    () => (filteredProducts && categories ? groupProductsByCategory(filteredProducts, categories) : []),
+    [filteredProducts, categories],
+  );
+
+  const [collapsedSectionIds, setCollapsedSectionIds] = useState<Set<string>>(new Set());
+
+  // Mirrors the Activity screen's collapse pattern: a collapsed section keeps
+  // its real count for the header but has its data swapped for [], since
+  // SectionList itself only knows how to render or omit rows, not fold a
+  // section while still showing its header.
+  const sectionsForList = useMemo(
+    () =>
+      sections.map((section) => ({
+        ...section,
+        count: section.data.length,
+        data: collapsedSectionIds.has(section.id) ? [] : section.data,
+      })),
+    [sections, collapsedSectionIds],
+  );
+
+  const toggleSectionCollapsed = (sectionId: string) => {
+    setCollapsedSectionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+      return next;
+    });
+  };
+
+  const sectionListRef = useRef<SectionList<Product>>(null);
+
+  // Treats headers and rows as one flat sequence of fixed heights, so
+  // scrollToLocation can jump straight to a row instead of guessing from an
+  // average — the same fix ROW_HEIGHT already is for the flat list above.
+  const sectionGetItemLayout = (
+    _data: unknown,
+    index: number,
+  ): { length: number; offset: number; index: number } => {
+    let offset = 0;
+    let remaining = index;
+    for (const section of sectionsForList) {
+      const rowCount = section.data.length;
+      // +1 for the header, mirroring how SectionList flattens [header, ...rows].
+      if (remaining === 0) {
+        return { length: SECTION_HEADER_HEIGHT, offset, index };
+      }
+      if (remaining <= rowCount) {
+        // A row within this section: past the header, plus every row before it.
+        return {
+          length: ROW_HEIGHT,
+          offset: offset + SECTION_HEADER_HEIGHT + (remaining - 1) * ROW_HEIGHT,
+          index,
+        };
+      }
+      offset += SECTION_HEADER_HEIGHT + rowCount * ROW_HEIGHT;
+      remaining -= rowCount + 1;
+    }
+    return { length: ROW_HEIGHT, offset, index };
+  };
+
   useEffect(() => {
-    if (!scrollTarget || !filteredProducts) return;
+    if (!scrollTarget) return;
     if (handledScrollTokenRef.current === scrollTarget.token) return;
-    const index = filteredProducts.findIndex((product) => product.id === scrollTarget.id);
-    if (index === -1) return;
-    scrollAttemptsRef.current = 0;
-    listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+
+    if (isSearching) {
+      if (!filteredProducts) return;
+      const index = filteredProducts.findIndex((product) => product.id === scrollTarget.id);
+      if (index === -1) return;
+      scrollAttemptsRef.current = 0;
+      listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+      handledScrollTokenRef.current = scrollTarget.token;
+      return;
+    }
+
+    if (!sections.length) return;
+    let sectionIndex = -1;
+    let itemIndex = -1;
+    for (let s = 0; s < sections.length; s += 1) {
+      const idx = sections[s].data.findIndex((product) => product.id === scrollTarget.id);
+      if (idx !== -1) {
+        sectionIndex = s;
+        itemIndex = idx;
+        break;
+      }
+    }
+    if (sectionIndex === -1) return;
+
+    const sectionId = sections[sectionIndex].id;
+    if (collapsedSectionIds.has(sectionId)) {
+      // Nothing rendered to scroll to while the section is folded away —
+      // expand it and let this effect re-run and find the same target again.
+      setCollapsedSectionIds((prev) => {
+        const next = new Set(prev);
+        next.delete(sectionId);
+        return next;
+      });
+      return;
+    }
+
+    sectionListRef.current?.scrollToLocation({
+      sectionIndex,
+      itemIndex,
+      viewPosition: 0.5,
+      animated: true,
+    });
     handledScrollTokenRef.current = scrollTarget.token;
-  }, [filteredProducts, scrollTarget]);
+  }, [filteredProducts, sections, scrollTarget, isSearching, collapsedSectionIds]);
 
   useEffect(() => {
     const parsedSource: Order | null = sourceOrder ? JSON.parse(sourceOrder) : null;
@@ -361,6 +481,86 @@ export default function OrderBuilderScreen() {
     setQuantity(product, 1);
   };
 
+  // Shared by both list modes (flat, while searching; sectioned, by default)
+  // so the row itself — and every quantity/unit bug already fixed on it —
+  // only exists once.
+  const renderProductCard = (product: Product) => {
+    const currentQuantity =
+      pendingQuantities[product.id] ?? itemsByProductId[product.id]?.quantity ?? 0;
+    const isHighlighted = product.id === scrollTarget?.id;
+    const unit = unitFor(product);
+    return (
+      <View style={[styles.card, isHighlighted && styles.cardHighlighted]}>
+        <View style={styles.productNameRow}>
+          <Text style={styles.productName}>{product.name}</Text>
+          {role === 'ADMIN' && isEditingProducts && (
+            <Pressable
+              hitSlop={8}
+              onPress={() =>
+                router.push({
+                  pathname: '/products/[productId]/edit',
+                  params: {
+                    productId: product.id,
+                    productName: product.name,
+                    unitType: product.unitType,
+                    barcode: product.barcode ?? '',
+                    providerId,
+                  },
+                })
+              }
+            >
+              <Text style={styles.productEditIcon}>✎</Text>
+            </Pressable>
+          )}
+        </View>
+        <View style={styles.rowBottom}>
+          <Pressable
+            testID={`unit-${product.id}`}
+            style={styles.unitBadge}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={`יחידת מידה: ${unit}. לשינוי`}
+            onPress={() => setUnitPickerProduct(product)}
+          >
+            <Text testID={`unit-label-${product.id}`} style={styles.unitBadgeText}>
+              {unit}
+            </Text>
+            <Text style={styles.unitBadgeCaret}>▾</Text>
+          </Pressable>
+          <View style={styles.stepper}>
+            {/* RN mirrors flexDirection:'row' under RTL, so JSX order here is
+                reversed on purpose: this renders visually as [−] [qty] [+]. */}
+            <Pressable
+              testID={`increment-${product.id}`}
+              onPress={() => adjustQuantity(product, 1)}
+              style={styles.stepperButton}
+            >
+              <Text style={styles.stepperButtonText}>+</Text>
+            </Pressable>
+            <TextInput
+              testID={`quantity-${product.id}`}
+              style={styles.quantityInput}
+              keyboardType={isWeightUnit(unit) ? 'decimal-pad' : 'number-pad'}
+              value={formatQuantity(currentQuantity)}
+              onChangeText={(text) => {
+                const parsed = Number(text.replace(',', '.'));
+                if (!Number.isFinite(parsed)) return;
+                setQuantity(product, isWeightUnit(unit) ? parsed : Math.trunc(parsed));
+              }}
+            />
+            <Pressable
+              testID={`decrement-${product.id}`}
+              onPress={() => adjustQuantity(product, -1)}
+              style={styles.stepperButton}
+            >
+              <Text style={styles.stepperButtonText}>−</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <Stack.Screen
@@ -434,122 +634,76 @@ export default function OrderBuilderScreen() {
           onClose={() => setUnitPickerProduct(null)}
         />
       )}
-      <FlatList
-        ref={listRef}
-        data={filteredProducts}
-        keyExtractor={(product) => product.id}
-        contentContainerStyle={styles.list}
-        getItemLayout={(_data, index) => ({
-          length: ROW_HEIGHT,
-          offset: ROW_HEIGHT * index,
-          index,
-        })}
-        onScrollToIndexFailed={(info) => {
-          // The row is outside the rendered window, so the list does not know
-          // its offset. Jumping to an estimate forces it to render, and only
-          // then can scrollToIndex place it accurately. Without the retry the
-          // list landed on the estimate — which is nowhere near the row when
-          // averageItemLength has not been measured yet, and exactly nowhere
-          // when it is still 0.
-          // Each attempt jumps to an estimate, which forces more rows to
-          // render and so improves averageItemLength for the next one. Two or
-          // three passes converge; the cap stops it looping forever if the
-          // row can never be reached.
-          if (scrollAttemptsRef.current >= 5) return;
-          scrollAttemptsRef.current += 1;
-          const rowHeight = ROW_HEIGHT;
-          listRef.current?.scrollToOffset({ offset: rowHeight * info.index, animated: false });
-          setTimeout(() => {
-            listRef.current?.scrollToIndex({
-              index: info.index,
-              animated: true,
-              viewPosition: 0.5,
-            });
-          }, 250);
-        }}
-        renderItem={({ item: product }) => {
-          const currentQuantity =
-            pendingQuantities[product.id] ?? itemsByProductId[product.id]?.quantity ?? 0;
-          const isHighlighted = product.id === scrollTarget?.id;
-          const unit = unitFor(product);
-          return (
-            <View style={[styles.card, isHighlighted && styles.cardHighlighted]}>
-              <View style={styles.productNameRow}>
-                <Text style={styles.productName}>{product.name}</Text>
-                {role === 'ADMIN' && isEditingProducts && (
-                  <Pressable
-                    hitSlop={8}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/products/[productId]/edit',
-                        params: {
-                          productId: product.id,
-                          productName: product.name,
-                          unitType: product.unitType,
-                          barcode: product.barcode ?? '',
-                          providerId,
-                        },
-                      })
-                    }
-                  >
-                    <Text style={styles.productEditIcon}>✎</Text>
-                  </Pressable>
-                )}
-              </View>
-              <View style={styles.rowBottom}>
-                <Pressable
-                  testID={`unit-${product.id}`}
-                  style={styles.unitBadge}
-                  hitSlop={6}
-                  accessibilityRole="button"
-                  accessibilityLabel={`יחידת מידה: ${unit}. לשינוי`}
-                  onPress={() => setUnitPickerProduct(product)}
-                >
-                  <Text testID={`unit-label-${product.id}`} style={styles.unitBadgeText}>
-                    {unit}
-                  </Text>
-                  <Text style={styles.unitBadgeCaret}>▾</Text>
-                </Pressable>
-                <View style={styles.stepper}>
-                  {/* RN mirrors flexDirection:'row' under RTL, so JSX order here is
-                      reversed on purpose: this renders visually as [−] [qty] [+]. */}
-                  <Pressable
-                    testID={`increment-${product.id}`}
-                    onPress={() => adjustQuantity(product, 1)}
-                    style={styles.stepperButton}
-                  >
-                    <Text style={styles.stepperButtonText}>+</Text>
-                  </Pressable>
-                  <TextInput
-                    testID={`quantity-${product.id}`}
-                    style={styles.quantityInput}
-                    keyboardType={isWeightUnit(unit) ? 'decimal-pad' : 'number-pad'}
-                    value={formatQuantity(currentQuantity)}
-                    onChangeText={(text) => {
-                      const parsed = Number(text.replace(',', '.'));
-                      if (!Number.isFinite(parsed)) return;
-                      setQuantity(
-                        product,
-                        isWeightUnit(unit) ? parsed : Math.trunc(parsed),
-                      );
-                    }}
-                  />
-                  <Pressable
-                    testID={`decrement-${product.id}`}
-                    onPress={() => adjustQuantity(product, -1)}
-                    style={styles.stepperButton}
-                  >
-                    <Text style={styles.stepperButtonText}>−</Text>
-                  </Pressable>
+      {isSearching ? (
+        <FlatList
+          ref={listRef}
+          data={filteredProducts}
+          keyExtractor={(product) => product.id}
+          contentContainerStyle={styles.list}
+          getItemLayout={(_data, index) => ({
+            length: ROW_HEIGHT,
+            offset: ROW_HEIGHT * index,
+            index,
+          })}
+          onScrollToIndexFailed={(info) => {
+            // The row is outside the rendered window, so the list does not know
+            // its offset. Jumping to an estimate forces it to render, and only
+            // then can scrollToIndex place it accurately. Without the retry the
+            // list landed on the estimate — which is nowhere near the row when
+            // averageItemLength has not been measured yet, and exactly nowhere
+            // when it is still 0.
+            // Each attempt jumps to an estimate, which forces more rows to
+            // render and so improves averageItemLength for the next one. Two or
+            // three passes converge; the cap stops it looping forever if the
+            // row can never be reached.
+            if (scrollAttemptsRef.current >= 5) return;
+            scrollAttemptsRef.current += 1;
+            const rowHeight = ROW_HEIGHT;
+            listRef.current?.scrollToOffset({ offset: rowHeight * info.index, animated: false });
+            setTimeout(() => {
+              listRef.current?.scrollToIndex({
+                index: info.index,
+                animated: true,
+                viewPosition: 0.5,
+              });
+            }, 250);
+          }}
+          renderItem={({ item: product }) => renderProductCard(product)}
+          ListEmptyComponent={
+            products ? <Text style={styles.emptyText}>לא נמצאו מוצרים תואמים לחיפוש.</Text> : null
+          }
+        />
+      ) : (
+        <SectionList
+          ref={sectionListRef}
+          sections={sectionsForList}
+          keyExtractor={(product) => product.id}
+          contentContainerStyle={styles.list}
+          stickySectionHeadersEnabled
+          getItemLayout={sectionGetItemLayout}
+          renderSectionHeader={({ section }) => {
+            const isCollapsed = collapsedSectionIds.has(section.id);
+            return (
+              <Pressable
+                style={styles.sectionHeader}
+                onPress={() => toggleSectionCollapsed(section.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`${section.title}, ${isCollapsed ? 'מוסתר' : 'מוצג'}`}
+              >
+                <Text style={styles.sectionHeaderText}>{section.title}</Text>
+                <View style={styles.sectionHeaderRight}>
+                  <Text style={styles.sectionHeaderCount}>{section.count}</Text>
+                  <Text style={styles.sectionChevron}>{isCollapsed ? '▸' : '▾'}</Text>
                 </View>
-              </View>
-            </View>
-          );
-        }}
-        ListEmptyComponent={
-          products ? <Text style={styles.emptyText}>לא נמצאו מוצרים תואמים לחיפוש.</Text> : null
-        }
-      />
+              </Pressable>
+            );
+          }}
+          renderItem={({ item: product }) => renderProductCard(product)}
+          ListEmptyComponent={
+            products ? <Text style={styles.emptyText}>אין מוצרים בקטלוג הספק הזה.</Text> : null
+          }
+        />
+      )}
       {order && (
         <PublishButton
           order={order}
@@ -616,6 +770,30 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#2563eb',
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    // Opaque, not transparent: with stickySectionHeadersEnabled this header
+    // pins to the top while cards scroll underneath it, and a see-through
+    // background would let their text bleed through behind it.
+    backgroundColor: '#f5f5f5',
+    paddingVertical: 8,
+  },
+  sectionHeaderText: { fontSize: 14, fontWeight: '700', color: '#1a1a1a', textAlign: 'right' },
+  sectionHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  sectionHeaderCount: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#666',
+    backgroundColor: '#eee',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 22,
+    textAlign: 'center',
+  },
+  sectionChevron: { fontSize: 14, color: '#999' },
   productName: { fontSize: 15, fontWeight: '600', textAlign: 'right', color: '#1a1a1a' },
   productNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   productEditIcon: { fontSize: 16, color: '#2563eb', paddingHorizontal: 4 },

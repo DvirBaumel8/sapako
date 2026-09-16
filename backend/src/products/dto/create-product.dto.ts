@@ -1,4 +1,4 @@
-import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 import { UNIT_TYPES } from '../unit-types';
 
 export class CreateProductDto {
@@ -15,4 +15,8 @@ export class CreateProductDto {
   @IsString()
   @IsOptional()
   barcode?: string;
+
+  @IsUUID()
+  @IsOptional()
+  categoryId?: string;
 }

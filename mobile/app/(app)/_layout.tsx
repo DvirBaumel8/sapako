@@ -60,6 +60,10 @@ function Gate() {
       />
       <Stack.Screen name="providers/[providerId]/order" options={{ title: '', headerLeft: () => <HeaderBackButton fallback={'/'} /> }} />
       <Stack.Screen name="providers/[providerId]/edit" options={{ title: 'עריכת ספק', headerLeft: () => <HeaderBackButton fallback={'/'} /> }} />
+      <Stack.Screen name="providers/[providerId]/categories/index" options={{ title: 'קטגוריות', headerLeft: () => <HeaderBackButton fallback={'/'} /> }} />
+      <Stack.Screen name="providers/[providerId]/categories/new" options={{ title: 'הוספת קטגוריה', headerLeft: () => <HeaderBackButton fallback={'/'} /> }} />
+      <Stack.Screen name="providers/[providerId]/categories/[categoryId]/edit" options={{ title: 'עריכת קטגוריה', headerLeft: () => <HeaderBackButton fallback={'/'} /> }} />
+      <Stack.Screen name="providers/[providerId]/categories/[categoryId]/products" options={{ title: '', headerLeft: () => <HeaderBackButton fallback={'/'} /> }} />
       <Stack.Screen name="departments/index" options={{ title: 'מחלקות', headerLeft: () => <HeaderBackButton fallback={'/'} /> }} />
       <Stack.Screen name="departments/new" options={{ title: 'הוספת מחלקה', headerLeft: () => <HeaderBackButton fallback={'/departments'} /> }} />
       <Stack.Screen name="departments/[departmentId]/edit" options={{ title: 'עריכת מחלקה', headerLeft: () => <HeaderBackButton fallback={'/departments'} /> }} />

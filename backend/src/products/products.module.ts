@@ -9,12 +9,14 @@ import {
 } from './products.controller';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { ProvidersModule } from '../providers/providers.module';
+import { CategoriesModule } from '../categories/categories.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Product]),
     PermissionsModule,
     ProvidersModule,
+    CategoriesModule,
   ],
   providers: [ProductsService],
   controllers: [

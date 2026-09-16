@@ -1,9 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, In, Repository } from 'typeorm';
 import { Product } from './product.entity';
 import { Provider } from '../providers/provider.entity';
 import { ProvidersService } from '../providers/providers.service';
+import { CategoriesService } from '../categories/categories.service';
 
 @Injectable()
 export class ProductsService {
@@ -11,22 +16,51 @@ export class ProductsService {
     @InjectRepository(Product)
     private readonly productsRepo: Repository<Product>,
     private readonly providersService: ProvidersService,
+    private readonly categoriesService: CategoriesService,
   ) {}
+
+  /** A category only makes sense for the product's own provider. */
+  private async assertCategoryBelongsToProvider(
+    categoryId: string,
+    providerId: string,
+  ): Promise<void> {
+    const category = await this.categoriesService.findById(categoryId);
+    if (category.providerId !== providerId) {
+      throw new BadRequestException(
+        'Category does not belong to this product’s provider',
+      );
+    }
+  }
 
   async create(
     providerId: string,
-    input: { name: string; unitType: string; barcode?: string },
+    input: {
+      name: string;
+      unitType: string;
+      barcode?: string;
+      categoryId?: string;
+    },
   ): Promise<Product> {
     // Confirm the provider exists before inserting — otherwise an invalid
     // providerId escapes as an unhandled FK-violation 500 instead of a
     // clean 404 (same failure mode already fixed for grantAccess).
     await this.providersService.findById(providerId);
+    if (input.categoryId) {
+      await this.assertCategoryBelongsToProvider(input.categoryId, providerId);
+    }
     const entity = this.productsRepo.create({ providerId, ...input });
     return this.productsRepo.save(entity);
   }
 
   findActiveByProvider(providerId: string): Promise<Product[]> {
-    return this.productsRepo.find({ where: { providerId, isActive: true } });
+    // Explicit order: without one, re-fetching after any write (e.g. the
+    // bulk category-assignment toggle screen) can silently reshuffle the
+    // list, which reads as rows jumping around while an admin is still
+    // tapping through them.
+    return this.productsRepo.find({
+      where: { providerId, isActive: true },
+      order: { name: 'ASC' },
+    });
   }
 
   findActiveByBranch(
@@ -61,9 +95,16 @@ export class ProductsService {
       unitType?: string;
       barcode?: string;
       isActive?: boolean;
+      categoryId?: string | null;
     },
   ): Promise<Product> {
     const product = await this.findById(id);
+    if (input.categoryId) {
+      await this.assertCategoryBelongsToProvider(
+        input.categoryId,
+        product.providerId,
+      );
+    }
     Object.assign(product, input);
     return this.productsRepo.save(product);
   }

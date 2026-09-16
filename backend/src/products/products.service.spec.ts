@@ -1,10 +1,11 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { In } from 'typeorm';
 import { ProductsService } from './products.service';
 import { Product } from './product.entity';
 import { ProvidersService } from '../providers/providers.service';
+import { CategoriesService } from '../categories/categories.service';
 
 describe('ProductsService', () => {
   let service: ProductsService;
@@ -18,6 +19,9 @@ describe('ProductsService', () => {
   const mockProvidersService = {
     findById: jest.fn(),
   };
+  const mockCategoriesService = {
+    findById: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -26,6 +30,7 @@ describe('ProductsService', () => {
         ProductsService,
         { provide: getRepositoryToken(Product), useValue: mockRepo },
         { provide: ProvidersService, useValue: mockProvidersService },
+        { provide: CategoriesService, useValue: mockCategoriesService },
       ],
     }).compile();
     service = module.get(ProductsService);
@@ -64,6 +69,31 @@ describe('ProductsService', () => {
     expect(mockRepo.save).not.toHaveBeenCalled();
   });
 
+  it('creates a product with a categoryId that belongs to the same provider', async () => {
+    mockProvidersService.findById.mockResolvedValue({ id: 'p1' });
+    mockCategoriesService.findById.mockResolvedValue({ id: 'c1', providerId: 'p1' });
+    mockRepo.create.mockImplementation((data) => data);
+    mockRepo.save.mockImplementation((data) => Promise.resolve({ id: 'pr1', ...data }));
+
+    const product = await service.create('p1', {
+      name: 'Tomatoes',
+      unitType: 'crate',
+      categoryId: 'c1',
+    });
+
+    expect(product).toMatchObject({ categoryId: 'c1' });
+  });
+
+  it('rejects creating a product with a categoryId that belongs to a different provider', async () => {
+    mockProvidersService.findById.mockResolvedValue({ id: 'p1' });
+    mockCategoriesService.findById.mockResolvedValue({ id: 'c1', providerId: 'OTHER' });
+
+    await expect(
+      service.create('p1', { name: 'Tomatoes', unitType: 'crate', categoryId: 'c1' }),
+    ).rejects.toThrow(BadRequestException);
+    expect(mockRepo.save).not.toHaveBeenCalled();
+  });
+
   it('lists only active products for a provider', async () => {
     mockRepo.find.mockResolvedValue([
       { id: 'pr1', name: 'Tomatoes', isActive: true },
@@ -73,6 +103,7 @@ describe('ProductsService', () => {
 
     expect(mockRepo.find).toHaveBeenCalledWith({
       where: { providerId: 'p1', isActive: true },
+      order: { name: 'ASC' },
     });
     expect(products).toHaveLength(1);
   });
@@ -108,6 +139,41 @@ describe('ProductsService', () => {
     expect(mockRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Cherry Tomatoes', isActive: false }),
     );
+  });
+
+  it('reassigns a product to a categoryId that belongs to its own provider', async () => {
+    mockRepo.findOneBy.mockResolvedValue({ id: 'pr1', providerId: 'p1', name: 'Tomatoes' });
+    mockCategoriesService.findById.mockResolvedValue({ id: 'c1', providerId: 'p1' });
+    mockRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+    const updated = await service.update('pr1', { categoryId: 'c1' });
+
+    expect(updated).toMatchObject({ categoryId: 'c1' });
+  });
+
+  it('rejects reassigning a product to a categoryId from a different provider', async () => {
+    mockRepo.findOneBy.mockResolvedValue({ id: 'pr1', providerId: 'p1', name: 'Tomatoes' });
+    mockCategoriesService.findById.mockResolvedValue({ id: 'c1', providerId: 'OTHER' });
+
+    await expect(service.update('pr1', { categoryId: 'c1' })).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(mockRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('un-assigns a product from its category when categoryId is explicitly null', async () => {
+    mockRepo.findOneBy.mockResolvedValue({
+      id: 'pr1',
+      providerId: 'p1',
+      name: 'Tomatoes',
+      categoryId: 'c1',
+    });
+    mockRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+    const updated = await service.update('pr1', { categoryId: null });
+
+    expect(mockCategoriesService.findById).not.toHaveBeenCalled();
+    expect(updated.categoryId).toBeNull();
   });
 
   describe('remove', () => {

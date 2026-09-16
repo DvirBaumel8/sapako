@@ -167,6 +167,12 @@ export default function EditProviderScreen() {
         onPress={handleSubmit}
         disabled={!name || !isNameValid || !isPhoneValid || selectedDepartmentIds.size === 0}
       />
+      <Pressable
+        onPress={() => router.push(`/providers/${providerId}/categories`)}
+        style={styles.categoriesButton}
+      >
+        <Text style={styles.categoriesButtonText}>ניהול קטגוריות</Text>
+      </Pressable>
       <Pressable style={styles.deleteButton} onPress={confirmDelete} disabled={removeProvider.isPending}>
         <Text style={styles.deleteButtonText}>מחיקת ספק לצמיתות</Text>
       </Pressable>
@@ -194,6 +200,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   departmentChipSelected: { backgroundColor: '#dbeafe', borderColor: '#2563eb' },
+  categoriesButton: { padding: 12, alignItems: 'center' },
+  categoriesButtonText: { color: '#2563eb', fontWeight: '600' },
   deleteButton: { paddingVertical: 12, alignItems: 'center' },
   deleteButtonText: { color: '#c0392b', fontWeight: '600', fontSize: 15 },
 });

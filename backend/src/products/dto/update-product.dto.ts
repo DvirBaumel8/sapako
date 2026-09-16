@@ -1,4 +1,11 @@
-import { IsBoolean, IsIn, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  ValidateIf,
+} from 'class-validator';
 import { UNIT_TYPES } from '../unit-types';
 
 export class UpdateProductDto {
@@ -19,4 +26,13 @@ export class UpdateProductDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  // Tri-state: omitted leaves the category untouched, a UUID assigns it, and
+  // explicit null un-assigns it back to "uncategorized" — the toggle-list
+  // bulk-assign screen needs that third state to remove a product from a
+  // category, not just add it to one.
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  @IsOptional()
+  categoryId?: string | null;
 }
