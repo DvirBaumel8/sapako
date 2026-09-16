@@ -345,20 +345,30 @@
 - Produces: evidence that the production scheduler has a successful run and
   prevents Render cold starts.
 
-- [ ] **Step 1: Confirm the GitHub workflow deployment completed successfully**
+- [x] **Step 1: Confirm the GitHub workflow deployment completed successfully**
 
   Inspect the `deploy-keepalive` workflow for the pushed commit.
 
   Expected: its test, typecheck, and deploy steps are all green.
 
-- [ ] **Step 2: Manually invoke the deployed Cron Trigger once**
+  Blocked initially: the account had never claimed a `workers.dev`
+  subdomain, so `wrangler deploy` uploaded the script but failed to set the
+  Cron Trigger (Cloudflare API code 10063) on every run, including a manual
+  UI attempt to add the trigger directly. Resolved by running the dashboard's
+  "Create Worker" wizard once, which is what actually provisions the
+  account's subdomain (visiting the Workers & Pages landing page alone does
+  not, despite the error message's suggestion). Run
+  https://github.com/DvirBaumel8/sapako/actions/runs/35085700389 deployed
+  cleanly with `schedule: */5 * * * *`.
+
+- [x] **Step 2: Manually invoke the deployed Cron Trigger once**
 
   In Cloudflare Dashboard → Workers & Pages → `sapako-keepalive` → Triggers,
   invoke the Cron Trigger and inspect the invocation log.
 
   Expected: a successful invocation with no error log.
 
-- [ ] **Step 3: Verify no cold start after the idle threshold**
+- [x] **Step 3: Verify no cold start after the idle threshold**
 
   After more than 15 minutes with no ordinary Sapako use, request
   `https://sapako-backend.onrender.com/health` and inspect Render events.
@@ -367,3 +377,9 @@
   spin-up immediately before it. If it fails, inspect the Cloudflare
   invocation log first, then the Render event log; do not add retries or
   change the endpoint without that evidence.
+
+  Verified 2026-09-16: baseline request immediately after first deploy took
+  32.5s (cold start, expected since the Worker had only just started
+  pinging). A follow-up request 18 minutes later, with no traffic from
+  anywhere except the Worker's own 5-minute cron pings, returned in 0.17s —
+  confirming the keepalive holds the app awake.
