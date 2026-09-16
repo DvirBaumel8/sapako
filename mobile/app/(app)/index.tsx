@@ -10,6 +10,7 @@ import { resolveBarcodeMatches, type BarcodeMatch } from '../../src/providers/re
 import { buildProviderSearchResults } from '../../src/providers/buildProviderSearchResults';
 import { useAlert } from '../../src/ui/AlertProvider';
 import { useAuth } from '../../src/auth/AuthContext';
+import { SecondaryNavButton } from '../../src/ui/SecondaryNavButton';
 
 export default function HomeScreen() {
   const { selectedBranch } = useBranch();
@@ -132,15 +133,9 @@ export default function HomeScreen() {
         <Text style={styles.branchName}>{selectedBranch!.name} ▾</Text>
       </Pressable>
       <View style={styles.secondaryButtonRow}>
-        <Pressable onPress={() => router.push('/activity')} style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>פעילות אחרונה</Text>
-        </Pressable>
-        <Pressable onPress={() => router.push('/departments')} style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>מחלקות</Text>
-        </Pressable>
-        <Pressable onPress={() => setIsScannerVisible(true)} style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>סריקת ברקוד</Text>
-        </Pressable>
+        <SecondaryNavButton icon="🕒" label="פעילות אחרונה" onPress={() => router.push('/activity')} />
+        <SecondaryNavButton icon="🗂️" label="מחלקות" onPress={() => router.push('/departments')} />
+        <SecondaryNavButton icon="📷" label="סריקת ברקוד" onPress={() => setIsScannerVisible(true)} />
       </View>
       <BarcodeScannerModal
         visible={isScannerVisible}
@@ -243,18 +238,13 @@ const styles = StyleSheet.create({
   branchName: { fontSize: 20, fontWeight: '700' },
   secondaryButtonRow: {
     flexDirection: 'row',
-    gap: 8,
+    // Bigger buttons no longer reliably fit one row on a narrow phone —
+    // wrapping keeps each one at full size instead of shrinking to fit.
+    flexWrap: 'wrap',
+    gap: 10,
     marginHorizontal: 16,
     marginBottom: 12,
   },
-  secondaryButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: '#eef2ff',
-    borderRadius: 10,
-    alignSelf: 'flex-start',
-  },
-  secondaryButtonText: { color: '#2563eb', fontWeight: '600', fontSize: 14 },
   search: {
     marginHorizontal: 16,
     marginBottom: 12,

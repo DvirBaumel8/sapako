@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchAccessibleBranches } from '../../src/api/branches';
 import { useBranch } from '../../src/branch/BranchContext';
 import { useAuth } from '../../src/auth/AuthContext';
+import { SecondaryNavButton } from '../../src/ui/SecondaryNavButton';
 
 export default function SelectBranchScreen() {
   const { selectBranch, selectedBranch } = useBranch();
@@ -53,9 +54,11 @@ export default function SelectBranchScreen() {
       keyExtractor={(branch) => branch.id}
       ListHeaderComponent={
         role === 'ADMIN' ? (
-          <Pressable onPress={() => router.push('/admin')} style={styles.adminButton}>
-            <Text style={styles.adminButtonText}>ניהול</Text>
-          </Pressable>
+          <SecondaryNavButton
+            icon="⚙️"
+            label="ניהול"
+            onPress={() => router.push('/admin')}
+          />
         ) : null
       }
       renderItem={({ item }) => (
@@ -76,15 +79,6 @@ export default function SelectBranchScreen() {
 const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { padding: 16, gap: 8 },
-  adminButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: '#eef2ff',
-    borderRadius: 10,
-    alignSelf: 'flex-start',
-    marginBottom: 8,
-  },
-  adminButtonText: { color: '#2563eb', fontWeight: '600', fontSize: 14 },
   item: { padding: 16, borderWidth: 1, borderColor: '#ddd', borderRadius: 8 },
   itemText: { fontSize: 16, fontWeight: '600' },
 });
