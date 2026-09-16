@@ -1,54 +1,45 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
 import { colors, radius } from './theme';
 
 interface SecondaryNavButtonProps {
   label: string;
-  icon: string;
   onPress: () => void;
+  style?: StyleProp<ViewStyle>;
 }
 
 /**
- * The top-level nav row (Recent Activity / Departments / Scan Barcode /
- * Admin) used to be plain colored text on a flat tint — visually identical
- * to `common.chip`, which is a filter/selection tag elsewhere in the app,
- * not a navigation control. A user reported not realizing these were
- * tappable at all. A border, a shadow to lift it off the background, a
- * leading icon, and larger text/padding give it the "this is a button" cues
- * chip never needed to have.
+ * A flat tonal button: tinted fill, bold accent-colored text, no border or
+ * shadow. Multi-color emoji icons were tried here first and dropped — full-
+ * color pictographs (a beige-and-red folder, a grey-and-white clock) read as
+ * visually noisy against one flat blue tint, which was the actual "ugly"
+ * complaint. Text-only, evenly sized, is both cleaner and narrower, which is
+ * what let three of these share one row instead of wrapping.
  */
-export function SecondaryNavButton({ label, icon, onPress }: SecondaryNavButtonProps) {
+export function SecondaryNavButton({ label, onPress, style }: SecondaryNavButtonProps) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.button, pressed && styles.pressed, style]}
     >
-      <Text style={styles.icon}>{icon}</Text>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label} numberOfLines={1}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     borderRadius: radius.control,
     backgroundColor: colors.accentSurface,
-    borderWidth: 1,
-    borderColor: '#c7d6fb',
     alignSelf: 'flex-start',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  pressed: { opacity: 0.7 },
-  icon: { fontSize: 16 },
-  label: { color: colors.accent, fontWeight: '700', fontSize: 15 },
+  pressed: { backgroundColor: '#dde6fd' },
+  label: { color: colors.accent, fontWeight: '700', fontSize: 14, textAlign: 'center' },
 });

@@ -133,9 +133,21 @@ export default function HomeScreen() {
         <Text style={styles.branchName}>{selectedBranch!.name} ▾</Text>
       </Pressable>
       <View style={styles.secondaryButtonRow}>
-        <SecondaryNavButton icon="🕒" label="פעילות אחרונה" onPress={() => router.push('/activity')} />
-        <SecondaryNavButton icon="🗂️" label="מחלקות" onPress={() => router.push('/departments')} />
-        <SecondaryNavButton icon="📷" label="סריקת ברקוד" onPress={() => setIsScannerVisible(true)} />
+        <SecondaryNavButton
+          label="פעילות אחרונה"
+          onPress={() => router.push('/activity')}
+          style={styles.secondaryButtonFlex}
+        />
+        <SecondaryNavButton
+          label="מחלקות"
+          onPress={() => router.push('/departments')}
+          style={styles.secondaryButtonFlex}
+        />
+        <SecondaryNavButton
+          label="סריקת ברקוד"
+          onPress={() => setIsScannerVisible(true)}
+          style={styles.secondaryButtonFlex}
+        />
       </View>
       <BarcodeScannerModal
         visible={isScannerVisible}
@@ -238,13 +250,14 @@ const styles = StyleSheet.create({
   branchName: { fontSize: 20, fontWeight: '700' },
   secondaryButtonRow: {
     flexDirection: 'row',
-    // Bigger buttons no longer reliably fit one row on a narrow phone —
-    // wrapping keeps each one at full size instead of shrinking to fit.
-    flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
     marginHorizontal: 16,
     marginBottom: 12,
   },
+  // Equal thirds rather than intrinsic (label-driven) widths, so the row
+  // always fits in one line regardless of device width — the longest label
+  // no longer determines whether the row wraps.
+  secondaryButtonFlex: { flex: 1 },
   search: {
     marginHorizontal: 16,
     marginBottom: 12,

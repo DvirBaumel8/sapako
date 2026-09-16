@@ -54,11 +54,7 @@ export default function SelectBranchScreen() {
       keyExtractor={(branch) => branch.id}
       ListHeaderComponent={
         role === 'ADMIN' ? (
-          <SecondaryNavButton
-            icon="⚙️"
-            label="ניהול"
-            onPress={() => router.push('/admin')}
-          />
+          <SecondaryNavButton label="ניהול" onPress={() => router.push('/admin')} />
         ) : null
       }
       renderItem={({ item }) => (
