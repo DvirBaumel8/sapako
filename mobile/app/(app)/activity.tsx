@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteOrder, fetchOrdersForBranch } from '../../src/api/orders';
@@ -8,6 +8,7 @@ import { useAlert } from '../../src/ui/AlertProvider';
 import type { Order } from '../../src/api/types';
 import { formatQuantity } from '../../src/products/unitTypes';
 import { orderStatusBadge } from '../../src/order/orderStatusBadge';
+import { groupOrdersForActivity } from '../../src/order/groupOrdersForActivity';
 import { confirmOrderSent, revertOrderToDraft } from '../../src/api/orders';
 
 const NAME_TRUNCATE_LENGTH = 22;
@@ -37,6 +38,11 @@ export default function ActivityScreen() {
   // Empty drafts shouldn't be created going forward (order.tsx creates them
   // lazily now), but this also hides any that already exist from before.
   const visibleOrders = useMemo(() => orders?.filter((order) => order.items.length > 0), [orders]);
+
+  const sections = useMemo(
+    () => (visibleOrders ? groupOrdersForActivity(visibleOrders) : []),
+    [visibleOrders],
+  );
 
   const removeOrder = useMutation({
     mutationFn: (orderId: string) => deleteOrder(orderId),
@@ -96,12 +102,19 @@ export default function ActivityScreen() {
   };
 
   return (
-    <FlatList
+    <SectionList
       contentContainerStyle={styles.list}
       refreshing={isRefetching}
       onRefresh={refetch}
-      data={visibleOrders}
+      sections={sections}
       keyExtractor={(order) => order.id}
+      stickySectionHeadersEnabled
+      renderSectionHeader={({ section }) => (
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionHeaderText}>{section.title}</Text>
+          <Text style={styles.sectionHeaderCount}>{section.data.length}</Text>
+        </View>
+      )}
       renderItem={({ item: order }) => {
         const isExpanded = expandedOrderIds.has(order.id);
         const orderedItems = order.items.filter((item) => item.quantity > 0);
@@ -177,6 +190,29 @@ export default function ActivityScreen() {
 
 const styles = StyleSheet.create({
   list: { padding: 16 },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    // Opaque, not transparent: with stickySectionHeadersEnabled this header
+    // pins to the top while cards scroll underneath it, and a see-through
+    // background would let their text bleed through behind it.
+    backgroundColor: '#f5f5f5',
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  sectionHeaderText: { fontSize: 14, fontWeight: '700', color: '#1a1a1a', textAlign: 'right' },
+  sectionHeaderCount: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#666',
+    backgroundColor: '#eee',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 22,
+    textAlign: 'center',
+  },
   card: { borderBottomWidth: 1, borderBottomColor: '#eee' },
   row: {
     flexDirection: 'row',
