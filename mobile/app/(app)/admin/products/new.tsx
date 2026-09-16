@@ -13,6 +13,7 @@ import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 import type { Branch, Provider } from '../../../../src/api/types';
 import { useAlert } from '../../../../src/ui/AlertProvider';
 import { UnitTypePicker } from '../../../../src/products/UnitTypePicker';
+import { CategoryPicker } from '../../../../src/products/CategoryPicker';
 import { DEFAULT_UNIT_TYPE } from '../../../../src/products/unitTypes';
 
 const DEFAULT_BRANCH_NAME = 'הילס';
@@ -32,6 +33,7 @@ export default function NewProductScreen() {
   const [providerSearch, setProviderSearch] = useState('');
   const [name, setName] = useState('');
   const [unitType, setUnitType] = useState<string>(DEFAULT_UNIT_TYPE);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   // Arriving from a scan that matched nothing: the number is already known,
   // so it is carried over rather than typed in again.
   const { barcode: scannedBarcode } = useLocalSearchParams<{ barcode?: string }>();
@@ -126,7 +128,15 @@ export default function NewProductScreen() {
       ];
       await Promise.all(
         targetProviderIds.map((providerId) =>
-          createProduct(providerId, { name, unitType, barcode: barcode || undefined }),
+          createProduct(providerId, {
+            name,
+            unitType,
+            barcode: barcode || undefined,
+            // Categories are per-provider rows, so the id picked against the
+            // primary provider's list means nothing on the duplicate copies
+            // created for other branches — only the primary gets it.
+            categoryId: providerId === provider.id ? categoryId ?? undefined : undefined,
+          }),
         ),
       );
       // Refresh the lists this product belongs to before returning to them.
@@ -184,7 +194,16 @@ export default function NewProductScreen() {
             data={filteredProviders}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <Pressable style={styles.providerRow} onPress={() => setProvider(item)}>
+              <Pressable
+                style={styles.providerRow}
+                onPress={() => {
+                  // A category id only means something within the provider it
+                  // was picked against — carrying it over to a new provider
+                  // would silently assign the wrong category.
+                  setCategoryId(null);
+                  setProvider(item);
+                }}
+              >
                 <Text style={styles.providerRowText}>{item.name}</Text>
               </Pressable>
             )}
@@ -215,6 +234,8 @@ export default function NewProductScreen() {
           <Text style={styles.label}>יחידת מידה</Text>
           <UnitTypePicker value={unitType} onChange={setUnitType} />
           <TextInput style={styles.input} placeholder="ברקוד (אופציונלי)" value={barcode} onChangeText={setBarcode} />
+          <Text style={styles.label}>קטגוריה</Text>
+          <CategoryPicker providerId={provider.id} value={categoryId} onChange={setCategoryId} />
           <Pressable onPress={() => setIsScannerVisible(true)} style={styles.scanButton}>
             <Text>סריקת ברקוד</Text>
           </Pressable>

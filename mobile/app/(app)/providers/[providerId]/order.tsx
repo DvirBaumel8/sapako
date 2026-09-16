@@ -505,6 +505,7 @@ export default function OrderBuilderScreen() {
                     unitType: product.unitType,
                     barcode: product.barcode ?? '',
                     providerId,
+                    categoryId: product.categoryId ?? '',
                   },
                 })
               }

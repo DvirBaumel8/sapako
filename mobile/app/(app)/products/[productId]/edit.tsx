@@ -8,23 +8,32 @@ import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { hasLetter, sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import { useAlert } from '../../../../src/ui/AlertProvider';
 import { UnitTypePicker } from '../../../../src/products/UnitTypePicker';
+import { CategoryPicker } from '../../../../src/products/CategoryPicker';
 import { DEFAULT_UNIT_TYPE } from '../../../../src/products/unitTypes';
 
 export default function EditProductScreen() {
   useRequireAdmin();
-  const { productId, productName, unitType: initialUnitType, barcode: initialBarcode, providerId } =
-    useLocalSearchParams<{
-      productId: string;
-      productName?: string;
-      unitType?: string;
-      barcode?: string;
-      providerId: string;
-    }>();
+  const {
+    productId,
+    productName,
+    unitType: initialUnitType,
+    barcode: initialBarcode,
+    providerId,
+    categoryId: initialCategoryId,
+  } = useLocalSearchParams<{
+    productId: string;
+    productName?: string;
+    unitType?: string;
+    barcode?: string;
+    providerId: string;
+    categoryId?: string;
+  }>();
   const queryClient = useQueryClient();
   const showAlert = useAlert();
   const [name, setName] = useState(productName ?? '');
   const [unitType, setUnitType] = useState<string>(initialUnitType ?? DEFAULT_UNIT_TYPE);
   const [barcode, setBarcode] = useState(initialBarcode ?? '');
+  const [categoryId, setCategoryId] = useState<string | null>(initialCategoryId || null);
   const isNameValid = hasLetter(name);
 
   const invalidateProducts = async () => {
@@ -37,7 +46,7 @@ export default function EditProductScreen() {
 
   const handleSubmit = async () => {
     try {
-      await updateProduct(productId, { name, unitType, barcode: barcode || undefined });
+      await updateProduct(productId, { name, unitType, barcode: barcode || undefined, categoryId });
       await invalidateProducts();
       router.back();
     } catch {
@@ -80,6 +89,8 @@ export default function EditProductScreen() {
       )}
       <UnitTypePicker value={unitType} onChange={setUnitType} />
       <TextInput style={styles.input} placeholder="ברקוד (אופציונלי)" value={barcode} onChangeText={setBarcode} />
+      <Text style={styles.label}>קטגוריה</Text>
+      <CategoryPicker providerId={providerId} value={categoryId} onChange={setCategoryId} />
       <PrimaryButton title="שמירה" onPress={handleSubmit} disabled={!name || !isNameValid || !unitType} />
       <Pressable style={styles.deleteButton} onPress={confirmDelete} disabled={removeProduct.isPending}>
         <Text style={styles.deleteButtonText}>מחיקת מוצר</Text>
@@ -90,6 +101,7 @@ export default function EditProductScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12 },
+  label: { fontWeight: '600', textAlign: 'right' },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
   errorText: { color: '#c0392b', fontSize: 13, textAlign: 'right' },
   deleteButton: { paddingVertical: 12, alignItems: 'center' },
