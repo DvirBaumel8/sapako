@@ -31,8 +31,8 @@ any non-2xx response or network error as a failed ping. It writes an error to
 Cloudflare's Worker log in those cases. It emits nothing for successful pings
 so operational logs remain useful.
 
-The Worker has no public fetch handler. It therefore cannot be used as a proxy
-or externally triggered job.
+The Worker has no public fetch handler and disables the default `workers.dev`
+route. It therefore cannot be used as a proxy or externally triggered job.
 
 ```
 Cloudflare Cron Trigger (every 5 minutes)

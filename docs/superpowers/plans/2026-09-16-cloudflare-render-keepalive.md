@@ -100,6 +100,7 @@
     "name": "sapako-keepalive",
     "main": "src/index.ts",
     "compatibility_date": "2026-09-16",
+    "workers_dev": false,
     "triggers": {
       "crons": ["*/5 * * * *"]
     }
