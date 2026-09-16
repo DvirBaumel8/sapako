@@ -52,6 +52,12 @@ export class OrdersService {
       createdByUserId: userId,
       status: OrderStatus.DRAFT,
     });
+    // save() only persists and echoes back scalar columns — provider is a
+    // relation TypeORM never populates from a plain create()+save(). The
+    // mobile client reads order.provider.name/.phone as soon as the order
+    // comes back to build the WhatsApp message, so a provider-less order
+    // crashes the very next publish.
+    entity.provider = provider;
     return this.orderRepo.save(entity);
   }
 

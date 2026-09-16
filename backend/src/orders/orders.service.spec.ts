@@ -99,6 +99,25 @@ describe('OrdersService', () => {
       });
     });
 
+    it('includes the provider on the returned order', async () => {
+      // The mobile client reads order.provider.name/.phone the moment the
+      // order comes back, to build the WhatsApp message — before the item
+      // list even exists. A provider-less order crashes that publish.
+      const provider = { id: 'p1', branchId: 'b1', name: 'ספק', phone: '050' };
+      providersService.findById.mockResolvedValue(provider);
+      orderRepo.create.mockImplementation((data) => data);
+      orderRepo.save.mockImplementation((data) =>
+        Promise.resolve({ id: 'o1', items: [], ...data }),
+      );
+
+      const order = await service.createDraft('u1', {
+        branchId: 'b1',
+        providerId: 'p1',
+      });
+
+      expect(order.provider).toEqual(provider);
+    });
+
     it("rejects when the provider doesn't belong to the given branch", async () => {
       providersService.findById.mockResolvedValue({
         id: 'p1',

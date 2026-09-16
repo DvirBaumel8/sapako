@@ -41,8 +41,14 @@ export function PublishButton({ order, items, onBeforeMarkPublished }: PublishBu
     const reportStage = (stage: WhatsAppAttemptStage) => {
       // Telemetry is deliberately fire-and-forget: awaiting a network call
       // before window.open would break Safari's user-gesture requirement.
+      // orderId is left out on purpose — it's already the URL param, and the
+      // backend DTO rejects a body carrying it as an extra property.
       void Promise.resolve(
-        reportWhatsAppAttempt(order.id, { ...attempt, stage }),
+        reportWhatsAppAttempt(order.id, {
+          attemptId: attempt.attemptId,
+          clientMode: attempt.clientMode,
+          stage,
+        }),
       ).catch(() => undefined);
     };
     reportStage('launch-attempted');

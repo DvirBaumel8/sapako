@@ -64,6 +64,17 @@ describe('PublishButton', () => {
     expect(url).toContain('wa.me/972501234567');
   });
 
+  it('never sends orderId in the telemetry body, since the backend DTO rejects it as an extra property', async () => {
+    await renderButton();
+
+    await fireEvent.press(screen.getByText('פרסום לוואטסאפ'));
+
+    await waitFor(() => expect(reportWhatsAppAttempt).toHaveBeenCalled());
+    for (const call of (reportWhatsAppAttempt as jest.Mock).mock.calls) {
+      expect(call[1]).not.toHaveProperty('orderId');
+    }
+  });
+
   it('records a handoff, not a send', async () => {
     // The app cannot observe whether the message left the device, so this
     // must not be the thing that marks the order as sent.
