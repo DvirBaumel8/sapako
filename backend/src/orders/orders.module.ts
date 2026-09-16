@@ -9,6 +9,7 @@ import { PermissionsModule } from '../permissions/permissions.module';
 import { ProvidersModule } from '../providers/providers.module';
 import { ProductsModule } from '../products/products.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { AdminNotificationsModule } from '../admin-notifications/admin-notifications.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ProvidersModule,
     ProductsModule,
     NotificationsModule,
+    AdminNotificationsModule,
   ],
   providers: [OrdersService, OrderAccessGuard],
   controllers: [OrdersController, BranchOrdersController],

@@ -3,9 +3,12 @@ import { HeaderBackButton } from '../../src/ui/HeaderBackButton';
 import { useAuth } from '../../src/auth/AuthContext';
 import { BranchProvider, useBranch } from '../../src/branch/BranchContext';
 import { SendConfirmationPrompt } from '../../src/order/SendConfirmationPrompt';
+import { NotificationBell } from '../../src/notifications/NotificationBell';
+import { AdminNotificationsSocket } from '../../src/notifications/AdminNotificationsSocket';
 
 function Gate() {
   const { selectedBranch, isRestoring } = useBranch();
+  const { role } = useAuth();
   const pathname = usePathname();
   // Wait for the persisted branch to be read back before deciding anything.
   // Without this the app redirects to /select-branch on every launch and only
@@ -23,7 +26,15 @@ function Gate() {
     return <Redirect href="/select-branch" />;
   }
   return (
-    <Stack>
+    <Stack
+      // Every screen gets the bell by default (admins only — the component
+      // itself renders nothing for staff); a screen that needs its own
+      // headerRight (the order screen's admin pencil) overrides this and is
+      // responsible for including the bell itself if it still wants it.
+      screenOptions={{
+        headerRight: role === 'ADMIN' ? () => <NotificationBell /> : undefined,
+      }}
+    >
       <Stack.Screen name="index" options={{ title: 'ספקים' }} />
       <Stack.Screen
         name="select-branch"
@@ -37,6 +48,16 @@ function Gate() {
         }}
       />
       <Stack.Screen name="activity" options={{ title: 'פעילות אחרונה', headerLeft: () => <HeaderBackButton fallback={'/'} /> }} />
+      <Stack.Screen
+        name="notifications"
+        options={{
+          title: 'התראות',
+          headerLeft: () => <HeaderBackButton fallback={'/'} />,
+          // Already on the notifications screen — showing the bell again,
+          // just to reopen the same screen, is dead weight in the header.
+          headerRight: () => null,
+        }}
+      />
       <Stack.Screen name="providers/[providerId]/order" options={{ title: '', headerLeft: () => <HeaderBackButton fallback={'/'} /> }} />
       <Stack.Screen name="providers/[providerId]/edit" options={{ title: 'עריכת ספק', headerLeft: () => <HeaderBackButton fallback={'/'} /> }} />
       <Stack.Screen name="departments/index" options={{ title: 'מחלקות', headerLeft: () => <HeaderBackButton fallback={'/'} /> }} />
@@ -75,6 +96,7 @@ export default function AppLayout() {
         keep asking wherever they are.
       */}
       <SendConfirmationPrompt />
+      <AdminNotificationsSocket />
     </BranchProvider>
   );
 }

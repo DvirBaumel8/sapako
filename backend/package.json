@@ -34,7 +34,9 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^10.0.0",
+    "@nestjs/platform-socket.io": "^10.4.22",
     "@nestjs/typeorm": "^11.0.3",
+    "@nestjs/websockets": "^10.4.22",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
@@ -45,6 +47,7 @@
     "pg": "^8.22.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
+    "socket.io": "^4.8.3",
     "typeorm": "^1.1.0"
   },
   "devDependencies": {

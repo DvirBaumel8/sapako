@@ -13,6 +13,7 @@ import { OrderStatus } from './order-status.enum';
 import { ProvidersService } from '../providers/providers.service';
 import { ProductsService } from '../products/products.service';
 import { OrderNotifierService } from '../notifications/order-notifier.service';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -55,6 +56,7 @@ describe('OrdersService', () => {
   const productsService = { findById: jest.fn() };
   // Returns false by default: "not configured", the state CI runs in.
   const orderNotifier = { sendOrderPublished: jest.fn() };
+  const adminNotifications = { notifyAdmins: jest.fn() };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -64,6 +66,7 @@ describe('OrdersService', () => {
     orderRepo.manager.transaction.mockImplementation((work: any) =>
       work(manager),
     );
+    adminNotifications.notifyAdmins.mockResolvedValue(undefined);
     manager.getRepository.mockReturnValue(managerOrderItemRepo);
 
     const module = await Test.createTestingModule({
@@ -73,6 +76,10 @@ describe('OrdersService', () => {
         { provide: ProvidersService, useValue: providersService },
         { provide: ProductsService, useValue: productsService },
         { provide: OrderNotifierService, useValue: orderNotifier },
+        {
+          provide: AdminNotificationsService,
+          useValue: adminNotifications,
+        },
       ],
     }).compile();
     service = module.get(OrdersService);
@@ -595,6 +602,33 @@ describe('OrdersService', () => {
       await expect(service.handOff('missing')).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('notifies admins with the handed-off order', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.DRAFT,
+      });
+      orderRepo.update.mockResolvedValue({ affected: 1 });
+
+      const result = await service.handOff('o1');
+
+      expect(adminNotifications.notifyAdmins).toHaveBeenCalledWith(result);
+    });
+
+    it('still hands off the order even if notifying admins fails', async () => {
+      // The employee waiting for WhatsApp to open must never be blocked by
+      // an unrelated notification-delivery failure.
+      orderRepo.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.DRAFT,
+      });
+      orderRepo.update.mockResolvedValue({ affected: 1 });
+      adminNotifications.notifyAdmins.mockRejectedValue(new Error('boom'));
+
+      await expect(service.handOff('o1')).resolves.toMatchObject({
+        id: 'o1',
+      });
     });
   });
 

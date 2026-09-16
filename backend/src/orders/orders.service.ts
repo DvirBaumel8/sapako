@@ -13,6 +13,7 @@ import { isWeightUnit } from '../products/unit-types';
 import { ProvidersService } from '../providers/providers.service';
 import { ProductsService } from '../products/products.service';
 import { OrderNotifierService } from '../notifications/order-notifier.service';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 
 /**
  * How many recent orders the activity list returns.
@@ -34,6 +35,7 @@ export class OrdersService {
     private readonly providersService: ProvidersService,
     private readonly productsService: ProductsService,
     private readonly orderNotifier: OrderNotifierService,
+    private readonly adminNotifications: AdminNotificationsService,
   ) {}
 
   async createDraft(
@@ -218,7 +220,12 @@ export class OrdersService {
       throw new ConflictException('Order is no longer a draft');
     }
 
-    return this.findById(orderId);
+    const handedOff = await this.findById(orderId);
+    // Fire-and-forget: an admin-notification failure must never fail the
+    // handoff itself, which is the thing the employee is actually waiting
+    // on. The order is already, correctly, on its way to WhatsApp.
+    void this.adminNotifications.notifyAdmins(handedOff).catch(() => undefined);
+    return handedOff;
   }
 
   /** AWAITING_CONFIRMATION -> PUBLISHED, on the user's word that it was sent. */

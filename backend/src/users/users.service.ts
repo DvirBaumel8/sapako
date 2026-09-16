@@ -91,6 +91,10 @@ export class UsersService {
     return this.usersRepo.find();
   }
 
+  findAdmins(): Promise<User[]> {
+    return this.usersRepo.find({ where: { role: Role.ADMIN } });
+  }
+
   countAll(): Promise<number> {
     return this.usersRepo.count();
   }

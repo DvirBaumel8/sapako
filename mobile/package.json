@@ -20,7 +20,8 @@
     "react-native": "0.86.0",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
-    "react-native-web": "^0.21.2"
+    "react-native-web": "^0.21.2",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@react-native/jest-preset": "^0.86.0",

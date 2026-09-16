@@ -12,6 +12,7 @@ import { ProductsModule } from './products/products.module';
 import { OrdersModule } from './orders/orders.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { AdminNotificationsModule } from './admin-notifications/admin-notifications.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { CatalogModule } from './catalog/catalog.module';
     OrdersModule,
     DepartmentsModule,
     CatalogModule,
+    AdminNotificationsModule,
   ],
   controllers: [HealthController],
   providers: [],

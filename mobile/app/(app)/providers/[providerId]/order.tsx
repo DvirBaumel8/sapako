@@ -24,6 +24,7 @@ import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 import { useAlert } from '../../../../src/ui/AlertProvider';
 import { formatQuantity, isWeightUnit, quantityStep } from '../../../../src/products/unitTypes';
 import { UnitPickerSheet } from '../../../../src/order/UnitPickerSheet';
+import { NotificationBell } from '../../../../src/notifications/NotificationBell';
 
 // Product rows are a fixed height, measured from the running app. Declaring
 // it lets the list jump straight to any row: without it, scrollToIndex cannot
@@ -368,12 +369,15 @@ export default function OrderBuilderScreen() {
           headerRight:
             role === 'ADMIN'
               ? () => (
-                  <Pressable
-                    onPress={() => router.push(`/providers/${providerId}/edit`)}
-                    style={styles.editButton}
-                  >
-                    <Text style={styles.editButtonText}>✎</Text>
-                  </Pressable>
+                  <View style={styles.headerRightRow}>
+                    <Pressable
+                      onPress={() => router.push(`/providers/${providerId}/edit`)}
+                      style={styles.editButton}
+                    >
+                      <Text style={styles.editButtonText}>✎</Text>
+                    </Pressable>
+                    <NotificationBell />
+                  </View>
                 )
               : undefined,
         }}
@@ -650,4 +654,5 @@ const styles = StyleSheet.create({
   emptyText: { textAlign: 'center', marginTop: 24, color: '#666' },
   editButton: { paddingHorizontal: 12 },
   editButtonText: { fontSize: 20, color: '#2563eb' },
+  headerRightRow: { flexDirection: 'row', alignItems: 'center' },
 });
