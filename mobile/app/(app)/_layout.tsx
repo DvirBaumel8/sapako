@@ -51,6 +51,7 @@ function Gate() {
       <Stack.Screen name="admin/products/new" options={{ title: 'הוספת מוצר', headerLeft: () => <HeaderBackButton fallback={'/admin'} /> }} />
       <Stack.Screen name="admin/users/index" options={{ title: 'משתמשים', headerLeft: () => <HeaderBackButton fallback={'/admin'} /> }} />
       <Stack.Screen name="admin/users/new" options={{ title: 'הוספת משתמש', headerLeft: () => <HeaderBackButton fallback={'/admin/users'} /> }} />
+      <Stack.Screen name="admin/users/[userId]/edit" options={{ title: 'עריכת משתמש', headerLeft: () => <HeaderBackButton fallback={'/admin/users'} /> }} />
       <Stack.Screen name="admin/users/[userId]/access" options={{ title: 'הרשאות ספקים', headerLeft: () => <HeaderBackButton fallback={'/admin/users'} /> }} />
     </Stack>
   );
