@@ -12,6 +12,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { buildCorsConfig, isAllowedOrigin } from './cors';
+import { requestLogger } from './request-logger';
 import { VALIDATION_PIPE_OPTIONS } from './validation';
 
 async function bootstrap() {
@@ -20,6 +21,9 @@ async function bootstrap() {
   // request's req.ip resolves to the proxy's address, so the rate limiter
   // below would treat all users as a single client sharing one quota.
   app.set('trust proxy', 1);
+  // First in the chain, ahead of helmet/cors/guards, so a request is logged
+  // no matter what later rejects it.
+  app.use(requestLogger);
   app.use(helmet());
   const corsConfig = buildCorsConfig(process.env);
   app.enableCors({
