@@ -2,21 +2,35 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { In } from 'typeorm';
+import { In, QueryFailedError } from 'typeorm';
 import { ProvidersService } from './providers.service';
 import { Provider } from './provider.entity';
 import { BranchesService } from '../branches/branches.service';
 import { DepartmentsService } from '../departments/departments.service';
 
+// Same shape Postgres actually throws for a unique-constraint violation —
+// used to prove `create` catches this specific error and nothing else.
+function uniqueViolation(): QueryFailedError {
+  return new QueryFailedError('INSERT ...', [], { code: '23505' } as any);
+}
+
 describe('ProvidersService', () => {
   let service: ProvidersService;
-  const mockRepo = {
+  const mockManager = {
     create: jest.fn(),
     save: jest.fn(),
+  };
+  const mockRepo = {
     find: jest.fn(),
     findOne: jest.fn(),
     findOneBy: jest.fn(),
+    save: jest.fn(),
     delete: jest.fn(),
+    manager: {
+      transaction: jest.fn((work: (manager: typeof mockManager) => unknown) =>
+        work(mockManager),
+      ),
+    },
   };
   const mockBranchesService = {
     findById: jest.fn(),
@@ -28,6 +42,7 @@ describe('ProvidersService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockRepo.findOneBy.mockResolvedValue(null);
+    mockRepo.manager.transaction.mockImplementation((work) => work(mockManager));
     const module = await Test.createTestingModule({
       providers: [
         ProvidersService,
@@ -45,8 +60,8 @@ describe('ProvidersService', () => {
       { id: 'd1', branchId: 'b1', name: 'מוצרי חלב' },
       { id: 'd2', branchId: 'b1', name: 'קפואים' },
     ]);
-    mockRepo.create.mockImplementation((data) => data);
-    mockRepo.save.mockImplementation((data) =>
+    mockManager.create.mockImplementation((_entity, data) => data);
+    mockManager.save.mockImplementation((data) =>
       Promise.resolve({ id: 'p1', ...data }),
     );
 
@@ -58,6 +73,15 @@ describe('ProvidersService', () => {
 
     expect(mockBranchesService.findById).toHaveBeenCalledWith('b1');
     expect(mockDepartmentsService.findByIds).toHaveBeenCalledWith(['d1', 'd2']);
+    expect(mockManager.create).toHaveBeenCalledWith(Provider, {
+      branchId: 'b1',
+      name: 'Meat Co',
+      phone: '+972501234567',
+      departments: [
+        { id: 'd1', branchId: 'b1', name: 'מוצרי חלב' },
+        { id: 'd2', branchId: 'b1', name: 'קפואים' },
+      ],
+    });
     expect(provider).toMatchObject({
       id: 'p1',
       branchId: 'b1',
@@ -69,13 +93,11 @@ describe('ProvidersService', () => {
     });
   });
 
-  it('rejects with ConflictException when a provider with the same name already exists in the branch', async () => {
+  it('rejects with ConflictException when a provider with the same name already exists in the branch — including when both requests race past a pre-check', async () => {
     mockBranchesService.findById.mockResolvedValue({ id: 'b1' });
-    mockRepo.findOneBy.mockResolvedValue({
-      id: 'existing',
-      branchId: 'b1',
-      name: 'Meat Co',
-    });
+    mockDepartmentsService.findByIds.mockResolvedValue([]);
+    mockManager.create.mockImplementation((_entity, data) => data);
+    mockManager.save.mockRejectedValue(uniqueViolation());
 
     await expect(
       service.create('b1', {
@@ -84,11 +106,24 @@ describe('ProvidersService', () => {
         departmentIds: [],
       }),
     ).rejects.toThrow(ConflictException);
-
-    expect(mockRepo.save).not.toHaveBeenCalled();
   });
 
-  it('rejects with NotFoundException when the branch does not exist, without saving', async () => {
+  it('lets an unrelated database error through rather than reporting it as a name conflict', async () => {
+    mockBranchesService.findById.mockResolvedValue({ id: 'b1' });
+    mockDepartmentsService.findByIds.mockResolvedValue([]);
+    mockManager.create.mockImplementation((_entity, data) => data);
+    mockManager.save.mockRejectedValue(new Error('connection reset'));
+
+    await expect(
+      service.create('b1', {
+        name: 'Meat Co',
+        phone: '+972501234567',
+        departmentIds: [],
+      }),
+    ).rejects.toThrow('connection reset');
+  });
+
+  it('rejects with NotFoundException when the branch does not exist, without opening a transaction', async () => {
     mockBranchesService.findById.mockRejectedValue(
       new NotFoundException('Branch not found'),
     );
@@ -101,10 +136,10 @@ describe('ProvidersService', () => {
       }),
     ).rejects.toThrow(NotFoundException);
 
-    expect(mockRepo.save).not.toHaveBeenCalled();
+    expect(mockRepo.manager.transaction).not.toHaveBeenCalled();
   });
 
-  it('rejects with NotFoundException when a departmentId does not exist, without saving', async () => {
+  it('rejects with NotFoundException when a departmentId does not exist, without opening a transaction', async () => {
     mockBranchesService.findById.mockResolvedValue({ id: 'b1' });
     mockDepartmentsService.findByIds.mockResolvedValue([
       { id: 'd1', branchId: 'b1', name: 'מוצרי חלב' },
@@ -118,10 +153,10 @@ describe('ProvidersService', () => {
       }),
     ).rejects.toThrow(NotFoundException);
 
-    expect(mockRepo.save).not.toHaveBeenCalled();
+    expect(mockRepo.manager.transaction).not.toHaveBeenCalled();
   });
 
-  it('rejects with NotFoundException when a departmentId belongs to a different branch, without saving', async () => {
+  it('rejects with NotFoundException when a departmentId belongs to a different branch, without opening a transaction', async () => {
     mockBranchesService.findById.mockResolvedValue({ id: 'b1' });
     mockDepartmentsService.findByIds.mockResolvedValue([
       { id: 'd1', branchId: 'OTHER_BRANCH', name: 'מוצרי חלב' },
@@ -135,7 +170,7 @@ describe('ProvidersService', () => {
       }),
     ).rejects.toThrow(NotFoundException);
 
-    expect(mockRepo.save).not.toHaveBeenCalled();
+    expect(mockRepo.manager.transaction).not.toHaveBeenCalled();
   });
 
   it('lists all active providers for a branch when the caller has ALL access', async () => {

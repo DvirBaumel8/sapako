@@ -1,18 +1,33 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { QueryFailedError } from 'typeorm';
 import { CategoriesService } from './categories.service';
 import { Category } from './category.entity';
 import { ProvidersService } from '../providers/providers.service';
 
+// Same shape Postgres actually throws for a unique-constraint violation —
+// used to prove `create` catches this specific error and nothing else.
+function uniqueViolation(): QueryFailedError {
+  return new QueryFailedError('INSERT ...', [], { code: '23505' } as any);
+}
+
 describe('CategoriesService', () => {
   let service: CategoriesService;
-  const mockRepo = {
+  const mockManager = {
     create: jest.fn(),
     save: jest.fn(),
+  };
+  const mockRepo = {
     find: jest.fn(),
     findOneBy: jest.fn(),
+    save: jest.fn(),
     delete: jest.fn(),
+    manager: {
+      transaction: jest.fn((work: (manager: typeof mockManager) => unknown) =>
+        work(mockManager),
+      ),
+    },
   };
   const mockProvidersService = {
     findById: jest.fn(),
@@ -20,6 +35,7 @@ describe('CategoriesService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockRepo.manager.transaction.mockImplementation((work) => work(mockManager));
     const module = await Test.createTestingModule({
       providers: [
         CategoriesService,
@@ -33,18 +49,22 @@ describe('CategoriesService', () => {
   describe('create', () => {
     it('creates a category under a provider that exists', async () => {
       mockProvidersService.findById.mockResolvedValue({ id: 'p1' });
-      mockRepo.create.mockImplementation((data) => data);
-      mockRepo.save.mockImplementation((data) =>
+      mockManager.create.mockImplementation((_entity, data) => data);
+      mockManager.save.mockImplementation((data) =>
         Promise.resolve({ id: 'c1', ...data }),
       );
 
       const category = await service.create('p1', { name: 'גבינות' });
 
       expect(mockProvidersService.findById).toHaveBeenCalledWith('p1');
+      expect(mockManager.create).toHaveBeenCalledWith(Category, {
+        providerId: 'p1',
+        name: 'גבינות',
+      });
       expect(category).toMatchObject({ id: 'c1', providerId: 'p1', name: 'גבינות' });
     });
 
-    it('rejects with NotFoundException when the provider does not exist, without saving', async () => {
+    it('rejects with NotFoundException when the provider does not exist, without opening a transaction', async () => {
       mockProvidersService.findById.mockRejectedValue(
         new NotFoundException('Provider not found'),
       );
@@ -52,21 +72,27 @@ describe('CategoriesService', () => {
       await expect(service.create('missing', { name: 'גבינות' })).rejects.toThrow(
         NotFoundException,
       );
-      expect(mockRepo.save).not.toHaveBeenCalled();
+      expect(mockRepo.manager.transaction).not.toHaveBeenCalled();
     });
 
-    it('rejects with ConflictException when a category with the same name already exists for the provider', async () => {
+    it('rejects with ConflictException when a category with the same name already exists for the provider — including when both requests race past a pre-check', async () => {
       mockProvidersService.findById.mockResolvedValue({ id: 'p1' });
-      mockRepo.findOneBy.mockResolvedValue({
-        id: 'existing',
-        providerId: 'p1',
-        name: 'גבינות',
-      });
+      mockManager.create.mockImplementation((_entity, data) => data);
+      mockManager.save.mockRejectedValue(uniqueViolation());
 
       await expect(service.create('p1', { name: 'גבינות' })).rejects.toThrow(
         ConflictException,
       );
-      expect(mockRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('lets an unrelated database error through rather than reporting it as a name conflict', async () => {
+      mockProvidersService.findById.mockResolvedValue({ id: 'p1' });
+      mockManager.create.mockImplementation((_entity, data) => data);
+      mockManager.save.mockRejectedValue(new Error('connection reset'));
+
+      await expect(service.create('p1', { name: 'גבינות' })).rejects.toThrow(
+        'connection reset',
+      );
     });
 
     it('allows the same category name for two different providers', async () => {
@@ -74,13 +100,14 @@ describe('CategoriesService', () => {
       // same name colliding across two unrelated suppliers must not block
       // either of them.
       mockProvidersService.findById.mockResolvedValue({ id: 'p2' });
-      mockRepo.findOneBy.mockResolvedValue(null);
-      mockRepo.create.mockImplementation((data) => data);
-      mockRepo.save.mockImplementation((data) => Promise.resolve({ id: 'c2', ...data }));
+      mockManager.create.mockImplementation((_entity, data) => data);
+      mockManager.save.mockImplementation((data) =>
+        Promise.resolve({ id: 'c2', ...data }),
+      );
 
-      await service.create('p2', { name: 'ירקות' });
+      const category = await service.create('p2', { name: 'ירקות' });
 
-      expect(mockRepo.findOneBy).toHaveBeenCalledWith({ providerId: 'p2', name: 'ירקות' });
+      expect(category).toMatchObject({ providerId: 'p2', name: 'ירקות' });
     });
   });
 

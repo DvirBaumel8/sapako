@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Category } from './category.entity';
 import { ProvidersService } from '../providers/providers.service';
+import { isUniqueViolation } from '../database/uniqueViolation';
 
 @Injectable()
 export class CategoriesService {
@@ -22,17 +23,25 @@ export class CategoriesService {
     // otherwise an invalid providerId surfaces as an unhandled FK-violation
     // 500 instead of a clean 404.
     await this.providersService.findById(providerId);
-    const existing = await this.categoriesRepo.findOneBy({
-      providerId,
-      name: input.name,
-    });
-    if (existing) {
-      throw new ConflictException(
-        'A category with this name already exists for this provider',
-      );
+    // No check-then-insert here: two requests naming the same category at
+    // once could both pass a pre-check before either had inserted, leaving
+    // the database's own UNIQUE("providerId", name) constraint to reject
+    // the second — as an unhandled 500, since nothing caught it. Inserting
+    // straight away and catching that violation closes the race instead of
+    // narrowing it.
+    try {
+      return await this.categoriesRepo.manager.transaction(async (manager) => {
+        const entity = manager.create(Category, { providerId, ...input });
+        return manager.save(entity);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          'A category with this name already exists for this provider',
+        );
+      }
+      throw error;
     }
-    const entity = this.categoriesRepo.create({ providerId, ...input });
-    return this.categoriesRepo.save(entity);
   }
 
   findAllForProvider(providerId: string): Promise<Category[]> {

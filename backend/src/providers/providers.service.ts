@@ -10,6 +10,7 @@ import { Provider } from './provider.entity';
 import { Department } from '../departments/department.entity';
 import { BranchesService } from '../branches/branches.service';
 import { DepartmentsService } from '../departments/departments.service';
+import { isUniqueViolation } from '../database/uniqueViolation';
 
 @Injectable()
 export class ProvidersService {
@@ -28,23 +29,27 @@ export class ProvidersService {
     // branchId escapes as an unhandled FK-violation 500 instead of a clean
     // 404 (same failure mode already fixed for grantAccess).
     await this.branchesService.findById(branchId);
-    const existing = await this.providersRepo.findOneBy({
-      branchId,
-      name: input.name,
-    });
-    if (existing) {
-      throw new ConflictException(
-        'A provider with this name already exists in this branch',
-      );
-    }
     const { departmentIds, ...rest } = input;
     const departments = await this.resolveDepartments(branchId, departmentIds);
-    const entity = this.providersRepo.create({
-      branchId,
-      ...rest,
-      departments,
-    });
-    return this.providersRepo.save(entity);
+    // No check-then-insert here: two requests naming the same provider at
+    // once could both pass a pre-check before either had inserted, leaving
+    // the database's own UQ_providers_branchId_name constraint to reject
+    // the second — as an unhandled 500, since nothing caught it. Inserting
+    // straight away and catching that violation closes the race instead of
+    // narrowing it.
+    try {
+      return await this.providersRepo.manager.transaction(async (manager) => {
+        const entity = manager.create(Provider, { branchId, ...rest, departments });
+        return manager.save(entity);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          'A provider with this name already exists in this branch',
+        );
+      }
+      throw error;
+    }
   }
 
   findActiveByBranch(
