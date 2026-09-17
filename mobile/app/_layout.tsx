@@ -1,4 +1,5 @@
 import '../src/instrument';
+import '../src/analytics';
 import * as Sentry from '@sentry/react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Stack } from 'expo-router';

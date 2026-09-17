@@ -24,5 +24,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ...config.extra,
     apiBaseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000',
     sentryDsn: process.env.SENTRY_DSN,
+    posthogApiKey: process.env.POSTHOG_API_KEY,
+    posthogHost: process.env.POSTHOG_HOST ?? 'https://us.i.posthog.com',
   },
 });
