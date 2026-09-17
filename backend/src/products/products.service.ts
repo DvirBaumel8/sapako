@@ -4,11 +4,18 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, In, Repository } from 'typeorm';
+import { FindOptionsWhere, In, IsNull, Not, Repository } from 'typeorm';
 import { Product } from './product.entity';
 import { Provider } from '../providers/provider.entity';
 import { ProvidersService } from '../providers/providers.service';
 import { CategoriesService } from '../categories/categories.service';
+import { gtinMatchKey } from './gtin';
+
+// A hard ceiling purely as a safety net against an unbounded query, not a
+// real pagination scheme — not expected to bind at today's catalogue size
+// (~14K products branch-wide). If this ever trips, that is a signal to build
+// real server-side search rather than raise the number further.
+const MAX_PRODUCTS_PER_QUERY = 20000;
 
 @Injectable()
 export class ProductsService {
@@ -60,6 +67,7 @@ export class ProductsService {
     return this.productsRepo.find({
       where: { providerId, isActive: true },
       order: { name: 'ASC' },
+      take: MAX_PRODUCTS_PER_QUERY,
     });
   }
 
@@ -77,6 +85,48 @@ export class ProductsService {
     return this.productsRepo.find({
       where: { isActive: true, provider: providerWhere },
       select: { id: true, providerId: true, name: true, barcode: true },
+      take: MAX_PRODUCTS_PER_QUERY,
+    });
+  }
+
+  /**
+   * Matches a scanned/typed barcode against every active product in the
+   * branch, without shipping the whole branch catalogue to the caller first.
+   *
+   * The barcode column holds whatever was originally typed or scanned — not
+   * a normalised GTIN — so this narrows to rows that have *a* barcode at all
+   * (a real cut at real catalogues, since most rows have none) and only then
+   * runs the same GTIN-aware comparison the mobile client used to run
+   * itself, in-process here instead of over the network to a phone.
+   */
+  async findByBarcodeInBranch(
+    branchId: string,
+    accessibleProviderIds: string[] | 'ALL',
+    barcode: string,
+  ): Promise<Product[]> {
+    const providerWhere: FindOptionsWhere<Provider> = {
+      branchId,
+      isActive: true,
+    };
+    if (accessibleProviderIds !== 'ALL') {
+      providerWhere.id = In(accessibleProviderIds);
+    }
+    const candidates = await this.productsRepo.find({
+      where: { isActive: true, provider: providerWhere, barcode: Not(IsNull()) },
+      select: { id: true, providerId: true, name: true, barcode: true },
+      take: MAX_PRODUCTS_PER_QUERY,
+    });
+    const scannedKey = gtinMatchKey(barcode);
+    return candidates.filter((product) => {
+      if (!product.barcode) return false;
+      // Mirrors matchesBarcode in mobile/src/barcode/matchesBarcode.ts: a
+      // valid GTIN compares on its normalised key (so symbology prefixes and
+      // stripped leading zeros still match); anything else falls back to
+      // exact equality for suppliers' own non-GTIN codes.
+      if (scannedKey !== null) {
+        return gtinMatchKey(product.barcode) === scannedKey;
+      }
+      return product.barcode === barcode;
     });
   }
 

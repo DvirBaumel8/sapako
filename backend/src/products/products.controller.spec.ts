@@ -24,6 +24,7 @@ describe('BranchProductsController', () => {
   let controller: BranchProductsController;
   const mockProductsService = {
     findActiveByBranch: jest.fn(),
+    findByBarcodeInBranch: jest.fn(),
   };
   const mockPermissionsService = {
     getAccessibleProviderIds: jest.fn(),
@@ -48,7 +49,7 @@ describe('BranchProductsController', () => {
   });
 
   describe('findForBranch', () => {
-    it('resolves accessible provider ids and delegates with them', async () => {
+    it('resolves accessible provider ids and delegates with them when no barcode is given', async () => {
       mockPermissionsService.getAccessibleProviderIds.mockResolvedValue(['p1']);
       const products = [{ id: 'prod1' }];
       mockProductsService.findActiveByBranch.mockResolvedValue(products);
@@ -63,7 +64,25 @@ describe('BranchProductsController', () => {
         'b1',
         ['p1'],
       );
+      expect(mockProductsService.findByBarcodeInBranch).not.toHaveBeenCalled();
       expect(result).toBe(products);
+    });
+
+    it('delegates to the barcode lookup instead when a barcode query param is given', async () => {
+      mockPermissionsService.getAccessibleProviderIds.mockResolvedValue(['p1']);
+      const matches = [{ id: 'prod1' }];
+      mockProductsService.findByBarcodeInBranch.mockResolvedValue(matches);
+      const req = { user: { userId: 'staff1', role: Role.STAFF } };
+
+      const result = await controller.findForBranch(req, 'b1', '7290000060071');
+
+      expect(mockProductsService.findByBarcodeInBranch).toHaveBeenCalledWith(
+        'b1',
+        ['p1'],
+        '7290000060071',
+      );
+      expect(mockProductsService.findActiveByBranch).not.toHaveBeenCalled();
+      expect(result).toBe(matches);
     });
   });
 });

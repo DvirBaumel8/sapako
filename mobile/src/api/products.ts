@@ -6,8 +6,13 @@ export async function fetchProductsForProvider(providerId: string): Promise<Prod
   return response.data;
 }
 
-export async function fetchProductsForBranch(branchId: string): Promise<ProviderProductSummary[]> {
-  const response = await apiClient.get<ProviderProductSummary[]>(`/branches/${branchId}/products`);
+export async function fetchProductsForBranch(
+  branchId: string,
+  options?: { barcode?: string },
+): Promise<ProviderProductSummary[]> {
+  const response = await apiClient.get<ProviderProductSummary[]>(`/branches/${branchId}/products`, {
+    params: options?.barcode ? { barcode: options.barcode } : undefined,
+  });
   return response.data;
 }
 

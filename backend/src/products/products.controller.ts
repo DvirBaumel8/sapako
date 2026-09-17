@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -33,9 +34,19 @@ export class BranchProductsController {
   async findForBranch(
     @Req() req: any,
     @Param('branchId') branchId: string,
+    // Present only from the barcode-scanner flow: narrows to a server-side
+    // match instead of shipping the whole branch catalogue to look one up.
+    @Query('barcode') barcode?: string,
   ): Promise<Product[]> {
     const accessibleProviderIds =
       await this.permissionsService.getAccessibleProviderIds(req.user);
+    if (barcode) {
+      return this.productsService.findByBarcodeInBranch(
+        branchId,
+        accessibleProviderIds,
+        barcode,
+      );
+    }
     return this.productsService.findActiveByBranch(
       branchId,
       accessibleProviderIds,

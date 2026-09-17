@@ -18,19 +18,20 @@ export default function HomeScreen() {
   const showAlert = useAlert();
   const [search, setSearch] = useState('');
   const [isScannerVisible, setIsScannerVisible] = useState(false);
+  const [isResolvingBarcode, setIsResolvingBarcode] = useState(false);
   const [collapsedProviderIds, setCollapsedProviderIds] = useState<Set<string>>(new Set());
   const { data: providers, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ['providers', selectedBranch!.id],
     queryFn: () => fetchProvidersForBranch(selectedBranch!.id),
   });
-  // Every product in the branch, needed only for searching by product name
-  // and for matching a scanned barcode. It is by far the largest payload the
-  // app fetches, so it is left until one of those two things is happening
-  // rather than downloaded on every visit to this screen.
-  const needsProducts = search.trim().length > 0 || isScannerVisible;
+  // Every product in the branch, needed only for searching by product name.
+  // It is by far the largest payload the app fetches, so it is left until
+  // that is actually happening rather than downloaded on every visit to this
+  // screen. A scanned barcode is resolved separately, server-side, below —
+  // it does not need this list at all.
+  const needsProducts = search.trim().length > 0;
   const {
     data: branchProducts,
-    error: branchProductsError,
     isLoading: isLoadingProducts,
   } = useQuery({
     queryKey: ['branch-products', selectedBranch!.id],
@@ -66,21 +67,34 @@ export default function HomeScreen() {
     });
   };
 
-  const handleBarcodeScanned = (barcode: string) => {
-    if (error || branchProductsError) {
-      showAlert({ title: 'שגיאה', message: 'לא ניתן לטעון את נתוני הספקים והמוצרים כרגע. יש לנסות שוב.' });
+  const handleBarcodeScanned = async (barcode: string) => {
+    if (error) {
+      showAlert({ title: 'שגיאה', message: 'לא ניתן לטעון את רשימת הספקים כרגע. יש לנסות שוב.' });
       return;
     }
-    if (!branchProducts) {
-      // The catalogue is still on its way. Saying "no matching product" here
-      // would be a lie that sends the user to add one that already exists.
+    if (!providers) {
+      // Provider names are needed to label a match; saying "no matching
+      // product" here would be a lie that sends the user to add one that
+      // already exists.
       showAlert({
-        title: 'רשימת המוצרים עדיין נטענת',
+        title: 'רשימת הספקים עדיין נטענת',
         message: 'יש להמתין רגע ולסרוק שוב.',
       });
       return;
     }
-    const matches = resolveBarcodeMatches(providers ?? [], branchProducts, barcode);
+    setIsResolvingBarcode(true);
+    let matchingProducts;
+    try {
+      matchingProducts = await fetchProductsForBranch(selectedBranch!.id, { barcode });
+    } catch {
+      showAlert({ title: 'שגיאה', message: 'לא ניתן היה לחפש את המוצר כרגע. יש לנסות שוב.' });
+      return;
+    } finally {
+      setIsResolvingBarcode(false);
+    }
+    // The server already matched on the scanned barcode (GTIN-normalised, so
+    // this list is exactly the real matches) — no further filtering needed.
+    const matches = resolveBarcodeMatches(providers, matchingProducts, barcode);
     if (matches.length === 0) {
       if (role !== 'ADMIN') {
         showAlert({
@@ -157,6 +171,7 @@ export default function HomeScreen() {
       {isLoadingProducts && search.trim().length > 0 && (
         <Text style={styles.statusText}>מחפש גם במוצרים…</Text>
       )}
+      {isResolvingBarcode && <Text style={styles.statusText}>מחפש מוצר…</Text>}
       {error && <Text style={styles.statusText}>לא ניתן לטעון ספקים. יש למשוך לרענון.</Text>}
 
       <FlatList

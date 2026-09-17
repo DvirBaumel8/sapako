@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { In } from 'typeorm';
+import { In, IsNull, Not } from 'typeorm';
 import { ProductsService } from './products.service';
 import { Product } from './product.entity';
 import { ProvidersService } from '../providers/providers.service';
@@ -104,6 +104,7 @@ describe('ProductsService', () => {
     expect(mockRepo.find).toHaveBeenCalledWith({
       where: { providerId: 'p1', isActive: true },
       order: { name: 'ASC' },
+      take: 20000,
     });
     expect(products).toHaveLength(1);
   });
@@ -204,6 +205,7 @@ describe('ProductsService', () => {
     expect(mockRepo.find).toHaveBeenCalledWith({
       where: { isActive: true, provider: { branchId: 'b1', isActive: true } },
       select: { id: true, providerId: true, name: true, barcode: true },
+      take: 20000,
     });
     expect(products).toHaveLength(1);
   });
@@ -221,6 +223,7 @@ describe('ProductsService', () => {
         provider: { branchId: 'b1', isActive: true, id: In(['p1']) },
       },
       select: { id: true, providerId: true, name: true, barcode: true },
+      take: 20000,
     });
     expect(products).toHaveLength(1);
   });
@@ -236,7 +239,53 @@ describe('ProductsService', () => {
         provider: { branchId: 'b1', isActive: true, id: In([]) },
       },
       select: { id: true, providerId: true, name: true, barcode: true },
+      take: 20000,
     });
     expect(products).toEqual([]);
+  });
+
+  describe('findByBarcodeInBranch', () => {
+    it('queries only barcoded rows, scoped to the branch and accessible providers', async () => {
+      mockRepo.find.mockResolvedValue([]);
+
+      await service.findByBarcodeInBranch('b1', ['p1'], '016000185517');
+
+      expect(mockRepo.find).toHaveBeenCalledWith({
+        where: {
+          isActive: true,
+          provider: { branchId: 'b1', isActive: true, id: In(['p1']) },
+          barcode: Not(IsNull()),
+        },
+        select: { id: true, providerId: true, name: true, barcode: true },
+        take: 20000,
+      });
+    });
+
+    it('matches a UPC-A candidate that lost its leading zero, via the normalised key', async () => {
+      mockRepo.find.mockResolvedValue([
+        { id: 'pr1', providerId: 'p1', name: 'Milk', barcode: '016000185517' },
+        { id: 'pr2', providerId: 'p1', name: 'Other', barcode: '7290000060071' },
+      ]);
+
+      // Scanned as the 11-digit, zero-stripped form of the same UPC-A.
+      const matches = await service.findByBarcodeInBranch('b1', 'ALL', '16000185517');
+
+      expect(matches).toEqual([
+        { id: 'pr1', providerId: 'p1', name: 'Milk', barcode: '016000185517' },
+      ]);
+    });
+
+    it('falls back to exact equality for a non-GTIN supplier code', async () => {
+      mockRepo.find.mockResolvedValue([
+        { id: 'pr1', providerId: 'p1', name: 'Widget', barcode: 'SUP-42' },
+      ]);
+
+      const matches = await service.findByBarcodeInBranch('b1', 'ALL', 'SUP-42');
+
+      expect(matches).toHaveLength(1);
+
+      const noMatch = await service.findByBarcodeInBranch('b1', 'ALL', 'SUP-43');
+      expect(noMatch).toEqual([]);
+    });
   });
 });
