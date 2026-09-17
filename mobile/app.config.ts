@@ -23,5 +23,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   extra: {
     ...config.extra,
     apiBaseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000',
+    sentryDsn: process.env.SENTRY_DSN,
   },
 });

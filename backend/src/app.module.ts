@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { buildDatabaseSsl } from './database/ssl';
 import { HealthController } from './health/health.controller';
 import { UsersModule } from './users/users.module';
@@ -19,6 +20,8 @@ import { CategoriesModule } from './categories/categories.module';
 
 @Module({
   imports: [
+    // Must be registered first, per @sentry/nestjs's setup docs.
+    SentryModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([
       {
@@ -53,6 +56,13 @@ import { CategoriesModule } from './categories/categories.module';
     CategoriesModule,
   ],
   controllers: [HealthController],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    // Reports unhandled exceptions to Sentry (a no-op until SENTRY_DSN is
+    // set, see src/instrument.ts) without replacing NestJS's own
+    // exception-to-HTTP-response handling — it delegates to that after
+    // reporting. Must come before any other exception filter.
+    { provide: APP_FILTER, useClass: SentryGlobalFilter },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}

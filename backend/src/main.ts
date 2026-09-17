@@ -1,11 +1,11 @@
-// Must be the first import: several modules read process.env at
-// decorator-evaluation time (e.g. AuthModule's JwtModule.register), which
-// happens while this file's later imports are being required — before
-// ConfigModule.forRoot() (nested inside AppModule) would otherwise load
-// .env. Loading dotenv here eagerly guarantees env vars are populated
-// before any of those modules are constructed. Mirrors the same fix
-// already applied in src/database/data-source.ts.
-import 'dotenv/config';
+// Must be the first import: it loads dotenv before anything else, which
+// several modules need at decorator-evaluation time (e.g. AuthModule's
+// JwtModule.register) — before ConfigModule.forRoot() (nested inside
+// AppModule) would otherwise load .env. Mirrors the same fix already
+// applied in src/database/data-source.ts. It also calls Sentry.init(),
+// which itself needs to run before any other module is required so Sentry
+// can instrument them.
+import './instrument';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
