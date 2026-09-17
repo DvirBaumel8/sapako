@@ -40,7 +40,7 @@ export function NotificationBell() {
 }
 
 const styles = StyleSheet.create({
-  button: { paddingHorizontal: 12, paddingVertical: 4 },
+  button: { paddingHorizontal: 12, paddingVertical: 4, marginEnd: 12 },
   bell: { fontSize: 20 },
   badge: {
     position: 'absolute',
