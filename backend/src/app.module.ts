@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { buildDatabaseSsl } from './database/ssl';
 import { HealthController } from './health/health.controller';
 import { UsersModule } from './users/users.module';
@@ -18,6 +20,19 @@ import { CategoriesModule } from './categories/categories.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([
+      {
+        // A generous app-wide default, meant to blunt scripted abuse rather
+        // than shape real usage — individual routes (e.g. login) tighten
+        // this with their own @Throttle(). A single admin building out an
+        // order line-by-line, or bulk-adding products, can easily fire a few
+        // hundred requests in a burst; the e2e suite's
+        // RECENT_ORDER_LIMIT-cap test does exactly that and set the floor
+        // for this number.
+        ttl: 60_000,
+        limit: 1000,
+      },
+    ]),
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: process.env.DATABASE_URL,
@@ -38,6 +53,6 @@ import { CategoriesModule } from './categories/categories.module';
     CategoriesModule,
   ],
   controllers: [HealthController],
-  providers: [],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

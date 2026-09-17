@@ -8,13 +8,18 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { buildCorsConfig, isAllowedOrigin } from './cors';
 import { VALIDATION_PIPE_OPTIONS } from './validation';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Render sits in front of this app as a reverse proxy. Without this, every
+  // request's req.ip resolves to the proxy's address, so the rate limiter
+  // below would treat all users as a single client sharing one quota.
+  app.set('trust proxy', 1);
   app.use(helmet());
   const corsConfig = buildCorsConfig(process.env);
   app.enableCors({
