@@ -1,4 +1,5 @@
 import type { Provider, ProviderProductSummary } from '../api/types';
+import { productBarcodes } from '../barcode/productBarcodes';
 import { matchScore, tokenize } from '../utils/fuzzySearch';
 
 export interface ProviderSearchResult {
@@ -15,7 +16,7 @@ const DIGITS_ONLY = /^\d+$/;
 function matchesBarcode(product: ProviderProductSummary, query: string): boolean {
   const trimmed = query.trim();
   if (!DIGITS_ONLY.test(trimmed)) return false;
-  return !!product.barcode && product.barcode.startsWith(trimmed);
+  return productBarcodes(product).some((code) => code.startsWith(trimmed));
 }
 
 export function buildProviderSearchResults(

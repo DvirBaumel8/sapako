@@ -63,6 +63,25 @@ describe('resolveBarcodeMatches', () => {
   });
 });
 
+describe('additional barcodes', () => {
+  it('matches a product by one of its additional barcodes', () => {
+    const providers = [{ id: 'p1', name: 'ספק א' }] as any;
+    const products = [
+      {
+        id: 'x1',
+        providerId: 'p1',
+        name: 'חלב',
+        barcode: '7290000000534',
+        additionalBarcodes: ['7290003706020'],
+      },
+    ] as any;
+
+    expect(resolveBarcodeMatches(providers, products, '7290003706020')).toEqual([
+      { providerId: 'p1', providerName: 'ספק א', productId: 'x1' },
+    ]);
+  });
+});
+
 describe('matching on the GTIN rather than the raw string', () => {
   const providers = [{ id: 'p1', name: 'ספק א' }] as any;
 

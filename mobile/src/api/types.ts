@@ -38,6 +38,9 @@ export interface Product {
   name: string;
   unitType: string;
   barcode?: string;
+  // Other barcodes this product answers to (merged duplicates). Absent from
+  // responses of servers older than the merge.
+  additionalBarcodes?: string[];
   imageUrl?: string;
   // Undefined/null both mean "uncategorized" — the order screen groups
   // either into the same "ללא קטגוריה" bucket.
@@ -48,7 +51,7 @@ export interface Product {
   createdAt: string;
 }
 
-export type ProviderProductSummary = Pick<Product, 'id' | 'name' | 'providerId' | 'barcode'>;
+export type ProviderProductSummary = Pick<Product, 'id' | 'name' | 'providerId' | 'barcode' | 'additionalBarcodes'>;
 
 /**
  * AWAITING_CONFIRMATION: WhatsApp was opened for this order, but nobody has

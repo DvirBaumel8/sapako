@@ -117,6 +117,15 @@ describe('buildProviderSearchResults', () => {
       expect(results).toHaveLength(0);
     });
 
+    it('finds a product by the start of an additional barcode', () => {
+      const merged = [
+        { id: 'm1', providerId: 'p1', name: 'חלב', barcode: '7290000000534', additionalBarcodes: ['7290003706020'] },
+      ] as never[];
+      const results = buildProviderSearchResults([provider], merged, '729000370');
+      expect(results).toHaveLength(1);
+      expect(results[0].matchingProducts.map((x) => x.id)).toEqual(['m1']);
+    });
+
     it('ignores products with no barcode', () => {
       const results = buildProviderSearchResults([provider], products, '7290');
       expect(results[0].matchingProducts.map((x) => x.id)).toEqual(['x1', 'x2']);

@@ -45,6 +45,17 @@ jest.mock('react-native-safe-area-context', () =>
   require('react-native-safe-area-context/jest/mock').default,
 );
 
+jest.mock('../../../../src/barcode/BarcodeScannerModal', () => {
+  const { Pressable, Text } = require('react-native');
+  return {
+    BarcodeScannerModal: ({ onScanned }: { onScanned: (code: string) => void }) => (
+      <Pressable testID="fake-scan" onPress={() => onScanned('7290003706020')}>
+        <Text>scan</Text>
+      </Pressable>
+    ),
+  };
+});
+
 jest.mock('../../../../src/api/products', () => ({
   fetchProductsForProvider: jest.fn(),
   fetchProductsForBranch: jest.fn(),
@@ -397,6 +408,28 @@ describe('changing the unit for this order', () => {
       expect(screen.getByTestId(`unit-label-${CARTON_PRODUCT.id}`)).toHaveTextContent('יחידה');
     });
     expect(screen.getByTestId(`unit-label-${WEIGHT_PRODUCT.id}`)).toHaveTextContent('ק"ג');
+  });
+});
+
+describe('scanning by an additional barcode', () => {
+  it('finds the product and highlights it instead of reporting not found', async () => {
+    (fetchProductsForProvider as jest.Mock).mockResolvedValue([
+      { ...CARTON_PRODUCT, barcode: '7290000000534', additionalBarcodes: ['7290003706020'] },
+      WEIGHT_PRODUCT,
+    ]);
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('fake-scan'));
+
+    expect(screen.queryByText(/לא נמצא מוצר עם ברקוד/)).toBeNull();
+  });
+
+  it('reports not found when no product has the scanned barcode', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('fake-scan'));
+
+    expect(await screen.findByText(/לא נמצא מוצר עם ברקוד 7290003706020/)).toBeTruthy();
   });
 });
 
