@@ -4,3 +4,4 @@
   No backend-only/infra changes — see the "Customer Release Notes" rule in CLAUDE.md.
   Cleared back to empty once Dvir confirms it was sent to the customer.
 -->
+- אפשר להוסיף הערה לכל מוצר במסך ההזמנה (למשל "לבקש תאריך ארוך"). ההערה נשמרת ומופיעה לכל מי שמזמין מהספק, והספק לא רואה אותה.

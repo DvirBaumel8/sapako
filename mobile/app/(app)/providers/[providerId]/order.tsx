@@ -26,19 +26,14 @@ import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 import { useAlert } from '../../../../src/ui/AlertProvider';
 import { formatQuantity, isWeightUnit, quantityStep } from '../../../../src/products/unitTypes';
 import { UnitPickerSheet } from '../../../../src/order/UnitPickerSheet';
+import {
+  hasNote,
+  buildFlatLayout,
+  buildSectionLayout,
+  layoutAt,
+} from '../../../../src/products/productRowLayout';
+import { ProductNoteDialog } from '../../../../src/products/ProductNoteDialog';
 import { NotificationBell } from '../../../../src/notifications/NotificationBell';
-
-// Product rows are a fixed height, measured from the running app. Declaring
-// it lets the list jump straight to any row: without it, scrollToIndex cannot
-// reach a row outside the rendered window, and its own averageItemLength
-// estimate reads ~82 against a real pitch of 104 — so every retry recomputed
-// the same wrong offset and the scroll stopped ~80 rows short.
-const ROW_HEIGHT = 104;
-
-// Same reasoning as ROW_HEIGHT: an exact height lets the category SectionList
-// jump straight to any row (via a getItemLayout that treats headers+rows as
-// one flat sequence) instead of guessing from an unmeasured average.
-const SECTION_HEADER_HEIGHT = 44;
 
 export default function OrderBuilderScreen() {
   const { providerId, providerName, sourceOrder, highlightProductId } = useLocalSearchParams<{
@@ -61,6 +56,8 @@ export default function OrderBuilderScreen() {
   const [pendingUnits, setPendingUnits] = useState<Record<string, string>>({});
   const pendingUnitsRef = useRef<Record<string, string>>({});
   const [unitPickerProduct, setUnitPickerProduct] = useState<Product | null>(null);
+  const [noteProduct, setNoteProduct] = useState<Product | null>(null);
+  const [noteToast, setNoteToast] = useState<string | null>(null);
   // Editing a product from here is rare; a pencil on every row is permanent
   // clutter on a screen whose job is setting quantities. Same toggle as the
   // departments list.
@@ -171,36 +168,39 @@ export default function OrderBuilderScreen() {
     });
   };
 
+  useEffect(() => {
+    if (!noteToast) return;
+    const timer = setTimeout(() => setNoteToast(null), 2000);
+    return () => clearTimeout(timer);
+  }, [noteToast]);
+
+  // Written into the cached list rather than refetched: the card should show
+  // the note the moment the dialog closes, and the server has already
+  // returned the saved value.
+  const handleNoteSaved = (updated: Product, outcome: 'saved' | 'deleted') => {
+    queryClient.setQueryData<Product[]>(['products', providerId], (previous) =>
+      previous?.map((product) =>
+        product.id === updated.id ? { ...product, note: updated.note ?? null } : product,
+      ),
+    );
+    setNoteProduct(null);
+    setNoteToast(outcome === 'saved' ? 'ההערה נשמרה' : 'ההערה נמחקה');
+  };
+
   const sectionListRef = useRef<SectionList<Product>>(null);
 
   // Treats headers and rows as one flat sequence of fixed heights, so
   // scrollToLocation can jump straight to a row instead of guessing from an
   // average — the same fix ROW_HEIGHT already is for the flat list above.
+  // Rows with a note are taller by one fixed line, so heights are per row but
+  // still exact; precomputed so each getItemLayout call is a lookup.
+  const sectionLayout = useMemo(() => buildSectionLayout(sectionsForList), [sectionsForList]);
+  const flatLayout = useMemo(() => buildFlatLayout(filteredProducts ?? []), [filteredProducts]);
+
   const sectionGetItemLayout = (
     _data: unknown,
     index: number,
-  ): { length: number; offset: number; index: number } => {
-    let offset = 0;
-    let remaining = index;
-    for (const section of sectionsForList) {
-      const rowCount = section.data.length;
-      // +1 for the header, mirroring how SectionList flattens [header, ...rows].
-      if (remaining === 0) {
-        return { length: SECTION_HEADER_HEIGHT, offset, index };
-      }
-      if (remaining <= rowCount) {
-        // A row within this section: past the header, plus every row before it.
-        return {
-          length: ROW_HEIGHT,
-          offset: offset + SECTION_HEADER_HEIGHT + (remaining - 1) * ROW_HEIGHT,
-          index,
-        };
-      }
-      offset += SECTION_HEADER_HEIGHT + rowCount * ROW_HEIGHT;
-      remaining -= rowCount + 1;
-    }
-    return { length: ROW_HEIGHT, offset, index };
-  };
+  ): { length: number; offset: number; index: number } => layoutAt(sectionLayout, index);
 
   useEffect(() => {
     if (!scrollTarget) return;
@@ -492,7 +492,19 @@ export default function OrderBuilderScreen() {
     return (
       <View style={[styles.card, isHighlighted && styles.cardHighlighted]}>
         <View style={styles.productNameRow}>
-          <Text style={styles.productName}>{product.name}</Text>
+          <View style={styles.productNameGroup}>
+            <Text style={styles.productName}>{product.name}</Text>
+            <Pressable
+              testID={`note-icon-${product.id}`}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={hasNote(product) ? 'עריכת הערה למוצר' : 'הוספת הערה למוצר'}
+              onPress={() => setNoteProduct(product)}
+            >
+              {/* An emoji can't be recolored, so state is carried by opacity. */}
+              <Text style={[styles.noteIcon, !hasNote(product) && styles.noteIconEmpty]}>🗒</Text>
+            </Pressable>
+          </View>
           {role === 'ADMIN' && isEditingProducts && (
             <Pressable
               hitSlop={8}
@@ -514,6 +526,18 @@ export default function OrderBuilderScreen() {
             </Pressable>
           )}
         </View>
+        {hasNote(product) && (
+          <Pressable
+            testID={`note-${product.id}`}
+            onPress={() => setNoteProduct(product)}
+            accessibilityRole="button"
+            accessibilityLabel={`הערה: ${product.note}`}
+          >
+            <Text style={styles.productNote} numberOfLines={1}>
+              {product.note}
+            </Text>
+          </Pressable>
+        )}
         <View style={styles.rowBottom}>
           <Pressable
             testID={`unit-${product.id}`}
@@ -635,17 +659,20 @@ export default function OrderBuilderScreen() {
           onClose={() => setUnitPickerProduct(null)}
         />
       )}
+      {noteProduct && (
+        <ProductNoteDialog
+          product={noteProduct}
+          onSaved={handleNoteSaved}
+          onClose={() => setNoteProduct(null)}
+        />
+      )}
       {isSearching ? (
         <FlatList
           ref={listRef}
           data={filteredProducts}
           keyExtractor={(product) => product.id}
           contentContainerStyle={styles.list}
-          getItemLayout={(_data, index) => ({
-            length: ROW_HEIGHT,
-            offset: ROW_HEIGHT * index,
-            index,
-          })}
+          getItemLayout={(_data, index) => layoutAt(flatLayout, index)}
           onScrollToIndexFailed={(info) => {
             // The row is outside the rendered window, so the list does not know
             // its offset. Jumping to an estimate forces it to render, and only
@@ -659,8 +686,10 @@ export default function OrderBuilderScreen() {
             // row can never be reached.
             if (scrollAttemptsRef.current >= 5) return;
             scrollAttemptsRef.current += 1;
-            const rowHeight = ROW_HEIGHT;
-            listRef.current?.scrollToOffset({ offset: rowHeight * info.index, animated: false });
+            listRef.current?.scrollToOffset({
+              offset: layoutAt(flatLayout, info.index).offset,
+              animated: false,
+            });
             setTimeout(() => {
               listRef.current?.scrollToIndex({
                 index: info.index,
@@ -711,6 +740,13 @@ export default function OrderBuilderScreen() {
           items={Object.values(itemsByProductId)}
           onBeforeMarkPublished={() => quantityWriterRef.current!.flush()}
         />
+      )}
+      {noteToast && (
+        <View style={styles.toast} pointerEvents="none">
+          <Text testID="note-toast" style={styles.toastText}>
+            {noteToast}
+          </Text>
+        </View>
       )}
     </View>
   );
@@ -795,7 +831,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   sectionChevron: { fontSize: 14, color: '#999' },
-  productName: { fontSize: 15, fontWeight: '600', textAlign: 'right', color: '#1a1a1a' },
+  productName: { fontSize: 15, fontWeight: '600', textAlign: 'right', color: '#1a1a1a', flexShrink: 1 },
+  productNameGroup: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+  noteIcon: { fontSize: 15 },
+  noteIconEmpty: { opacity: 0.3 },
+  // height and lineHeight are fixed at 16 so the extra row height is exactly
+  // NOTE_LINE_HEIGHT (card gap 10 + 16) in productRowLayout.ts.
+  productNote: { fontSize: 12, lineHeight: 16, height: 16, color: '#6b7280', textAlign: 'right' },
+  toast: {
+    position: 'absolute',
+    top: 72,
+    alignSelf: 'center',
+    backgroundColor: '#111827',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  toastText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   productNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   productEditIcon: { fontSize: 16, color: '#2563eb', paddingHorizontal: 4 },
   rowBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

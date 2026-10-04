@@ -50,6 +50,7 @@ jest.mock('../../../../src/api/products', () => ({
   createProduct: jest.fn(),
   updateProduct: jest.fn(),
   deleteProduct: jest.fn(),
+  updateProductNote: jest.fn(),
 }));
 
 jest.mock('../../../../src/api/categories', () => ({
@@ -70,7 +71,7 @@ jest.mock('../../../../src/api/orders', () => ({
   deleteOrder: jest.fn(),
 }));
 
-import { fetchProductsForProvider } from '../../../../src/api/products';
+import { fetchProductsForProvider, updateProductNote } from '../../../../src/api/products';
 import { fetchCategoriesForProvider } from '../../../../src/api/categories';
 import {
   createDraftOrder,
@@ -395,5 +396,73 @@ describe('changing the unit for this order', () => {
       expect(screen.getByTestId(`unit-label-${CARTON_PRODUCT.id}`)).toHaveTextContent('יחידה');
     });
     expect(screen.getByTestId(`unit-label-${WEIGHT_PRODUCT.id}`)).toHaveTextContent('ק"ג');
+  });
+});
+
+describe('product notes', () => {
+  const NOTE = 'לבקש רק תאריך ארוך';
+
+  it('shows a note line only under products that have a note', async () => {
+    (fetchProductsForProvider as jest.Mock).mockResolvedValue([
+      { ...CARTON_PRODUCT, note: NOTE },
+      WEIGHT_PRODUCT,
+    ]);
+    await renderScreen();
+
+    expect(screen.getByTestId(`note-${CARTON_PRODUCT.id}`)).toHaveTextContent(NOTE);
+    expect(screen.queryByTestId(`note-${WEIGHT_PRODUCT.id}`)).toBeNull();
+    // The icon is on every card, for every role (this suite runs as STAFF).
+    expect(screen.getByTestId(`note-icon-${CARTON_PRODUCT.id}`)).toBeTruthy();
+    expect(screen.getByTestId(`note-icon-${WEIGHT_PRODUCT.id}`)).toBeTruthy();
+  });
+
+  it('opens the note dialog from the icon', async () => {
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId(`note-icon-${WEIGHT_PRODUCT.id}`));
+
+    expect(screen.getByText('הערה למוצר')).toBeTruthy();
+    expect(screen.getByTestId('note-input').props.value).toBe('');
+  });
+
+  it('opens the note dialog with the full note from the note line', async () => {
+    (fetchProductsForProvider as jest.Mock).mockResolvedValue([
+      { ...CARTON_PRODUCT, note: NOTE },
+      WEIGHT_PRODUCT,
+    ]);
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId(`note-${CARTON_PRODUCT.id}`));
+
+    expect(screen.getByTestId('note-input').props.value).toBe(NOTE);
+  });
+
+  it('shows a saved note on the card straight away and confirms it', async () => {
+    (updateProductNote as jest.Mock).mockResolvedValue({ ...WEIGHT_PRODUCT, note: NOTE });
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId(`note-icon-${WEIGHT_PRODUCT.id}`));
+    await fireEvent.changeText(screen.getByTestId('note-input'), NOTE);
+    await fireEvent.press(screen.getByTestId('note-save'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId(`note-${WEIGHT_PRODUCT.id}`)).toHaveTextContent(NOTE),
+    );
+    expect(screen.getByTestId('note-toast')).toHaveTextContent('ההערה נשמרה');
+    expect(screen.queryByTestId('note-input')).toBeNull();
+    expect(updateProductNote).toHaveBeenCalledWith(PROVIDER_ID, WEIGHT_PRODUCT.id, NOTE);
+  });
+
+  it('removes the note line after deleting and confirms it', async () => {
+    (fetchProductsForProvider as jest.Mock).mockResolvedValue([
+      { ...CARTON_PRODUCT, note: NOTE },
+      WEIGHT_PRODUCT,
+    ]);
+    (updateProductNote as jest.Mock).mockResolvedValue({ ...CARTON_PRODUCT, note: null });
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId(`note-${CARTON_PRODUCT.id}`));
+    await fireEvent.press(screen.getByTestId('note-delete'));
+
+    await waitFor(() => expect(screen.queryByTestId(`note-${CARTON_PRODUCT.id}`)).toBeNull());
+    expect(screen.getByTestId('note-toast')).toHaveTextContent('ההערה נמחקה');
   });
 });
