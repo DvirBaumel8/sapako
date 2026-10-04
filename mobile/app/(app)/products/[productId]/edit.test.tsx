@@ -40,9 +40,20 @@ const baseParams = {
   providerId: 'provider-1',
 };
 
+let activeQueryClient: QueryClient | null = null;
+
+// React Query keeps a garbage-collection timer alive per query (default
+// gcTime is 5 minutes, and it is not unref'd), which otherwise leaves Jest's
+// process unable to exit on its own after the run finishes.
+afterEach(() => {
+  activeQueryClient?.clear();
+  activeQueryClient = null;
+});
+
 async function renderScreen(extra: Record<string, string> = {}) {
   mockParams = { ...baseParams, ...extra };
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  activeQueryClient = queryClient;
   await render(
     <QueryClientProvider client={queryClient}>
       <AlertProvider>
