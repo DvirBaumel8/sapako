@@ -288,4 +288,46 @@ describe('ProductsService', () => {
       expect(noMatch).toEqual([]);
     });
   });
+
+  describe('updateNote', () => {
+    it('saves the trimmed note on a product that belongs to the provider', async () => {
+      mockRepo.findOneBy.mockResolvedValue({ id: 'pr1', providerId: 'p1', note: null });
+      mockRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+      const result = await service.updateNote('p1', 'pr1', '  לבקש תאריך ארוך  ');
+
+      expect(mockRepo.findOneBy).toHaveBeenCalledWith({ id: 'pr1', providerId: 'p1' });
+      expect(mockRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'pr1', note: 'לבקש תאריך ארוך' }),
+      );
+      expect(result.note).toBe('לבקש תאריך ארוך');
+    });
+
+    it('stores a whitespace-only note as null', async () => {
+      mockRepo.findOneBy.mockResolvedValue({ id: 'pr1', providerId: 'p1', note: 'ישן' });
+      mockRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+      const result = await service.updateNote('p1', 'pr1', '   ');
+
+      expect(result.note).toBeNull();
+    });
+
+    it('clears the note when given null', async () => {
+      mockRepo.findOneBy.mockResolvedValue({ id: 'pr1', providerId: 'p1', note: 'ישן' });
+      mockRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+      const result = await service.updateNote('p1', 'pr1', null);
+
+      expect(result.note).toBeNull();
+    });
+
+    it('rejects with NotFoundException when the product is not under that provider, without saving', async () => {
+      mockRepo.findOneBy.mockResolvedValue(null);
+
+      await expect(service.updateNote('p1', 'pr-of-p2', 'x')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockRepo.save).not.toHaveBeenCalled();
+    });
+  });
 });

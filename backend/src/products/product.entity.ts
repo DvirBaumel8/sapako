@@ -40,6 +40,11 @@ export class Product {
   @JoinColumn({ name: 'categoryId' })
   category?: Category;
 
+  // Internal reminder for staff ordering this product. Never sent to the
+  // supplier — it is not part of the WhatsApp message or the order email.
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  note?: string | null;
+
   @Column({ default: true })
   isActive: boolean;
 

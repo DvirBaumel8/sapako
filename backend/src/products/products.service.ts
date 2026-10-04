@@ -59,6 +59,25 @@ export class ProductsService {
     return this.productsRepo.save(entity);
   }
 
+  /**
+   * Looked up by provider as well as id: the route is authorised per
+   * provider, so without this a user with access to one supplier could edit
+   * another supplier's product by pairing its id with their own provider's.
+   */
+  async updateNote(
+    providerId: string,
+    productId: string,
+    note: string | null,
+  ): Promise<Product> {
+    const product = await this.productsRepo.findOneBy({ id: productId, providerId });
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+    const trimmed = note?.trim() ?? '';
+    product.note = trimmed.length > 0 ? trimmed : null;
+    return this.productsRepo.save(product);
+  }
+
   findActiveByProvider(providerId: string): Promise<Product[]> {
     // Explicit order: without one, re-fetching after any write (e.g. the
     // bulk category-assignment toggle screen) can silently reshuffle the
