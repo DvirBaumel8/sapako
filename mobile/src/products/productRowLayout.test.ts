@@ -2,6 +2,7 @@ import {
   ROW_HEIGHT,
   NOTE_LINE_HEIGHT,
   SECTION_HEADER_HEIGHT,
+  SECTION_FOOTER_HEIGHT,
   hasNote,
   rowHeightFor,
   buildFlatLayout,
@@ -61,12 +62,12 @@ describe('buildSectionLayout', () => {
     });
     expect(layoutAt(table, 4)).toEqual({
       length: SECTION_HEADER_HEIGHT,
-      offset: SECTION_HEADER_HEIGHT + ROW_HEIGHT * 2,
+      offset: SECTION_HEADER_HEIGHT + ROW_HEIGHT * 2 + SECTION_FOOTER_HEIGHT,
       index: 4,
     });
     expect(layoutAt(table, 5)).toEqual({
       length: ROW_HEIGHT,
-      offset: SECTION_HEADER_HEIGHT * 2 + ROW_HEIGHT * 2,
+      offset: SECTION_HEADER_HEIGHT * 2 + ROW_HEIGHT * 2 + SECTION_FOOTER_HEIGHT,
       index: 5,
     });
   });
@@ -75,7 +76,7 @@ describe('buildSectionLayout', () => {
     const table = buildSectionLayout([{ data: [noted] }, { data: [plain] }]);
     // Flattened: [h0, noted, f0, h1, plain, f1]
     expect(layoutAt(table, 4).offset).toBe(
-      SECTION_HEADER_HEIGHT * 2 + ROW_HEIGHT + NOTE_LINE_HEIGHT,
+      SECTION_HEADER_HEIGHT * 2 + ROW_HEIGHT + NOTE_LINE_HEIGHT + SECTION_FOOTER_HEIGHT,
     );
   });
 
@@ -84,16 +85,24 @@ describe('buildSectionLayout', () => {
     // Flattened: [h0, f0, h1, plain, f1]
     expect(layoutAt(table, 3)).toEqual({
       length: ROW_HEIGHT,
-      offset: SECTION_HEADER_HEIGHT * 2,
+      offset: SECTION_HEADER_HEIGHT * 2 + SECTION_FOOTER_HEIGHT,
       index: 3,
     });
   });
 
-  it('gives each section a zero-length footer slot, which the list counts even unrendered', () => {
+  it('gives each section a footer slot of the list gap, which the list counts even unrendered', () => {
     const table = buildSectionLayout([{ data: [plain] }, { data: [plain] }]);
     // Flattened: [h0, r, f0, h1, r, f1]
-    expect(layoutAt(table, 2).length).toBe(0);
-    expect(layoutAt(table, 5).length).toBe(0);
+    expect(layoutAt(table, 2).length).toBe(SECTION_FOOTER_HEIGHT);
+    expect(layoutAt(table, 5).length).toBe(SECTION_FOOTER_HEIGHT);
+  });
+});
+
+describe('measured web layout', () => {
+  it('reproduces the offsets measured in the running app', () => {
+    const table = buildSectionLayout([{ data: [noted, plain] }, { data: [plain] }]);
+    // Flattened: [h0, noted, plain, f0, h1, plain, f1]
+    expect(table.offsets.slice(0, 6)).toEqual([0, 43, 173, 277, 285, 328]);
   });
 });
 
@@ -102,7 +111,7 @@ describe('layoutAt', () => {
     const table = buildSectionLayout([{ data: [plain] }]);
     expect(layoutAt(table, 5)).toEqual({
       length: ROW_HEIGHT,
-      offset: SECTION_HEADER_HEIGHT + ROW_HEIGHT,
+      offset: SECTION_HEADER_HEIGHT + ROW_HEIGHT + SECTION_FOOTER_HEIGHT,
       index: 5,
     });
   });

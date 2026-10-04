@@ -192,7 +192,7 @@ export default function OrderBuilderScreen() {
   // Treats [header, ...rows, footer] per section as one flat sequence of fixed
   // heights, so scrollToLocation can jump straight to a row instead of guessing
   // from an average — the same fix as the shared layout tables in
-  // src/products/productRowLayout.ts (footer slots are zero-length).
+  // src/products/productRowLayout.ts (footer slots are the list's 8px gap).
   // Rows with a note are taller by one fixed line, so heights are per row but
   // still exact; precomputed so each getItemLayout call is a lookup.
   const sectionLayout = useMemo(() => buildSectionLayout(sectionsForList), [sectionsForList]);

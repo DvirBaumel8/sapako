@@ -5,6 +5,7 @@ import type { Product } from '../api/types';
 // reach a row outside the rendered window, and its own averageItemLength
 // estimate reads ~82 against a real pitch of 104 — so every retry recomputed
 // the same wrong offset and the scroll stopped ~80 rows short.
+// Measured in the running web app: 96px card + the list's 8px gap.
 export const ROW_HEIGHT = 104;
 
 // A product with a note renders one extra line under its name: the card's
@@ -14,7 +15,12 @@ export const NOTE_LINE_HEIGHT = 26;
 
 // Same reasoning as ROW_HEIGHT: an exact height lets the category SectionList
 // jump straight to any row instead of guessing from an unmeasured average.
-export const SECTION_HEADER_HEIGHT = 44;
+// Measured in the running web app: 35px header + the list's 8px gap.
+export const SECTION_HEADER_HEIGHT = 43;
+
+// The footer cell renders empty, but it still takes the list's 8px gap.
+// Measured in the running web app.
+export const SECTION_FOOTER_HEIGHT = 8;
 
 type HasNoteField = Pick<Product, 'note'>;
 
@@ -52,7 +58,8 @@ export function buildFlatLayout(products: readonly HasNoteField[]): ItemLayoutTa
 /**
  * Treats headers and rows as one flat sequence: [header, ...rows, footer] per
  * section. VirtualizedSectionList counts a footer slot for every section even
- * when no footer is rendered, so we add a zero-length one to keep indexes aligned.
+ * when no footer is rendered (it is an empty cell that still takes the list's gap),
+ * so we add a SECTION_FOOTER_HEIGHT one to keep indexes and offsets aligned.
  */
 export function buildSectionLayout(
   sections: readonly { data: readonly HasNoteField[] }[],
@@ -61,7 +68,7 @@ export function buildSectionLayout(
   for (const section of sections) {
     pushSlot(table, SECTION_HEADER_HEIGHT);
     for (const product of section.data) pushSlot(table, rowHeightFor(product));
-    pushSlot(table, 0);
+    pushSlot(table, SECTION_FOOTER_HEIGHT);
   }
   return table;
 }
