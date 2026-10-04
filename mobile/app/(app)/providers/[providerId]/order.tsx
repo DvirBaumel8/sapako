@@ -521,6 +521,7 @@ export default function OrderBuilderScreen() {
                     productName: product.name,
                     unitType: product.unitType,
                     barcode: product.barcode ?? '',
+                    additionalBarcodes: (product.additionalBarcodes ?? []).join(','),
                     providerId,
                     categoryId: product.categoryId ?? '',
                   },

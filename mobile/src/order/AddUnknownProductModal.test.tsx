@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { AxiosError, AxiosHeaders } from 'axios';
 import { AlertProvider } from '../ui/AlertProvider';
 import { AddUnknownProductModal } from './AddUnknownProductModal';
 import { DEFAULT_UNIT_TYPE } from '../products/unitTypes';
@@ -136,6 +137,26 @@ describe('AddUnknownProductModal', () => {
     );
     expect(onCreated).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [409, 'מוצר בשם הזה כבר קיים אצל הספק.'],
+    [500, 'הוספת המוצר נכשלה. יש לנסות שוב.'],
+  ])('on a %s failure shows the matching message', async (status, message) => {
+    (createProduct as jest.Mock).mockRejectedValue(
+      new AxiosError('x', 'ERR', undefined, undefined, {
+        status,
+        statusText: '',
+        data: {},
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      }),
+    );
+    await renderModal();
+    await fireEvent.changeText(screen.getByPlaceholderText('שם המוצר'), 'גבינה');
+    await fireEvent.press(screen.getByText('הוספה והוספה להזמנה'));
+
+    expect(await screen.findByText(message)).toBeTruthy();
   });
 });
 

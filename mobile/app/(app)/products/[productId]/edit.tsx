@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { deleteProduct, updateProduct } from '../../../../src/api/products';
+import { isConflictError } from '../../../../src/api/errors';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { hasLetter, sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
@@ -18,6 +19,7 @@ export default function EditProductScreen() {
     productName,
     unitType: initialUnitType,
     barcode: initialBarcode,
+    additionalBarcodes,
     providerId,
     categoryId: initialCategoryId,
   } = useLocalSearchParams<{
@@ -25,6 +27,7 @@ export default function EditProductScreen() {
     productName?: string;
     unitType?: string;
     barcode?: string;
+    additionalBarcodes?: string;
     providerId: string;
     categoryId?: string;
   }>();
@@ -49,8 +52,13 @@ export default function EditProductScreen() {
       await updateProduct(productId, { name, unitType, barcode: barcode || undefined, categoryId });
       await invalidateProducts();
       router.back();
-    } catch {
-      showAlert({ title: 'שגיאה', message: 'שמירת המוצר נכשלה. יש לנסות שוב.' });
+    } catch (err) {
+      showAlert({
+        title: 'שגיאה',
+        message: isConflictError(err)
+          ? 'מוצר בשם הזה כבר קיים אצל הספק.'
+          : 'שמירת המוצר נכשלה. יש לנסות שוב.',
+      });
     }
   };
 
@@ -89,6 +97,11 @@ export default function EditProductScreen() {
       )}
       <UnitTypePicker value={unitType} onChange={setUnitType} />
       <TextInput style={styles.input} placeholder="ברקוד (אופציונלי)" value={barcode} onChangeText={setBarcode} />
+      {additionalBarcodes ? (
+        <Text style={styles.additionalBarcodes}>
+          {`ברקודים נוספים: ${additionalBarcodes.split(',').join(', ')}`}
+        </Text>
+      ) : null}
       <Text style={styles.label}>קטגוריה</Text>
       <CategoryPicker providerId={providerId} value={categoryId} onChange={setCategoryId} />
       <PrimaryButton title="שמירה" onPress={handleSubmit} disabled={!name || !isNameValid || !unitType} />
@@ -100,6 +113,7 @@ export default function EditProductScreen() {
 }
 
 const styles = StyleSheet.create({
+  additionalBarcodes: { fontSize: 13, color: '#666', textAlign: 'right' },
   container: { flex: 1, padding: 16, gap: 12 },
   label: { fontWeight: '600', textAlign: 'right' },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },

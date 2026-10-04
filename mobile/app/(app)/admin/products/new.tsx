@@ -11,6 +11,7 @@ import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
 import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 import type { Branch, Provider } from '../../../../src/api/types';
+import { isConflictError } from '../../../../src/api/errors';
 import { useAlert } from '../../../../src/ui/AlertProvider';
 import { UnitTypePicker } from '../../../../src/products/UnitTypePicker';
 import { CategoryPicker } from '../../../../src/products/CategoryPicker';
@@ -143,11 +144,16 @@ export default function NewProductScreen() {
       await queryClient.invalidateQueries({ queryKey: ['products'] });
       await queryClient.invalidateQueries({ queryKey: ['branch-products'] });
       router.back();
-    } catch {
+    } catch (err) {
       // Previously unhandled: a failed create left the screen silently doing
       // nothing, which on a slow connection is indistinguishable from the app
       // having ignored the tap.
-      showAlert({ title: 'שגיאה', message: 'יצירת המוצר נכשלה. יש לנסות שוב.' });
+      showAlert({
+        title: 'שגיאה',
+        message: isConflictError(err)
+          ? 'מוצר בשם הזה כבר קיים אצל הספק.'
+          : 'יצירת המוצר נכשלה. יש לנסות שוב.',
+      });
     } finally {
       setIsSubmitting(false);
     }
