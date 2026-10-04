@@ -25,7 +25,9 @@ image are identical. No duplicate is referenced by an order line locally.
    whitespace differences (leading/trailing, repeated spaces). Near-matches
    ("ראש סלרי" vs "סלרי ראש", "סלרי ראש טרי") are **out of scope**.
 3. Extra copies are **hidden, not deleted**, and remember what they were
-   merged into — fully reversible.
+   merged into, so they can be restored. (Combining colliding lines on draft
+   orders is not undoable by `down()`; the real rollback is a Neon restore
+   point taken before the push.)
 4. The merge runs as a **database migration** (applies automatically on
    deploy, no production credentials needed), previewed first on the local
    copy.
