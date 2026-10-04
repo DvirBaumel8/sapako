@@ -15,6 +15,7 @@ export interface MergeSummary {
   groups: number;
   hidden: number;
   orderLinesRepointed: number;
+  draftLinesCollapsed: number;
 }
 
 export const NORMALIZED_NAME_INDEX = 'uq_products_provider_normalized_name';
@@ -47,7 +48,7 @@ export async function mergeDuplicateProducts(
   // A temp table is per-connection: callers must pass ONE connection (a
   // QueryRunner), never a pooled DataSource whose calls may each land on a
   // different connection.
-  await runner.query(`DROP TABLE IF EXISTS merge_map`);
+  await runner.query(`DROP TABLE IF EXISTS pg_temp.merge_map`);
   await runner.query(`
     CREATE TEMP TABLE merge_map AS
     WITH ranked AS (
@@ -76,15 +77,6 @@ export async function mergeDuplicateProducts(
     WHERE loser.rn > 1
   `);
 
-  const [counts] = await runner.query(`
-    SELECT
-      count(DISTINCT survivor_id)::int AS groups,
-      count(*)::int AS hidden,
-      (SELECT count(*)::int FROM order_items oi
-         WHERE oi."productId" IN (SELECT loser_id FROM merge_map)) AS "orderLinesRepointed"
-    FROM merge_map
-  `);
-
   await runner.query(`
     UPDATE products s
     SET "additionalBarcodes" = (
@@ -103,6 +95,52 @@ export async function mergeDuplicateProducts(
     WHERE s.id IN (SELECT survivor_id FROM merge_map)
   `);
 
+  // On a DRAFT, staff see one line per product, so lines that would land on
+  // the same survivor with the same unit become one (quantities summed).
+  // Sent orders keep their lines as history and are only repointed below.
+  const [collapsed] = await runner.query(`
+    WITH lines AS (
+      SELECT oi.id, oi."orderId", oi."unitType", oi.quantity,
+             coalesce(m.survivor_id, oi."productId") AS sid,
+             (m.loser_id IS NULL) AS own
+      FROM order_items oi
+      JOIN orders o ON o.id = oi."orderId" AND o.status = 'DRAFT'
+      LEFT JOIN merge_map m ON m.loser_id = oi."productId"
+      WHERE m.loser_id IS NOT NULL
+         OR oi."productId" IN (SELECT survivor_id FROM merge_map)
+    ),
+    ranked AS (
+      SELECT id, quantity,
+        row_number() OVER w AS rn,
+        count(*) OVER w2 AS cnt,
+        sum(quantity) OVER w2 AS total
+      FROM lines
+      WINDOW w AS (PARTITION BY "orderId", sid, "unitType" ORDER BY own DESC, id ASC),
+             w2 AS (PARTITION BY "orderId", sid, "unitType")
+    ),
+    kept AS (
+      UPDATE order_items oi SET quantity = r.total
+      FROM ranked r WHERE oi.id = r.id AND r.rn = 1 AND r.cnt > 1
+      RETURNING oi.id
+    ),
+    dropped AS (
+      DELETE FROM order_items oi USING ranked r
+      WHERE oi.id = r.id AND r.rn > 1
+      RETURNING oi.id
+    )
+    SELECT (SELECT count(*)::int FROM dropped) AS n
+  `);
+
+  // Counted after the collapse so deleted lines aren't reported as repointed.
+  const [counts] = await runner.query(`
+    SELECT
+      count(DISTINCT survivor_id)::int AS groups,
+      count(*)::int AS hidden,
+      (SELECT count(*)::int FROM order_items oi
+         WHERE oi."productId" IN (SELECT loser_id FROM merge_map)) AS "orderLinesRepointed"
+    FROM merge_map
+  `);
+
   await runner.query(`
     UPDATE order_items oi SET "productId" = m.survivor_id
     FROM merge_map m WHERE oi."productId" = m.loser_id
@@ -113,11 +151,12 @@ export async function mergeDuplicateProducts(
     FROM merge_map m WHERE p.id = m.loser_id
   `);
 
-  await runner.query(`DROP TABLE merge_map`);
+  await runner.query(`DROP TABLE IF EXISTS pg_temp.merge_map`);
 
   return {
     groups: counts.groups,
     hidden: counts.hidden,
     orderLinesRepointed: counts.orderLinesRepointed,
+    draftLinesCollapsed: collapsed.n,
   };
 }

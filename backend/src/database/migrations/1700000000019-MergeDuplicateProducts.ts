@@ -12,13 +12,13 @@ export class MergeDuplicateProducts1700000000019 implements MigrationInterface {
     await queryRunner.query(`
       ALTER TABLE products
         ADD COLUMN "additionalBarcodes" TEXT[] NOT NULL DEFAULT '{}',
-        ADD COLUMN "mergedIntoProductId" UUID NULL REFERENCES products(id)
+        ADD COLUMN "mergedIntoProductId" UUID NULL REFERENCES products(id) ON DELETE SET NULL
     `);
     // The one-off item-file import created one product per barcode; see
     // docs/superpowers/specs/2026-10-05-merge-duplicate-products-design.md.
     const summary = await mergeDuplicateProducts(queryRunner);
     console.log(
-      `MergeDuplicateProducts: merged ${summary.groups} groups, hid ${summary.hidden} products, repointed ${summary.orderLinesRepointed} order lines`,
+      `MergeDuplicateProducts: merged ${summary.groups} groups, hid ${summary.hidden} products, repointed ${summary.orderLinesRepointed} order lines, collapsed ${summary.draftLinesCollapsed} draft lines`,
     );
     await createNormalizedNameIndex(queryRunner);
   }

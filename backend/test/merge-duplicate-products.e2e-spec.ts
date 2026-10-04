@@ -24,9 +24,12 @@ describe('mergeDuplicateProducts (e2e, real Postgres)', () => {
   });
 
   afterAll(async () => {
-    await createNormalizedNameIndex(runner);
-    await runner.release();
-    await app.close();
+    try {
+      await createNormalizedNameIndex(runner);
+    } finally {
+      await runner.release();
+      await app.close();
+    }
   });
 
   // Each test uses its own provider-scoped names so tests don't see each
@@ -50,20 +53,33 @@ describe('mergeDuplicateProducts (e2e, real Postgres)', () => {
     return row.id;
   }
 
-  async function insertOrder(): Promise<string> {
+  async function insertOrder(status = 'DRAFT'): Promise<string> {
     const [order] = await db.query(
       `INSERT INTO orders ("branchId", "providerId", "createdByUserId", status)
-       VALUES ($1, $2, (SELECT id FROM users LIMIT 1), 'DRAFT') RETURNING id`,
-      [fixtures.branchId, P()],
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [fixtures.branchId, P(), fixtures.staffUserId, status],
     );
     return order.id;
   }
 
-  const insertLine = (orderId: string, productId: string, name: string) =>
+  const insertLine = (
+    orderId: string,
+    productId: string,
+    name: string,
+    quantity = 1,
+    unitType = 'קרטון',
+  ) =>
     db.query(
       `INSERT INTO order_items ("orderId", "productId", "productNameSnapshot", "unitType", quantity)
-       VALUES ($1, $2, $3, 'קרטון', 1)`,
-      [orderId, productId, name],
+       VALUES ($1, $2, $3, $4, $5)`,
+      [orderId, productId, name, unitType, quantity],
+    );
+
+  const linesOf = (orderId: string) =>
+    db.query(
+      `SELECT "productId", "unitType", quantity::float AS quantity FROM order_items
+       WHERE "orderId" = $1 ORDER BY quantity`,
+      [orderId],
     );
 
   const get = async (id: string) =>
@@ -160,7 +176,7 @@ describe('mergeDuplicateProducts (e2e, real Postgres)', () => {
       '7290000000900',
       '2026-01-01T00:00:00Z',
     );
-    const orderId = await insertOrder();
+    const orderId = await insertOrder('PUBLISHED');
     await insertLine(orderId, loser, 'כרפס');
     await insertLine(orderId, survivor, 'כרפס');
     const summary = await mergeDuplicateProducts(runner);
@@ -221,7 +237,144 @@ describe('mergeDuplicateProducts (e2e, real Postgres)', () => {
     const after = await db.query(
       `SELECT id, "isActive", "additionalBarcodes" FROM products ORDER BY id`,
     );
-    expect(summary).toEqual({ groups: 0, hidden: 0, orderLinesRepointed: 0 });
+    expect(summary).toEqual({
+      groups: 0,
+      hidden: 0,
+      orderLinesRepointed: 0,
+      draftLinesCollapsed: 0,
+    });
     expect(after).toEqual(before);
+  });
+
+  it('keeps the hidden copy when its survivor is deleted, clearing the pointer', async () => {
+    const a = await insert(
+      P(),
+      'נענע',
+      '7290000000917',
+      '2026-01-01T00:00:00Z',
+    );
+    const b = await insert(
+      P(),
+      'נענע',
+      '7290000000924',
+      '2026-01-02T00:00:00Z',
+    );
+    await mergeDuplicateProducts(runner);
+    expect((await get(b)).mergedIntoProductId).toBe(a);
+    await db.query(`DELETE FROM products WHERE id = $1`, [a]);
+    expect((await get(b)).mergedIntoProductId).toBeNull();
+  });
+
+  it("carries a loser's own additional barcodes over, once, and skips empty ones", async () => {
+    const a = await insert(
+      P(),
+      'כוסברה',
+      '7290000000931',
+      '2026-01-01T00:00:00Z',
+    );
+    const b = await insert(
+      P(),
+      'כוסברה',
+      '7290000000948',
+      '2026-01-02T00:00:00Z',
+    );
+    const c = await insert(
+      P(),
+      'כוסברה',
+      '7290000000948',
+      '2026-01-03T00:00:00Z',
+    );
+    await insert(P(), 'כוסברה', '', '2026-01-04T00:00:00Z');
+    await db.query(
+      `UPDATE products SET "additionalBarcodes" = '{9001,9002}' WHERE id = $1`,
+      [b],
+    );
+    await db.query(
+      `UPDATE products SET "additionalBarcodes" = '{9002}' WHERE id = $1`,
+      [c],
+    );
+    await mergeDuplicateProducts(runner);
+    expect((await get(a)).additionalBarcodes).toEqual([
+      '7290000000948',
+      '9001',
+      '9002',
+    ]);
+  });
+
+  it('treats Latin case differences as the same name', async () => {
+    const a = await insert(
+      P(),
+      'Coca Cola',
+      '7290000000955',
+      '2026-01-01T00:00:00Z',
+    );
+    const b = await insert(
+      P(),
+      'coca cola',
+      '7290000000962',
+      '2026-01-02T00:00:00Z',
+    );
+    await mergeDuplicateProducts(runner);
+    expect((await get(a)).isActive).toBe(true);
+    expect((await get(b)).mergedIntoProductId).toBe(a);
+  });
+
+  describe('order lines on a merged product', () => {
+    it('collapses same-unit lines on a DRAFT into one with the summed quantity', async () => {
+      const survivor = await insert(
+        P(),
+        'פלפל',
+        '7290000000979',
+        '2026-01-01T00:00:00Z',
+      );
+      const loser = await insert(P(), 'פלפל', null, '2026-01-02T00:00:00Z');
+      const orderId = await insertOrder();
+      await insertLine(orderId, survivor, 'פלפל', 2);
+      await insertLine(orderId, loser, 'פלפל', 3);
+      const summary = await mergeDuplicateProducts(runner);
+      expect(await linesOf(orderId)).toEqual([
+        { productId: survivor, unitType: 'קרטון', quantity: 5 },
+      ]);
+      expect(summary.draftLinesCollapsed).toBe(1);
+      expect(summary.orderLinesRepointed).toBe(0);
+    });
+
+    it('keeps lines with different units separate on a DRAFT', async () => {
+      const survivor = await insert(
+        P(),
+        'מלפפון',
+        '7290000000986',
+        '2026-01-01T00:00:00Z',
+      );
+      const loser = await insert(P(), 'מלפפון', null, '2026-01-02T00:00:00Z');
+      // The survivor must be referenced too, or the ordered copy outranks it.
+      await insertLine(await insertOrder('PUBLISHED'), survivor, 'מלפפון');
+      const orderId = await insertOrder();
+      await insertLine(orderId, loser, 'מלפפון', 1, 'קרטון');
+      await insertLine(orderId, loser, 'מלפפון', 2, 'יחידה');
+      await mergeDuplicateProducts(runner);
+      expect(await linesOf(orderId)).toEqual([
+        { productId: survivor, unitType: 'קרטון', quantity: 1 },
+        { productId: survivor, unitType: 'יחידה', quantity: 2 },
+      ]);
+    });
+
+    it('leaves sent orders with all their lines, repointed', async () => {
+      const survivor = await insert(
+        P(),
+        'חציל',
+        '7290000000993',
+        '2026-01-01T00:00:00Z',
+      );
+      const loser = await insert(P(), 'חציל', null, '2026-01-02T00:00:00Z');
+      const orderId = await insertOrder('PUBLISHED');
+      await insertLine(orderId, survivor, 'חציל', 2);
+      await insertLine(orderId, loser, 'חציל', 3);
+      await mergeDuplicateProducts(runner);
+      expect(await linesOf(orderId)).toEqual([
+        { productId: survivor, unitType: 'קרטון', quantity: 2 },
+        { productId: survivor, unitType: 'קרטון', quantity: 3 },
+      ]);
+    });
   });
 });
