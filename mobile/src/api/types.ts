@@ -42,6 +42,8 @@ export interface Product {
   // Undefined/null both mean "uncategorized" — the order screen groups
   // either into the same "ללא קטגוריה" bucket.
   categoryId?: string | null;
+  // Internal staff reminder; null/undefined means no note.
+  note?: string | null;
   isActive: boolean;
   createdAt: string;
 }

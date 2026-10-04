@@ -39,6 +39,20 @@ export async function updateProduct(
   return response.data;
 }
 
+// Separate from updateProduct on purpose: this route is open to staff with
+// access to the provider, while updateProduct is admin-only.
+export async function updateProductNote(
+  providerId: string,
+  productId: string,
+  note: string | null,
+): Promise<Product> {
+  const response = await apiClient.patch<Product>(
+    `/providers/${providerId}/products/${productId}/note`,
+    { note },
+  );
+  return response.data;
+}
+
 export async function deleteProduct(id: string): Promise<void> {
   await apiClient.delete(`/products/${id}`);
 }
