@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -20,6 +21,7 @@ import { PermissionsService } from '../permissions/permissions.service';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { UpdateProductNoteDto } from './dto/update-product-note.dto';
 import { Product } from './product.entity';
 
 @Controller('branches/:branchId/products')
@@ -71,6 +73,18 @@ export class ProviderProductsController {
     @Body() dto: CreateProductDto,
   ): Promise<Product> {
     return this.productsService.create(providerId, dto);
+  }
+
+  // No @Roles: anyone who can see this provider's products can keep their
+  // notes. Deliberately a separate route from the admin PATCH /products/:id,
+  // so this grants staff the note and nothing else on the product.
+  @Patch(':productId/note')
+  updateNote(
+    @Param('providerId') providerId: string,
+    @Param('productId', ParseUUIDPipe) productId: string,
+    @Body() dto: UpdateProductNoteDto,
+  ): Promise<Product> {
+    return this.productsService.updateNote(providerId, productId, dto.note);
   }
 }
 

@@ -8,6 +8,7 @@ import {
 } from './products.controller';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { UpdateProductNoteDto } from './dto/update-product-note.dto';
 import { UNIT_TYPES } from './unit-types';
 import { Role } from '../users/role.enum';
 import { ROLES_KEY } from '../auth/roles.decorator';
@@ -92,6 +93,7 @@ describe('ProviderProductsController', () => {
   const mockProductsService = {
     findActiveByProvider: jest.fn(),
     create: jest.fn(),
+    updateNote: jest.fn(),
   };
 
   beforeEach(() => {
@@ -123,6 +125,14 @@ describe('ProviderProductsController', () => {
       );
       expect(roles).toEqual([Role.ADMIN]);
     });
+
+    it('leaves editing a note open to any authenticated role with provider access', () => {
+      const roles = Reflect.getMetadata(
+        ROLES_KEY,
+        ProviderProductsController.prototype.updateNote,
+      );
+      expect(roles).toBeUndefined();
+    });
   });
 
   describe('findForProvider', () => {
@@ -149,6 +159,24 @@ describe('ProviderProductsController', () => {
 
       expect(mockProductsService.create).toHaveBeenCalledWith('p1', dto);
       expect(result).toBe(created);
+    });
+  });
+
+  describe('updateNote', () => {
+    it('delegates to the service with the provider id, product id and note', async () => {
+      const updated = { id: 'prod1', note: 'לבקש תאריך ארוך' };
+      mockProductsService.updateNote.mockResolvedValue(updated);
+
+      const result = await controller.updateNote('p1', 'prod1', {
+        note: 'לבקש תאריך ארוך',
+      });
+
+      expect(mockProductsService.updateNote).toHaveBeenCalledWith(
+        'p1',
+        'prod1',
+        'לבקש תאריך ארוך',
+      );
+      expect(result).toBe(updated);
     });
   });
 });
@@ -290,5 +318,36 @@ describe('unitType validation', () => {
 
       expect(errors).toHaveLength(0);
     });
+  });
+});
+
+describe('UpdateProductNoteDto', () => {
+  it('accepts a note of exactly 200 characters', async () => {
+    const dto = plainToInstance(UpdateProductNoteDto, {
+      note: 'א'.repeat(200),
+    });
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejects a note longer than 200 characters', async () => {
+    const dto = plainToInstance(UpdateProductNoteDto, {
+      note: 'א'.repeat(201),
+    });
+    expect(await validate(dto)).not.toHaveLength(0);
+  });
+
+  it('accepts null, which clears the note', async () => {
+    const dto = plainToInstance(UpdateProductNoteDto, { note: null });
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejects a body with no note field at all', async () => {
+    const dto = plainToInstance(UpdateProductNoteDto, {});
+    expect(await validate(dto)).not.toHaveLength(0);
+  });
+
+  it('rejects a non-string note', async () => {
+    const dto = plainToInstance(UpdateProductNoteDto, { note: 5 });
+    expect(await validate(dto)).not.toHaveLength(0);
   });
 });
