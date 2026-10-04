@@ -7,6 +7,20 @@
 - Workflow for new work: build and test locally (not pushed to `main`) until satisfied, then push straight to `main`.
 - The `dev` branch is obsolete under this workflow and can be deleted.
 
+## Model Split: Opus Plans, Sonnet Implements
+
+- **Opus** (the main session) handles requirements, specs, and implementation
+  plans: clarifying ambiguous asks, writing the spec, getting Dvir's explicit
+  sign-off, then breaking it into a concrete step-by-step plan.
+- **Sonnet** does the implementation. Once a plan is approved, Opus hands each
+  task to a subagent launched with `model: "sonnet"`. The handoff includes the
+  relevant spec/plan section, the files involved, and how to verify the work.
+- Opus reviews what Sonnet returns (diff, tests, behavior) before the task
+  counts as done, and sends it back to Sonnet for fixes rather than quietly
+  rewriting it.
+- Trivial one-line fixes don't need the handoff. Anything that needs a plan
+  goes through it.
+
 ## Customer Release Notes
 
 Dvir periodically sends the customer (a non-technical supermarket owner/staff)
