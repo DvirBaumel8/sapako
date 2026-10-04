@@ -158,6 +158,21 @@ describe('ProductsService', () => {
     );
   });
 
+  it('clears the merge pointer when a hidden product is reactivated', async () => {
+    mockRepo.findOneBy.mockResolvedValue({
+      id: 'pr1',
+      providerId: 'p1',
+      name: 'Tomatoes',
+      isActive: false,
+      mergedIntoProductId: 'pr2',
+    });
+    mockRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+    const updated = await service.update('pr1', { isActive: true });
+
+    expect(updated.mergedIntoProductId).toBeNull();
+  });
+
   it('reassigns a product to a categoryId that belongs to its own provider', async () => {
     mockRepo.findOneBy.mockResolvedValue({
       id: 'pr1',

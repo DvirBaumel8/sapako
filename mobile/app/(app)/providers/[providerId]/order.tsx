@@ -4,6 +4,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchProductsForProvider } from '../../../../src/api/products';
 import { fetchCategoriesForProvider } from '../../../../src/api/categories';
+import { collapseOrderLinesForContinue } from '../../../../src/order/collapseOrderLinesForContinue';
 import { groupProductsByCategory } from '../../../../src/products/groupProductsByCategory';
 import {
   createDraftOrder,
@@ -267,7 +268,7 @@ export default function OrderBuilderScreen() {
       // "Continue" a sent order: build a fresh draft pre-filled with the same items.
       createDraftOrder(selectedBranch!.id, providerId).then(async (created) => {
         const addedItems = await Promise.all(
-          parsedSource.items.map((item) =>
+          collapseOrderLinesForContinue(parsedSource.items).map((item) =>
             addOrderItem(created.id, {
               productId: item.productId,
               productNameSnapshot: item.productNameSnapshot,

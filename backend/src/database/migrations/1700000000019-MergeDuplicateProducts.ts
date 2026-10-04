@@ -9,6 +9,8 @@ export class MergeDuplicateProducts1700000000019 implements MigrationInterface {
   name = 'MergeDuplicateProducts1700000000019';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // Fail fast and roll back rather than queue every products query behind the ALTER if an old instance holds a lock.
+    await queryRunner.query(`SET LOCAL lock_timeout = '10s'`);
     await queryRunner.query(`
       ALTER TABLE products
         ADD COLUMN "additionalBarcodes" TEXT[] NOT NULL DEFAULT '{}',
@@ -18,7 +20,7 @@ export class MergeDuplicateProducts1700000000019 implements MigrationInterface {
     // docs/superpowers/specs/2026-10-05-merge-duplicate-products-design.md.
     const summary = await mergeDuplicateProducts(queryRunner);
     console.log(
-      `MergeDuplicateProducts: merged ${summary.groups} groups, hid ${summary.hidden} products, repointed ${summary.orderLinesRepointed} order lines, collapsed ${summary.draftLinesCollapsed} draft lines`,
+      `MergeDuplicateProducts: merged ${summary.groups} groups, hid ${summary.hidden} products, repointed ${summary.orderLinesRepointed} order lines, collapsed ${summary.draftLinesCollapsed} draft lines, ${summary.lockedOrderCollisions} sent-order lines now share a product`,
     );
     await createNormalizedNameIndex(queryRunner);
   }

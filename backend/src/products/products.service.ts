@@ -202,6 +202,8 @@ export class ProductsService {
       );
     }
     Object.assign(product, input);
+    // Bringing a hidden copy back makes it a live product in its own right.
+    if (input.isActive === true) product.mergedIntoProductId = null;
     return this.saveRefusingDuplicateName(product);
   }
 

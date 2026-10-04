@@ -242,6 +242,7 @@ describe('mergeDuplicateProducts (e2e, real Postgres)', () => {
       hidden: 0,
       orderLinesRepointed: 0,
       draftLinesCollapsed: 0,
+      lockedOrderCollisions: 0,
     });
     expect(after).toEqual(before);
   });
@@ -370,11 +371,12 @@ describe('mergeDuplicateProducts (e2e, real Postgres)', () => {
       const orderId = await insertOrder('PUBLISHED');
       await insertLine(orderId, survivor, 'חציל', 2);
       await insertLine(orderId, loser, 'חציל', 3);
-      await mergeDuplicateProducts(runner);
+      const summary = await mergeDuplicateProducts(runner);
       expect(await linesOf(orderId)).toEqual([
         { productId: survivor, unitType: 'קרטון', quantity: 2 },
         { productId: survivor, unitType: 'קרטון', quantity: 3 },
       ]);
+      expect(summary.lockedOrderCollisions).toBe(1);
     });
   });
 });

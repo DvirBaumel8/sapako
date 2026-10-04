@@ -105,16 +105,24 @@ export class OrdersService {
     return this.withDraftOrder(orderId, async (order, manager) => {
       let productNameSnapshot = input.productNameSnapshot;
       let unitType = input.unitType;
+      let productId = input.productId;
 
       if (input.productId) {
         // Not part of the order-row lock: it reads the (unrelated) products
         // table and doesn't need to participate in the transaction.
-        const product = await this.productsService.findById(input.productId);
+        let product = await this.productsService.findById(input.productId);
+        // A session open across the merge may still hold a hidden copy.
+        if (product.mergedIntoProductId) {
+          product = await this.productsService.findById(
+            product.mergedIntoProductId,
+          );
+        }
         if (product.providerId !== order.providerId) {
           throw new BadRequestException(
             "Product does not belong to this order's provider",
           );
         }
+        productId = product.id;
         productNameSnapshot = product.name;
         unitType = unitType ?? product.unitType;
       }
@@ -128,7 +136,7 @@ export class OrdersService {
       const itemRepo = manager.getRepository(OrderItem);
       const entity = itemRepo.create({
         orderId,
-        productId: input.productId,
+        productId,
         productNameSnapshot,
         unitType,
         quantity: input.quantity,

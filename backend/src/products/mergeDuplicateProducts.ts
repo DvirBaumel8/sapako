@@ -16,6 +16,8 @@ export interface MergeSummary {
   hidden: number;
   orderLinesRepointed: number;
   draftLinesCollapsed: number;
+  /** (sent order, survivor, unit) groups left with more than one line. */
+  lockedOrderCollisions: number;
 }
 
 export const NORMALIZED_NAME_INDEX = 'uq_products_provider_normalized_name';
@@ -146,6 +148,19 @@ export async function mergeDuplicateProducts(
     FROM merge_map m WHERE oi."productId" = m.loser_id
   `);
 
+  // Sent orders keep their lines as history, so a survivor can now appear
+  // twice on one; counted so the migration log shows how many.
+  const [locked] = await runner.query(`
+    SELECT count(*)::int AS n FROM (
+      SELECT oi."orderId"
+      FROM order_items oi
+      JOIN orders o ON o.id = oi."orderId" AND o.status <> 'DRAFT'
+      WHERE oi."productId" IN (SELECT survivor_id FROM merge_map)
+      GROUP BY oi."orderId", oi."productId", oi."unitType"
+      HAVING count(*) > 1
+    ) g
+  `);
+
   await runner.query(`
     UPDATE products p SET "isActive" = false, "mergedIntoProductId" = m.survivor_id
     FROM merge_map m WHERE p.id = m.loser_id
@@ -158,5 +173,6 @@ export async function mergeDuplicateProducts(
     hidden: counts.hidden,
     orderLinesRepointed: counts.orderLinesRepointed,
     draftLinesCollapsed: collapsed.n,
+    lockedOrderCollisions: locked.n,
   };
 }

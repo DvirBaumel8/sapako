@@ -246,6 +246,43 @@ describe('OrdersService', () => {
       });
     });
 
+    it('adds the line on the survivor when the product was merged away', async () => {
+      manager.findOne.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.DRAFT,
+        providerId: 'p1',
+      });
+      productsService.findById.mockImplementation((id: string) =>
+        Promise.resolve(
+          id === 'hidden'
+            ? {
+                id: 'hidden',
+                providerId: 'p1',
+                name: 'Tomatoes',
+                unitType: 'crate',
+                mergedIntoProductId: 'survivor',
+              }
+            : {
+                id: 'survivor',
+                providerId: 'p1',
+                name: 'Tomatoes',
+                unitType: 'crate',
+              },
+        ),
+      );
+      managerOrderItemRepo.create.mockImplementation((data) => data);
+      managerOrderItemRepo.save.mockImplementation((data) =>
+        Promise.resolve({ id: 'oi1', ...data }),
+      );
+
+      const item = await service.addItem('o1', {
+        productId: 'hidden',
+        quantity: 1,
+      });
+
+      expect(item).toMatchObject({ productId: 'survivor', quantity: 1 });
+    });
+
     it('rejects a catalog product that belongs to a different provider than the order', async () => {
       manager.findOne.mockResolvedValue({
         id: 'o1',

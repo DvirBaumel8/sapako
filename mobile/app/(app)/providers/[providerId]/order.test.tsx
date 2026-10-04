@@ -513,3 +513,29 @@ describe('product notes', () => {
     expect(screen.getByTestId('note-toast')).toHaveTextContent('ההערה נמחקה');
   });
 });
+
+describe('continuing a sent order', () => {
+  it('adds one line with the summed quantity when the source has two same-unit lines for a product', async () => {
+    const source: Order = {
+      ...FIXTURE_ORDER,
+      id: 'sent-1',
+      status: 'PUBLISHED',
+      items: [
+        { id: 'i1', productId: CARTON_PRODUCT.id, productNameSnapshot: 'קרטון חלב', unitType: 'קרטון', quantity: 2 },
+        { id: 'i2', productId: CARTON_PRODUCT.id, productNameSnapshot: 'קרטון חלב', unitType: 'קרטון', quantity: 3 },
+      ],
+    };
+    mockUseLocalSearchParams.mockReturnValue({
+      providerId: PROVIDER_ID,
+      providerName: 'ספק בדיקה',
+      sourceOrder: JSON.stringify(source),
+    });
+    await renderScreen();
+
+    await waitFor(() => expect(addOrderItem).toHaveBeenCalledTimes(1));
+    expect(addOrderItem).toHaveBeenCalledWith(
+      FIXTURE_ORDER.id,
+      expect.objectContaining({ productId: CARTON_PRODUCT.id, quantity: 5 }),
+    );
+  });
+});
