@@ -71,9 +71,14 @@ describe('ProductsService', () => {
 
   it('creates a product with a categoryId that belongs to the same provider', async () => {
     mockProvidersService.findById.mockResolvedValue({ id: 'p1' });
-    mockCategoriesService.findById.mockResolvedValue({ id: 'c1', providerId: 'p1' });
+    mockCategoriesService.findById.mockResolvedValue({
+      id: 'c1',
+      providerId: 'p1',
+    });
     mockRepo.create.mockImplementation((data) => data);
-    mockRepo.save.mockImplementation((data) => Promise.resolve({ id: 'pr1', ...data }));
+    mockRepo.save.mockImplementation((data) =>
+      Promise.resolve({ id: 'pr1', ...data }),
+    );
 
     const product = await service.create('p1', {
       name: 'Tomatoes',
@@ -86,10 +91,17 @@ describe('ProductsService', () => {
 
   it('rejects creating a product with a categoryId that belongs to a different provider', async () => {
     mockProvidersService.findById.mockResolvedValue({ id: 'p1' });
-    mockCategoriesService.findById.mockResolvedValue({ id: 'c1', providerId: 'OTHER' });
+    mockCategoriesService.findById.mockResolvedValue({
+      id: 'c1',
+      providerId: 'OTHER',
+    });
 
     await expect(
-      service.create('p1', { name: 'Tomatoes', unitType: 'crate', categoryId: 'c1' }),
+      service.create('p1', {
+        name: 'Tomatoes',
+        unitType: 'crate',
+        categoryId: 'c1',
+      }),
     ).rejects.toThrow(BadRequestException);
     expect(mockRepo.save).not.toHaveBeenCalled();
   });
@@ -143,8 +155,15 @@ describe('ProductsService', () => {
   });
 
   it('reassigns a product to a categoryId that belongs to its own provider', async () => {
-    mockRepo.findOneBy.mockResolvedValue({ id: 'pr1', providerId: 'p1', name: 'Tomatoes' });
-    mockCategoriesService.findById.mockResolvedValue({ id: 'c1', providerId: 'p1' });
+    mockRepo.findOneBy.mockResolvedValue({
+      id: 'pr1',
+      providerId: 'p1',
+      name: 'Tomatoes',
+    });
+    mockCategoriesService.findById.mockResolvedValue({
+      id: 'c1',
+      providerId: 'p1',
+    });
     mockRepo.save.mockImplementation((data) => Promise.resolve(data));
 
     const updated = await service.update('pr1', { categoryId: 'c1' });
@@ -153,8 +172,15 @@ describe('ProductsService', () => {
   });
 
   it('rejects reassigning a product to a categoryId from a different provider', async () => {
-    mockRepo.findOneBy.mockResolvedValue({ id: 'pr1', providerId: 'p1', name: 'Tomatoes' });
-    mockCategoriesService.findById.mockResolvedValue({ id: 'c1', providerId: 'OTHER' });
+    mockRepo.findOneBy.mockResolvedValue({
+      id: 'pr1',
+      providerId: 'p1',
+      name: 'Tomatoes',
+    });
+    mockCategoriesService.findById.mockResolvedValue({
+      id: 'c1',
+      providerId: 'OTHER',
+    });
 
     await expect(service.update('pr1', { categoryId: 'c1' })).rejects.toThrow(
       BadRequestException,
@@ -264,11 +290,20 @@ describe('ProductsService', () => {
     it('matches a UPC-A candidate that lost its leading zero, via the normalised key', async () => {
       mockRepo.find.mockResolvedValue([
         { id: 'pr1', providerId: 'p1', name: 'Milk', barcode: '016000185517' },
-        { id: 'pr2', providerId: 'p1', name: 'Other', barcode: '7290000060071' },
+        {
+          id: 'pr2',
+          providerId: 'p1',
+          name: 'Other',
+          barcode: '7290000060071',
+        },
       ]);
 
       // Scanned as the 11-digit, zero-stripped form of the same UPC-A.
-      const matches = await service.findByBarcodeInBranch('b1', 'ALL', '16000185517');
+      const matches = await service.findByBarcodeInBranch(
+        'b1',
+        'ALL',
+        '16000185517',
+      );
 
       expect(matches).toEqual([
         { id: 'pr1', providerId: 'p1', name: 'Milk', barcode: '016000185517' },
@@ -280,23 +315,42 @@ describe('ProductsService', () => {
         { id: 'pr1', providerId: 'p1', name: 'Widget', barcode: 'SUP-42' },
       ]);
 
-      const matches = await service.findByBarcodeInBranch('b1', 'ALL', 'SUP-42');
+      const matches = await service.findByBarcodeInBranch(
+        'b1',
+        'ALL',
+        'SUP-42',
+      );
 
       expect(matches).toHaveLength(1);
 
-      const noMatch = await service.findByBarcodeInBranch('b1', 'ALL', 'SUP-43');
+      const noMatch = await service.findByBarcodeInBranch(
+        'b1',
+        'ALL',
+        'SUP-43',
+      );
       expect(noMatch).toEqual([]);
     });
   });
 
   describe('updateNote', () => {
     it('saves the trimmed note on a product that belongs to the provider', async () => {
-      mockRepo.findOneBy.mockResolvedValue({ id: 'pr1', providerId: 'p1', note: null });
+      mockRepo.findOneBy.mockResolvedValue({
+        id: 'pr1',
+        providerId: 'p1',
+        note: null,
+      });
       mockRepo.save.mockImplementation((data) => Promise.resolve(data));
 
-      const result = await service.updateNote('p1', 'pr1', '  לבקש תאריך ארוך  ');
+      const result = await service.updateNote(
+        'p1',
+        'pr1',
+        '  לבקש תאריך ארוך  ',
+      );
 
-      expect(mockRepo.findOneBy).toHaveBeenCalledWith({ id: 'pr1', providerId: 'p1' });
+      expect(mockRepo.findOneBy).toHaveBeenCalledWith({
+        id: 'pr1',
+        providerId: 'p1',
+      });
       expect(mockRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'pr1', note: 'לבקש תאריך ארוך' }),
       );
@@ -304,7 +358,11 @@ describe('ProductsService', () => {
     });
 
     it('stores a whitespace-only note as null', async () => {
-      mockRepo.findOneBy.mockResolvedValue({ id: 'pr1', providerId: 'p1', note: 'ישן' });
+      mockRepo.findOneBy.mockResolvedValue({
+        id: 'pr1',
+        providerId: 'p1',
+        note: 'ישן',
+      });
       mockRepo.save.mockImplementation((data) => Promise.resolve(data));
 
       const result = await service.updateNote('p1', 'pr1', '   ');
@@ -313,7 +371,11 @@ describe('ProductsService', () => {
     });
 
     it('clears the note when given null', async () => {
-      mockRepo.findOneBy.mockResolvedValue({ id: 'pr1', providerId: 'p1', note: 'ישן' });
+      mockRepo.findOneBy.mockResolvedValue({
+        id: 'pr1',
+        providerId: 'p1',
+        note: 'ישן',
+      });
       mockRepo.save.mockImplementation((data) => Promise.resolve(data));
 
       const result = await service.updateNote('p1', 'pr1', null);

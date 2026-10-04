@@ -69,7 +69,10 @@ export class ProductsService {
     productId: string,
     note: string | null,
   ): Promise<Product> {
-    const product = await this.productsRepo.findOneBy({ id: productId, providerId });
+    const product = await this.productsRepo.findOneBy({
+      id: productId,
+      providerId,
+    });
     if (!product) {
       throw new NotFoundException('Product not found');
     }
@@ -131,7 +134,11 @@ export class ProductsService {
       providerWhere.id = In(accessibleProviderIds);
     }
     const candidates = await this.productsRepo.find({
-      where: { isActive: true, provider: providerWhere, barcode: Not(IsNull()) },
+      where: {
+        isActive: true,
+        provider: providerWhere,
+        barcode: Not(IsNull()),
+      },
       select: { id: true, providerId: true, name: true, barcode: true },
       take: MAX_PRODUCTS_PER_QUERY,
     });

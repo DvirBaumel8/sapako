@@ -66,6 +66,11 @@ describe('product notes (e2e)', () => {
     });
 
     it('clears the note when sent null', async () => {
+      await request(app.getHttpServer())
+        .patch(noteUrl(fixtures.providerIds[0], fixtures.productId))
+        .set(auth(fixtures.staffToken))
+        .send({ note: 'temporary note' })
+        .expect(200);
       const response = await request(app.getHttpServer())
         .patch(noteUrl(fixtures.providerIds[0], fixtures.productId))
         .set(auth(fixtures.staffToken))

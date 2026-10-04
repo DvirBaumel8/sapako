@@ -52,7 +52,7 @@ describe('buildFlatLayout', () => {
 describe('buildSectionLayout', () => {
   it('matches the old formula (header then rows, per section) with no notes', () => {
     const table = buildSectionLayout([{ data: [plain, plain] }, { data: [plain] }]);
-    // Flattened: [h0, r, r, h1, r]
+    // Flattened: [h0, r, r, f0, h1, r, f1]
     expect(layoutAt(table, 0)).toEqual({ length: SECTION_HEADER_HEIGHT, offset: 0, index: 0 });
     expect(layoutAt(table, 2)).toEqual({
       length: ROW_HEIGHT,
@@ -60,27 +60,40 @@ describe('buildSectionLayout', () => {
       index: 2,
     });
     expect(layoutAt(table, 4)).toEqual({
+      length: SECTION_HEADER_HEIGHT,
+      offset: SECTION_HEADER_HEIGHT + ROW_HEIGHT * 2,
+      index: 4,
+    });
+    expect(layoutAt(table, 5)).toEqual({
       length: ROW_HEIGHT,
       offset: SECTION_HEADER_HEIGHT * 2 + ROW_HEIGHT * 2,
-      index: 4,
+      index: 5,
     });
   });
 
   it('includes note lines from earlier sections in later offsets', () => {
     const table = buildSectionLayout([{ data: [noted] }, { data: [plain] }]);
-    // Flattened: [h0, noted, h1, plain]
-    expect(layoutAt(table, 3).offset).toBe(
+    // Flattened: [h0, noted, f0, h1, plain, f1]
+    expect(layoutAt(table, 4).offset).toBe(
       SECTION_HEADER_HEIGHT * 2 + ROW_HEIGHT + NOTE_LINE_HEIGHT,
     );
   });
 
-  it('treats a collapsed (empty) section as just its header', () => {
+  it('treats a collapsed (empty) section as just its header and footer', () => {
     const table = buildSectionLayout([{ data: [] }, { data: [plain] }]);
-    expect(layoutAt(table, 2)).toEqual({
+    // Flattened: [h0, f0, h1, plain, f1]
+    expect(layoutAt(table, 3)).toEqual({
       length: ROW_HEIGHT,
       offset: SECTION_HEADER_HEIGHT * 2,
-      index: 2,
+      index: 3,
     });
+  });
+
+  it('gives each section a zero-length footer slot, which the list counts even unrendered', () => {
+    const table = buildSectionLayout([{ data: [plain] }, { data: [plain] }]);
+    // Flattened: [h0, r, f0, h1, r, f1]
+    expect(layoutAt(table, 2).length).toBe(0);
+    expect(layoutAt(table, 5).length).toBe(0);
   });
 });
 

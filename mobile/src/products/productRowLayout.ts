@@ -49,7 +49,11 @@ export function buildFlatLayout(products: readonly HasNoteField[]): ItemLayoutTa
   return table;
 }
 
-/** Treats headers and rows as one flat sequence: [header, ...rows] per section. */
+/**
+ * Treats headers and rows as one flat sequence: [header, ...rows, footer] per
+ * section. VirtualizedSectionList counts a footer slot for every section even
+ * when no footer is rendered, so we add a zero-length one to keep indexes aligned.
+ */
 export function buildSectionLayout(
   sections: readonly { data: readonly HasNoteField[] }[],
 ): ItemLayoutTable {
@@ -57,6 +61,7 @@ export function buildSectionLayout(
   for (const section of sections) {
     pushSlot(table, SECTION_HEADER_HEIGHT);
     for (const product of section.data) pushSlot(table, rowHeightFor(product));
+    pushSlot(table, 0);
   }
   return table;
 }

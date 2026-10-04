@@ -189,9 +189,10 @@ export default function OrderBuilderScreen() {
 
   const sectionListRef = useRef<SectionList<Product>>(null);
 
-  // Treats headers and rows as one flat sequence of fixed heights, so
-  // scrollToLocation can jump straight to a row instead of guessing from an
-  // average — the same fix ROW_HEIGHT already is for the flat list above.
+  // Treats [header, ...rows, footer] per section as one flat sequence of fixed
+  // heights, so scrollToLocation can jump straight to a row instead of guessing
+  // from an average — the same fix as the shared layout tables in
+  // src/products/productRowLayout.ts (footer slots are zero-length).
   // Rows with a note are taller by one fixed line, so heights are per row but
   // still exact; precomputed so each getItemLayout call is a lookup.
   const sectionLayout = useMemo(() => buildSectionLayout(sectionsForList), [sectionsForList]);
@@ -497,12 +498,18 @@ export default function OrderBuilderScreen() {
             <Pressable
               testID={`note-icon-${product.id}`}
               hitSlop={8}
+              style={styles.noteIconBox}
               accessibilityRole="button"
               accessibilityLabel={hasNote(product) ? 'עריכת הערה למוצר' : 'הוספת הערה למוצר'}
               onPress={() => setNoteProduct(product)}
             >
               {/* An emoji can't be recolored, so state is carried by opacity. */}
-              <Text style={[styles.noteIcon, !hasNote(product) && styles.noteIconEmpty]}>🗒</Text>
+              <Text
+                testID={`note-icon-glyph-${product.id}`}
+                style={[styles.noteIcon, !hasNote(product) && styles.noteIconEmpty]}
+              >
+                🗒
+              </Text>
             </Pressable>
           </View>
           {role === 'ADMIN' && isEditingProducts && (
@@ -833,7 +840,9 @@ const styles = StyleSheet.create({
   sectionChevron: { fontSize: 14, color: '#999' },
   productName: { fontSize: 15, fontWeight: '600', textAlign: 'right', color: '#1a1a1a', flexShrink: 1 },
   productNameGroup: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
-  noteIcon: { fontSize: 15 },
+  // Height pinned so the emoji's line box can't make rows taller than ROW_HEIGHT.
+  noteIconBox: { height: 16, justifyContent: 'center', overflow: 'visible' },
+  noteIcon: { fontSize: 15, lineHeight: 16 },
   noteIconEmpty: { opacity: 0.3 },
   // height and lineHeight are fixed at 16 so the extra row height is exactly
   // NOTE_LINE_HEIGHT (card gap 10 + 16) in productRowLayout.ts.

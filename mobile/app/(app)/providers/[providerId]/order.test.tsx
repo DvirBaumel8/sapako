@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AlertProvider } from '../../../../src/ui/AlertProvider';
@@ -414,6 +415,19 @@ describe('product notes', () => {
     // The icon is on every card, for every role (this suite runs as STAFF).
     expect(screen.getByTestId(`note-icon-${CARTON_PRODUCT.id}`)).toBeTruthy();
     expect(screen.getByTestId(`note-icon-${WEIGHT_PRODUCT.id}`)).toBeTruthy();
+  });
+
+  it('dims the icon only on products without a note', async () => {
+    (fetchProductsForProvider as jest.Mock).mockResolvedValue([
+      { ...CARTON_PRODUCT, note: NOTE },
+      WEIGHT_PRODUCT,
+    ]);
+    await renderScreen();
+
+    const opacityOf = (id: string) =>
+      StyleSheet.flatten(screen.getByTestId(`note-icon-glyph-${id}`).props.style).opacity;
+    expect(opacityOf(WEIGHT_PRODUCT.id)).toBe(0.3);
+    expect(opacityOf(CARTON_PRODUCT.id)).toBeUndefined();
   });
 
   it('opens the note dialog from the icon', async () => {
