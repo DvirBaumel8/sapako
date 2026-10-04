@@ -1,7 +1,11 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { In, IsNull, Not } from 'typeorm';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import { In, IsNull, Not, QueryFailedError } from 'typeorm';
 import { ProductsService } from './products.service';
 import { Product } from './product.entity';
 import { ProvidersService } from '../providers/providers.service';
@@ -230,7 +234,13 @@ describe('ProductsService', () => {
 
     expect(mockRepo.find).toHaveBeenCalledWith({
       where: { isActive: true, provider: { branchId: 'b1', isActive: true } },
-      select: { id: true, providerId: true, name: true, barcode: true },
+      select: {
+        id: true,
+        providerId: true,
+        name: true,
+        barcode: true,
+        additionalBarcodes: true,
+      },
       take: 20000,
     });
     expect(products).toHaveLength(1);
@@ -248,7 +258,13 @@ describe('ProductsService', () => {
         isActive: true,
         provider: { branchId: 'b1', isActive: true, id: In(['p1']) },
       },
-      select: { id: true, providerId: true, name: true, barcode: true },
+      select: {
+        id: true,
+        providerId: true,
+        name: true,
+        barcode: true,
+        additionalBarcodes: true,
+      },
       take: 20000,
     });
     expect(products).toHaveLength(1);
@@ -264,7 +280,13 @@ describe('ProductsService', () => {
         isActive: true,
         provider: { branchId: 'b1', isActive: true, id: In([]) },
       },
-      select: { id: true, providerId: true, name: true, barcode: true },
+      select: {
+        id: true,
+        providerId: true,
+        name: true,
+        barcode: true,
+        additionalBarcodes: true,
+      },
       take: 20000,
     });
     expect(products).toEqual([]);
@@ -277,12 +299,25 @@ describe('ProductsService', () => {
       await service.findByBarcodeInBranch('b1', ['p1'], '016000185517');
 
       expect(mockRepo.find).toHaveBeenCalledWith({
-        where: {
-          isActive: true,
-          provider: { branchId: 'b1', isActive: true, id: In(['p1']) },
-          barcode: Not(IsNull()),
+        where: [
+          {
+            isActive: true,
+            provider: { branchId: 'b1', isActive: true, id: In(['p1']) },
+            barcode: Not(IsNull()),
+          },
+          {
+            isActive: true,
+            provider: { branchId: 'b1', isActive: true, id: In(['p1']) },
+            additionalBarcodes: expect.anything(),
+          },
+        ],
+        select: {
+          id: true,
+          providerId: true,
+          name: true,
+          barcode: true,
+          additionalBarcodes: true,
         },
-        select: { id: true, providerId: true, name: true, barcode: true },
         take: 20000,
       });
     });
@@ -390,6 +425,86 @@ describe('ProductsService', () => {
         NotFoundException,
       );
       expect(mockRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('barcode lookup with additional barcodes', () => {
+    it('finds a product by one of its additional barcodes', async () => {
+      mockRepo.find.mockResolvedValue([
+        {
+          id: 'a',
+          providerId: 'p1',
+          name: 'סלרי ראש',
+          barcode: '7290000000534',
+          additionalBarcodes: ['7290003706020', '27'],
+        },
+        {
+          id: 'b',
+          providerId: 'p1',
+          name: 'גזר',
+          barcode: '7290000000794',
+          additionalBarcodes: [],
+        },
+      ]);
+
+      const result = await service.findByBarcodeInBranch(
+        'br1',
+        'ALL',
+        '7290003706020',
+      );
+
+      expect(result.map((p) => p.id)).toEqual(['a']);
+    });
+
+    it('matches a non-GTIN additional code exactly', async () => {
+      mockRepo.find.mockResolvedValue([
+        {
+          id: 'a',
+          providerId: 'p1',
+          name: 'סלרי ראש',
+          barcode: '7290000000534',
+          additionalBarcodes: ['27'],
+        },
+      ]);
+
+      expect(
+        (await service.findByBarcodeInBranch('br1', 'ALL', '27')).map(
+          (p) => p.id,
+        ),
+      ).toEqual(['a']);
+      expect(await service.findByBarcodeInBranch('br1', 'ALL', '2')).toEqual(
+        [],
+      );
+    });
+  });
+
+  describe('duplicate names', () => {
+    const uniqueViolation = Object.assign(
+      new QueryFailedError('INSERT', [], new Error('dup')),
+      { code: '23505' },
+    );
+
+    it('turns a duplicate name on create into a ConflictException', async () => {
+      mockProvidersService.findById.mockResolvedValue({ id: 'p1' });
+      mockRepo.create.mockImplementation((data) => data);
+      mockRepo.save.mockRejectedValue(uniqueViolation);
+
+      await expect(
+        service.create('p1', { name: 'סלרי ראש', unitType: 'קרטון' }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('turns a duplicate name on update into a ConflictException', async () => {
+      mockRepo.findOneBy.mockResolvedValue({
+        id: 'pr1',
+        providerId: 'p1',
+        name: 'גזר',
+      });
+      mockRepo.save.mockRejectedValue(uniqueViolation);
+
+      await expect(service.update('pr1', { name: 'סלרי ראש' })).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 });

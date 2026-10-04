@@ -1,6 +1,9 @@
 import 'dotenv/config';
 import { Client } from 'pg';
-import { classifyBarcode, BarcodeProblem } from '../src/products/classifyBarcode';
+import {
+  classifyBarcode,
+  BarcodeProblem,
+} from '../src/products/classifyBarcode';
 import { describeTarget } from '../src/database/describeTarget';
 
 /**
@@ -97,11 +100,12 @@ async function main(): Promise<void> {
       barcode: string;
       names: string;
     }>(`
-      SELECT p.barcode, string_agg(pr.name || ' / ' || p.name, '  |  ') AS names
+      SELECT code AS barcode, string_agg(pr.name || ' / ' || p.name, '  |  ') AS names
       FROM products p
       JOIN providers pr ON pr.id = p."providerId"
-      WHERE p.barcode IS NOT NULL AND p."isActive" = true
-      GROUP BY p.barcode
+      CROSS JOIN LATERAL unnest(array_remove(array[p.barcode] || p."additionalBarcodes", NULL)) AS code
+      WHERE p."isActive" = true
+      GROUP BY code
       HAVING count(*) > 1
     `);
 

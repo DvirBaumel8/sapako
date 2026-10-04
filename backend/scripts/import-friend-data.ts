@@ -27,7 +27,7 @@ interface SupplierRow {
 
 interface ProductRow {
   'קוד פריט': string;
-  'ברקוד': string;
+  ברקוד: string;
   'תאור פריט': string;
   'שם מחלקה': string;
   'קוד ספק ראשי': string;
@@ -103,7 +103,9 @@ async function main() {
   );
   const products = readCsv<ProductRow>(PRODUCTS_CSV);
 
-  console.log(`Parsed ${suppliers.length} suppliers, ${products.length} products.`);
+  console.log(
+    `Parsed ${suppliers.length} suppliers, ${products.length} products.`,
+  );
 
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
@@ -133,42 +135,75 @@ async function main() {
         params,
       );
       batch.forEach((row, idx) => {
-        supplierCodeToProviderId.set(row['קוד ספק'].trim(), result.rows[idx].id);
+        supplierCodeToProviderId.set(
+          row['קוד ספק'].trim(),
+          result.rows[idx].id,
+        );
       });
     }
     console.log(`Created ${supplierCodeToProviderId.size} providers.`);
 
-    let productsCreated = 0;
+    // The item file has one row per barcode, so one product can appear on
+    // several rows. Group them by supplier + normalized name (same rule as
+    // the MergeDuplicateProducts migration) into one product per group.
+    const normalize = (name: string) =>
+      name.replace(/\s+/g, ' ').trim().toLowerCase();
+    const groups = new Map<
+      string,
+      { providerId: string; name: string; barcodes: string[] }
+    >();
     let productsSkipped = 0;
-    for (let i = 0; i < products.length; i += BATCH_SIZE) {
-      const batch = products.slice(i, i + BATCH_SIZE);
+    for (const row of products) {
+      const providerId = supplierCodeToProviderId.get(
+        row['קוד ספק ראשי']?.trim(),
+      );
+      const name = row['תאור פריט']?.trim().replace(/\s+/g, ' ');
+      if (!providerId || !name) {
+        productsSkipped++;
+        continue;
+      }
+      const key = `${providerId}|${normalize(name)}`;
+      const group = groups.get(key) ?? { providerId, name, barcodes: [] };
+      const barcode = row['ברקוד']?.trim();
+      if (barcode && !group.barcodes.includes(barcode))
+        group.barcodes.push(barcode);
+      groups.set(key, group);
+    }
+
+    const grouped = [...groups.values()];
+    for (let i = 0; i < grouped.length; i += BATCH_SIZE) {
+      const batch = grouped.slice(i, i + BATCH_SIZE);
       const values: string[] = [];
       const params: unknown[] = [];
-      let batchCount = 0;
-      for (const row of batch) {
-        const providerId = supplierCodeToProviderId.get(row['קוד ספק ראשי']?.trim());
-        const name = row['תאור פריט']?.trim();
-        if (!providerId || !name) {
-          productsSkipped++;
-          continue;
-        }
-        const barcode = row['ברקוד']?.trim() || null;
-        const base = batchCount * 4;
-        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`);
-        params.push(providerId, name, DEFAULT_UNIT_TYPE, barcode);
-        batchCount++;
-      }
-      if (values.length > 0) {
-        await client.query(
-          `INSERT INTO products ("providerId", name, "unitType", barcode) VALUES ${values.join(', ')}`,
-          params,
+      batch.forEach((group, index) => {
+        const base = index * 5;
+        values.push(
+          `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`,
         );
-        productsCreated += batchCount;
-      }
+        const [first = null, ...rest] = group.barcodes;
+        params.push(
+          group.providerId,
+          group.name,
+          DEFAULT_UNIT_TYPE,
+          first,
+          rest,
+        );
+      });
+      await client.query(
+        `INSERT INTO products ("providerId", name, "unitType", barcode, "additionalBarcodes") VALUES ${values.join(', ')}`,
+        params,
+      );
     }
-    console.log(`Created ${productsCreated} products, skipped ${productsSkipped} (missing supplier match or name).`);
+    console.log(
+      `Created ${grouped.length} products from ${products.length - productsSkipped} rows, skipped ${productsSkipped} (missing supplier match or name).`,
+    );
 
-    await importDepartments(client, branchId, products, supplierCodeToProviderId);
+    await importDepartments(
+      client,
+      branchId,
+      products,
+      supplierCodeToProviderId,
+    );
 
     await client.query('COMMIT');
     console.log('Import committed successfully.');
