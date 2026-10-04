@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
+import { DataSource } from 'typeorm';
 import { createTestApp, seed, Seeded } from './helpers';
 
 describe('duplicate product names (e2e)', () => {
@@ -62,5 +63,46 @@ describe('duplicate product names (e2e)', () => {
       .expect(200);
     expect(list.body.length).toBeGreaterThan(0);
     expect(Array.isArray(list.body[0].additionalBarcodes)).toBe(true);
+  });
+
+  describe('barcode lookup (e2e)', () => {
+    const lookup = (code: string) =>
+      request(app.getHttpServer())
+        .get(`/branches/${fixtures.branchId}/products?barcode=${code}`)
+        .set({ Authorization: `Bearer ${fixtures.adminToken}` })
+        .expect(200);
+
+    it('matches additional barcodes and main barcodes, and skips barcode-less products', async () => {
+      const db = app.get(DataSource);
+      const withExtra = await create(
+        fixtures.providerIds[1],
+        'מוצר עם ברקודים',
+      ).expect(201);
+      await db.query(
+        `UPDATE products SET "additionalBarcodes" = ARRAY['7290003706020','27'] WHERE id = $1`,
+        [withExtra.body.id],
+      );
+      const mainOnly = await create(
+        fixtures.providerIds[1],
+        'מוצר ברקוד ראשי',
+      ).expect(201);
+      await db.query(
+        `UPDATE products SET barcode = '4006381333931' WHERE id = $1`,
+        [mainOnly.body.id],
+      );
+      const none = await create(
+        fixtures.providerIds[1],
+        'מוצר בלי ברקוד',
+      ).expect(201);
+
+      const ids = (res: { body: { id: string }[] }) =>
+        res.body.map((p) => p.id);
+
+      expect(ids(await lookup('7290003706020'))).toEqual([withExtra.body.id]);
+      expect(ids(await lookup('27'))).toEqual([withExtra.body.id]);
+      expect(ids(await lookup('4006381333931'))).toEqual([mainOnly.body.id]);
+      expect(ids(await lookup('999'))).not.toContain(none.body.id);
+      expect(ids(await lookup('999'))).toEqual([]);
+    });
   });
 });

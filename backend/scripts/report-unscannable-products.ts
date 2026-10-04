@@ -100,13 +100,13 @@ async function main(): Promise<void> {
       barcode: string;
       names: string;
     }>(`
-      SELECT code AS barcode, string_agg(pr.name || ' / ' || p.name, '  |  ') AS names
+      SELECT code AS barcode, string_agg(DISTINCT pr.name || ' / ' || p.name, '  |  ') AS names
       FROM products p
       JOIN providers pr ON pr.id = p."providerId"
       CROSS JOIN LATERAL unnest(array_remove(array[p.barcode] || p."additionalBarcodes", NULL)) AS code
       WHERE p."isActive" = true
       GROUP BY code
-      HAVING count(*) > 1
+      HAVING count(DISTINCT p.id) > 1
     `);
 
     if (duplicates.length > 0) {
