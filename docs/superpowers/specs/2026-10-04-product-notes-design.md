@@ -25,6 +25,8 @@ from that supplier sees on the order screen.
 - One note per product, free text, max **200 characters**.
 - Whitespace is trimmed. Saving an empty (or whitespace-only) note deletes it
   (stored as `NULL`).
+- Saving an empty box on a product that has no note just closes the dialog —
+  no request, no "deleted" message.
 - No history and no author tracking: last write wins.
 - Editing a note does not require an open order and does not touch any order.
 - Search matches product names only — notes are not searched.
@@ -32,8 +34,11 @@ from that supplier sees on the order screen.
 ## UX (order screen — `mobile/app/(app)/providers/[providerId]/order.tsx`)
 
 - **Every product card** gets a note icon 🗒 next to the product name, for every
-  role. Grey when the product has no note, orange when it has one. This is
-  separate from the admin-only ✎ edit-mode pencil, which stays as is.
+  role. Faded (low opacity) when the product has no note, full strength when
+  it has one. (The mockup showed grey/orange, but 🗒 is an emoji and can't be
+  recolored, and the app has no icon library — opacity carries the same
+  signal without adding a dependency.) This is separate from the admin-only
+  ✎ edit-mode pencil, which stays as is.
 - If the product has a note, it renders as **one grey line under the name**,
   truncated with an ellipsis (`numberOfLines={1}`).
 - Tapping the icon **or** the note line opens a **centered modal dialog**
@@ -118,7 +123,7 @@ same per-product height function.
 - Admin `PATCH /products/:id` still rejects STAFF (unchanged).
 
 **Mobile (Jest + RTL, existing patterns):**
-- Card shows the note line only when a note exists; icon color reflects state.
+- Card shows the note line only when a note exists; icon opacity reflects state.
 - Dialog saves a new note and the card updates.
 - Saving empty text deletes the note.
 - "מחיקת ההערה" appears only when a note exists and deletes it.
