@@ -842,7 +842,9 @@ const styles = StyleSheet.create({
   productNameGroup: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
   // Height pinned so the emoji's line box can't make rows taller than ROW_HEIGHT.
   noteIconBox: { height: 16, justifyContent: 'center', overflow: 'visible' },
-  noteIcon: { fontSize: 15, lineHeight: 16 },
+  // Dimmed: the emoji renders as a bright white notepad on iOS and glared
+  // against the white card.
+  noteIcon: { fontSize: 15, lineHeight: 16, filter: 'brightness(0.85)' },
   noteIconEmpty: { opacity: 0.3 },
   // height and lineHeight are fixed at 16 so the extra row height is exactly
   // NOTE_LINE_HEIGHT (card gap 10 + 16) in productRowLayout.ts.
