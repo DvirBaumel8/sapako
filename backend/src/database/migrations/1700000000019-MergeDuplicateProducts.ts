@@ -1,0 +1,37 @@
+import { MigrationInterface, QueryRunner } from 'typeorm';
+import {
+  createNormalizedNameIndex,
+  dropNormalizedNameIndex,
+  mergeDuplicateProducts,
+} from '../../products/mergeDuplicateProducts';
+
+export class MergeDuplicateProducts1700000000019 implements MigrationInterface {
+  name = 'MergeDuplicateProducts1700000000019';
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      ALTER TABLE products
+        ADD COLUMN "additionalBarcodes" TEXT[] NOT NULL DEFAULT '{}',
+        ADD COLUMN "mergedIntoProductId" UUID NULL REFERENCES products(id)
+    `);
+    // The one-off item-file import created one product per barcode; see
+    // docs/superpowers/specs/2026-10-05-merge-duplicate-products-design.md.
+    const summary = await mergeDuplicateProducts(queryRunner);
+    console.log(
+      `MergeDuplicateProducts: merged ${summary.groups} groups, hid ${summary.hidden} products, repointed ${summary.orderLinesRepointed} order lines`,
+    );
+    await createNormalizedNameIndex(queryRunner);
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await dropNormalizedNameIndex(queryRunner);
+    // Repointed order lines stay on the survivor: same product, and each line
+    // keeps its own name snapshot.
+    await queryRunner.query(`
+      UPDATE products SET "isActive" = true WHERE "mergedIntoProductId" IS NOT NULL
+    `);
+    await queryRunner.query(`
+      ALTER TABLE products DROP COLUMN "mergedIntoProductId", DROP COLUMN "additionalBarcodes"
+    `);
+  }
+}

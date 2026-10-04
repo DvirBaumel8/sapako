@@ -20,6 +20,7 @@ import { CreateAdminNotifications1700000000015 } from './migrations/170000000001
 import { CreateCategories1700000000016 } from './migrations/1700000000016-CreateCategories';
 import { AddOrdersBranchCreatedAtIndex1700000000017 } from './migrations/1700000000017-AddOrdersBranchCreatedAtIndex';
 import { AddProductNote1700000000018 } from './migrations/1700000000018-AddProductNote';
+import { MergeDuplicateProducts1700000000019 } from './migrations/1700000000019-MergeDuplicateProducts';
 
 // NOTE: the installed TypeORM CLI rejects a module that exports the same
 // DataSource instance under more than one export name (it iterates every
@@ -55,6 +56,7 @@ const dataSource = new DataSource({
     CreateCategories1700000000016,
     AddOrdersBranchCreatedAtIndex1700000000017,
     AddProductNote1700000000018,
+    MergeDuplicateProducts1700000000019,
   ],
   synchronize: false,
 });

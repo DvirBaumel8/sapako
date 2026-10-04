@@ -41,8 +41,10 @@ describe('product validation (e2e)', () => {
     it.each(UNIT_TYPES)(
       'stores a product in the listed unit %s',
       async (unitType) => {
+        // A distinct name per unit: the same name twice at one supplier is a
+        // duplicate and gets refused.
         const response = await createProduct({
-          name: 'עגבניות',
+          name: `עגבניות ${unitType}`,
           unitType,
         }).expect(201);
 

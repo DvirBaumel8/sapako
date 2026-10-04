@@ -30,6 +30,17 @@ export class Product {
   @Column({ nullable: true })
   barcode?: string;
 
+  // Every other barcode this product is known by — a product sold under
+  // several barcodes (different packers, a supplier's own short code next to
+  // the GTIN) is still one product to order.
+  @Column('text', { array: true, default: () => "'{}'" })
+  additionalBarcodes: string[];
+
+  // Set on a duplicate that was merged into another product and hidden.
+  // Kept so the merge can be undone; null on every live product.
+  @Column({ type: 'uuid', nullable: true })
+  mergedIntoProductId?: string | null;
+
   @Column({ nullable: true })
   imageUrl?: string;
 
