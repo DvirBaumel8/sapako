@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react-native';
+import { act, render, screen, waitFor } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './AuthContext';
@@ -25,8 +25,13 @@ afterEach(() => {
 });
 
 function Probe() {
-  const { isLoading, canEditProducts } = useAuth();
-  return <Text testID="probe">{isLoading ? 'loading' : String(canEditProducts)}</Text>;
+  const { isLoading, canEditProducts, isCapabilityLoading } = useAuth();
+  return (
+    <>
+      <Text testID="probe">{isLoading ? 'loading' : String(canEditProducts)}</Text>
+      <Text testID="capLoading">{String(isCapabilityLoading)}</Text>
+    </>
+  );
 }
 
 async function renderProvider(token: string | null) {
@@ -43,6 +48,9 @@ async function renderProvider(token: string | null) {
   await waitFor(() => expect(screen.getByTestId('probe').props.children).not.toBe('loading'));
 }
 
+// Let any in-flight /auth/me query land inside the test, not after it.
+const settle = () => waitFor(() => expect(activeQueryClient!.isFetching()).toBe(0));
+
 beforeEach(() => jest.clearAllMocks());
 
 describe('AuthProvider canEditProducts', () => {
@@ -52,7 +60,10 @@ describe('AuthProvider canEditProducts', () => {
     await renderProvider(JSON.stringify({ sub: 'u1', role: 'STAFF' }));
     expect(screen.getByTestId('probe').props.children).toBe('false');
 
-    resolveMe({ userId: 'u1', username: 'x', role: 'STAFF', canEditProducts: true });
+    expect(screen.getByTestId('capLoading').props.children).toBe('true');
+    await act(async () => {
+      resolveMe({ userId: 'u1', username: 'x', role: 'STAFF', canEditProducts: true });
+    });
     await waitFor(() => expect(screen.getByTestId('probe').props.children).toBe('true'));
   });
 
@@ -62,18 +73,22 @@ describe('AuthProvider canEditProducts', () => {
     (fetchMe as jest.Mock).mockResolvedValue({ canEditProducts: true });
     await renderProvider(JSON.stringify({ sub: 'u1', role: 'ADMIN' }));
     expect(screen.getByTestId('probe').props.children).toBe('true');
+    expect(screen.getByTestId('capLoading').props.children).toBe('false');
+    await settle();
   });
 
   it('is false when logged out', async () => {
     await renderProvider(null);
     expect(screen.getByTestId('probe').props.children).toBe('false');
+    expect(screen.getByTestId('capLoading').props.children).toBe('false');
     expect(fetchMe).not.toHaveBeenCalled();
   });
 
   it('stays false when /auth/me fails', async () => {
     (fetchMe as jest.Mock).mockRejectedValue(new Error('404'));
     await renderProvider(JSON.stringify({ sub: 'u1', role: 'STAFF' }));
-    await waitFor(() => expect(fetchMe).toHaveBeenCalled());
+    await settle();
+    expect(fetchMe).toHaveBeenCalled();
     expect(screen.getByTestId('probe').props.children).toBe('false');
   });
 });
