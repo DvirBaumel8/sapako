@@ -91,4 +91,12 @@ export interface UserWithAccess {
   // which understates anyone reachable through a department instead of a
   // direct grant.
   providerAccessCount: number;
+  canEditProducts: boolean;
+}
+
+export interface Me {
+  userId: string;
+  username: string;
+  role: Role;
+  canEditProducts: boolean;
 }

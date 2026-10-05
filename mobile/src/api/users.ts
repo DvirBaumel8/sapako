@@ -13,7 +13,7 @@ export async function createUser(input: { username: string; password: string; ro
 
 export async function updateUser(
   userId: string,
-  input: { username?: string; password?: string },
+  input: { username?: string; password?: string; canEditProducts?: boolean },
 ): Promise<UserWithAccess> {
   const response = await apiClient.patch<UserWithAccess>(`/users/${userId}`, input);
   return response.data;

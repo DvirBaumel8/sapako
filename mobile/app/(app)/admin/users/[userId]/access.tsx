@@ -10,6 +10,7 @@ import {
   setProviderAccess,
   type AccessView,
 } from '../../../../../src/api/access';
+import { fetchUsers, updateUser } from '../../../../../src/api/users';
 import { fetchAccessibleBranches } from '../../../../../src/api/branches';
 import { useRequireAdmin } from '../../../../../src/auth/useRequireAdmin';
 import type { Branch } from '../../../../../src/api/types';
@@ -34,6 +35,10 @@ export default function UserAccessScreen() {
   const queryClient = useQueryClient();
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: fetchAccessibleBranches });
   const showAlert = useAlert();
+  const { data: users } = useQuery({ queryKey: ['users'], queryFn: fetchUsers });
+  const targetUser = users?.find((user) => user.id === userId);
+  const [pendingCanEdit, setPendingCanEdit] = useState<boolean | null>(null);
+  const canEditInFlightRef = useRef(false);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
   // Both lists run to dozens of rows — 33 departments and 195 providers in the
   // live catalogue — so reaching one section means scrolling past the other.
@@ -48,6 +53,21 @@ export default function UserAccessScreen() {
     queryFn: () => fetchAccess(userId, activeBranch!.id),
     enabled: !!activeBranch,
   });
+
+  const toggleCanEditProducts = async (next: boolean) => {
+    if (canEditInFlightRef.current) return;
+    canEditInFlightRef.current = true;
+    setPendingCanEdit(next);
+    try {
+      await updateUser(userId, { canEditProducts: next });
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+    } catch {
+      showAlert({ title: 'שגיאה', message: 'שמירת ההרשאה נכשלה. יש לנסות שוב.' });
+    } finally {
+      canEditInFlightRef.current = false;
+      setPendingCanEdit(null);
+    }
+  };
 
   const refetchAccess = () => queryClient.invalidateQueries({ queryKey: accessQueryKey });
 
@@ -177,6 +197,16 @@ export default function UserAccessScreen() {
 
   return (
     <View style={common.screen}>
+      {targetUser?.role === 'STAFF' && (
+        <View style={[common.cardRow, styles.canEditRow]}>
+          <Text style={common.label}>יכול לערוך מוצרים</Text>
+          <Toggle
+            accessibilityLabel="יכול לערוך מוצרים"
+            value={pendingCanEdit ?? targetUser.canEditProducts}
+            onValueChange={toggleCanEditProducts}
+          />
+        </View>
+      )}
       {/* A row rather than a horizontal FlatList: react-native-web mirrors
           flexDirection under RTL, but a horizontal list keeps its own
           left-to-right scroll axis, which put the first branch on the left. */}
@@ -291,6 +321,7 @@ const styles = StyleSheet.create({
   },
   branchChipSelected: { backgroundColor: colors.accent },
   branchChipTextSelected: { color: colors.surface },
+  canEditRow: { marginHorizontal: spacing.lg, marginTop: spacing.sm },
   providerList: { flex: 1 },
   sectionHeader: {
     flexDirection: 'row',

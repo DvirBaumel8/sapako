@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { jwtDecode } from 'jwt-decode';
 import { getToken, setToken, clearToken } from './tokenStorage';
 import { setUnauthorizedHandler } from '../api/client';
-import { login as loginRequest } from '../api/auth';
+import { fetchMe, login as loginRequest } from '../api/auth';
 import type { Role } from '../api/types';
 
 interface JwtPayload {
@@ -14,6 +16,10 @@ interface AuthState {
   isLoading: boolean;
   userId: string | null;
   role: Role | null;
+  // True for admins and for staff granted the can-edit-products flag.
+  canEditProducts: boolean;
+  // True while a logged-in non-admin's capability is still being fetched.
+  isCapabilityLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -24,6 +30,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<Role | null>(null);
+
+  // Any failure (including a 404 for a deleted user) leaves `me` undefined,
+  // which reads as "no capability" rather than crashing.
+  const {
+    data: me,
+    isPending: isMePending,
+    refetch: refetchMe,
+  } = useQuery({ queryKey: ['me', userId], queryFn: fetchMe, enabled: !!userId, retry: false });
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refetchMe();
+    });
+    return () => subscription.remove();
+  }, [refetchMe]);
+
+  const canEditProducts = role === 'ADMIN' || (!!userId && !!me?.canEditProducts);
+  const isCapabilityLoading = !!userId && role !== 'ADMIN' && isMePending;
 
   const applyToken = (token: string | null) => {
     if (!token) {
@@ -57,8 +81,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ isLoading, userId, role, login, logout }),
-    [isLoading, userId, role],
+    () => ({ isLoading, userId, role, canEditProducts, isCapabilityLoading, login, logout }),
+    [isLoading, userId, role, canEditProducts, isCapabilityLoading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -17,6 +17,11 @@ jest.mock('../../../../../src/api/branches', () => ({
   fetchAccessibleBranches: jest.fn(),
 }));
 
+jest.mock('../../../../../src/api/users', () => ({
+  fetchUsers: jest.fn(),
+  updateUser: jest.fn(),
+}));
+
 jest.mock('../../../../../src/api/access', () => ({
   fetchAccess: jest.fn(),
   setProviderAccess: jest.fn(),
@@ -25,6 +30,7 @@ jest.mock('../../../../../src/api/access', () => ({
   setBranchAccess: jest.fn(),
 }));
 
+import { fetchUsers, updateUser } from '../../../../../src/api/users';
 import { fetchAccessibleBranches } from '../../../../../src/api/branches';
 import {
   fetchAccess,
@@ -45,12 +51,22 @@ const accessView = (departmentsGranted: boolean) => ({
   ],
 });
 
+const staffUser = {
+  id: 'user-1',
+  username: 'dana',
+  role: 'STAFF',
+  providerAccessCount: 0,
+  canEditProducts: false,
+};
+
 let activeQueryClient: QueryClient | null = null;
 
 beforeEach(() => {
   jest.clearAllMocks();
   (fetchAccessibleBranches as jest.Mock).mockResolvedValue([branch]);
   (fetchAccess as jest.Mock).mockResolvedValue(accessView(false));
+  (fetchUsers as jest.Mock).mockResolvedValue([staffUser]);
+  (updateUser as jest.Mock).mockResolvedValue(staffUser);
   (setAllDepartmentsAccess as jest.Mock).mockResolvedValue(undefined);
   (setBranchAccess as jest.Mock).mockResolvedValue(undefined);
   (setDepartmentAccess as jest.Mock).mockResolvedValue(undefined);
@@ -203,3 +219,43 @@ describe('UserAccessScreen — a single department', () => {
 // awaiting opens overlapping act() scopes that corrupt every later test in
 // the file. A test written either way would pass without exercising the
 // guard. See the comment beside departmentInFlightRef in access.tsx.
+
+describe('UserAccessScreen — can edit products', () => {
+  it('shows the toggle for a staff user', async () => {
+    await renderScreen();
+    await waitFor(() => expect(screen.getByLabelText('יכול לערוך מוצרים')).toBeTruthy());
+  });
+
+  it('hides the toggle for an admin user', async () => {
+    (fetchUsers as jest.Mock).mockResolvedValue([{ ...staffUser, role: 'ADMIN' }]);
+    await renderScreen();
+    await waitFor(() => expect(fetchUsers).toHaveBeenCalled());
+    expect(screen.queryByLabelText('יכול לערוך מוצרים')).toBeNull();
+  });
+
+  it('saves the flag when tapped', async () => {
+    await renderScreen();
+    await waitFor(() => expect(screen.getByLabelText('יכול לערוך מוצרים')).toBeTruthy());
+
+    await fireEvent.press(screen.getByLabelText('יכול לערוך מוצרים'));
+
+    await waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith('user-1', { canEditProducts: true }),
+    );
+  });
+
+  it('reverts and reports when the save fails', async () => {
+    (updateUser as jest.Mock).mockRejectedValue(new Error('offline'));
+    await renderScreen();
+    await waitFor(() => expect(screen.getByLabelText('יכול לערוך מוצרים')).toBeTruthy());
+
+    await fireEvent.press(screen.getByLabelText('יכול לערוך מוצרים'));
+
+    await waitFor(() =>
+      expect(screen.getByText('שמירת ההרשאה נכשלה. יש לנסות שוב.')).toBeTruthy(),
+    );
+    expect(
+      screen.getByLabelText('יכול לערוך מוצרים').props.accessibilityState.checked,
+    ).toBe(false);
+  });
+});
