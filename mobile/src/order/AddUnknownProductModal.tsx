@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { createProduct } from '../api/products';
-import { isConflictError } from '../api/errors';
+import { isConflictError, isForbiddenError, FORBIDDEN_MESSAGE } from '../api/errors';
+import { useQueryClient } from '@tanstack/react-query';
 import { lookupCatalogItem } from '../api/catalog';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { hasLetter, sanitizeHebrewInput } from '../utils/hebrewInput';
@@ -32,6 +33,7 @@ export function AddUnknownProductModal({
   onCreated,
 }: AddUnknownProductModalProps) {
   const showAlert = useAlert();
+  const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [unitType, setUnitType] = useState<string>(DEFAULT_UNIT_TYPE);
   const [isSaving, setIsSaving] = useState(false);
@@ -84,10 +86,13 @@ export function AddUnknownProductModal({
     } catch (err) {
       showAlert({
         title: 'שגיאה',
-        message: isConflictError(err)
-          ? 'מוצר בשם הזה כבר קיים אצל הספק.'
-          : 'הוספת המוצר נכשלה. יש לנסות שוב.',
+        message: isForbiddenError(err)
+          ? FORBIDDEN_MESSAGE
+          : isConflictError(err)
+            ? 'מוצר בשם הזה כבר קיים אצל הספק.'
+            : 'הוספת המוצר נכשלה. יש לנסות שוב.',
       });
+      if (isForbiddenError(err)) queryClient.invalidateQueries({ queryKey: ['me'] });
     } finally {
       setIsSaving(false);
     }

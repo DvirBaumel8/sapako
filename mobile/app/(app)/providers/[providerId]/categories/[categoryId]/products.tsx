@@ -10,6 +10,7 @@ import { Toggle } from '../../../../../../src/ui/Toggle';
 import { common } from '../../../../../../src/ui/commonStyles';
 import { colors, spacing } from '../../../../../../src/ui/theme';
 import { fuzzySearch } from '../../../../../../src/utils/fuzzySearch';
+import { isForbiddenError, FORBIDDEN_MESSAGE } from '../../../../../../src/api/errors';
 import type { Product } from '../../../../../../src/api/types';
 
 /**
@@ -73,13 +74,18 @@ export default function CategoryProductsScreen() {
         delete updated[product.id];
         return updated;
       });
-    } catch {
+    } catch (err) {
       setPendingProductIds((prev) => {
         const updated = { ...prev };
         delete updated[product.id];
         return updated;
       });
-      showAlert({ title: 'שגיאה', message: 'עדכון הקטגוריה נכשל. יש לנסות שוב.' });
+      if (isForbiddenError(err)) {
+        showAlert({ title: 'שגיאה', message: FORBIDDEN_MESSAGE });
+        queryClient.invalidateQueries({ queryKey: ['me'] });
+      } else {
+        showAlert({ title: 'שגיאה', message: 'עדכון הקטגוריה נכשל. יש לנסות שוב.' });
+      }
     } finally {
       inFlightRef.current.delete(product.id);
     }

@@ -4,6 +4,12 @@ export function isConflictError(error: unknown): boolean {
   return axios.isAxiosError(error) && error.response?.status === 409;
 }
 
+export const FORBIDDEN_MESSAGE = 'אין לך הרשאה לערוך מוצרים אצל ספק זה.';
+
+export function isForbiddenError(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 403;
+}
+
 export function isUnauthorizedError(error: unknown): boolean {
   return axios.isAxiosError(error) && error.response?.status === 401;
 }

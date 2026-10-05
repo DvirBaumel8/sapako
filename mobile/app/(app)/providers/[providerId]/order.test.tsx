@@ -453,7 +453,7 @@ describe('product editing for users with the can-edit-products permission', () =
     await fireEvent.press(screen.getByText('הוספת מוצר'));
     expect(router.push).toHaveBeenCalledWith({
       pathname: '/admin/products/new',
-      params: { providerId: PROVIDER_ID },
+      params: { providerId: PROVIDER_ID, branchId: 'branch-1' },
     });
   });
 

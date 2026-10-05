@@ -41,10 +41,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') refetchMe();
+      if (state === 'active' && userId) refetchMe();
     });
     return () => subscription.remove();
-  }, [refetchMe]);
+  }, [refetchMe, userId]);
 
   const canEditProducts = role === 'ADMIN' || (!!userId && !!me?.canEditProducts);
   const isCapabilityLoading = !!userId && role !== 'ADMIN' && isMePending;

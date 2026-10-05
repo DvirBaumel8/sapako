@@ -83,6 +83,13 @@ describe('EditProductScreen', () => {
     expect(await screen.findByText('מוצר בשם הזה כבר קיים אצל הספק.')).toBeTruthy();
   });
 
+  it('shows the permission message on 403', async () => {
+    (updateProduct as jest.Mock).mockRejectedValue(err(403));
+    await renderScreen();
+    await fireEvent.press(screen.getByText('שמירה'));
+    expect(await screen.findByText('אין לך הרשאה לערוך מוצרים אצל ספק זה.')).toBeTruthy();
+  });
+
   it('keeps the generic message for other failures', async () => {
     (updateProduct as jest.Mock).mockRejectedValue(err());
     await renderScreen();

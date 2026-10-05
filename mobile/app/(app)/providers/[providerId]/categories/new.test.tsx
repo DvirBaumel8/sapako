@@ -80,6 +80,25 @@ describe('NewCategoryScreen', () => {
     await waitFor(() => expect(mockBack).toHaveBeenCalled());
   });
 
+  it('shows the permission message on 403', async () => {
+    (createCategory as jest.Mock).mockRejectedValue(
+      new AxiosError('Forbidden', 'ERR', undefined, undefined, {
+        status: 403,
+        statusText: '',
+        data: {},
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      }),
+    );
+    await renderScreen();
+
+    await fireEvent.changeText(screen.getByPlaceholderText('שם הקטגוריה'), 'ירקות');
+    await fireEvent.press(screen.getByText('יצירת קטגוריה'));
+
+    expect(await screen.findByText('אין לך הרשאה לערוך מוצרים אצל ספק זה.')).toBeTruthy();
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+
   it('shows a conflict-specific error when the name already exists for this provider', async () => {
     (createCategory as jest.Mock).mockRejectedValue(conflictError());
     await renderScreen();

@@ -108,7 +108,7 @@ export class ProductAdminController {
   @Patch(':id')
   async update(
     @Req() req: { user: AuthenticatedUser },
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateProductDto,
   ): Promise<Product> {
     const product = await this.productsService.findById(id);
@@ -122,7 +122,7 @@ export class ProductAdminController {
   @Delete(':id')
   async remove(
     @Req() req: { user: AuthenticatedUser },
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     const product = await this.productsService.findById(id);
     await this.permissionsService.assertCanEditProducts(

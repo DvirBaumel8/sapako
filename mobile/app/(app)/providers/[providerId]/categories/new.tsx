@@ -6,7 +6,7 @@ import { createCategory } from '../../../../../src/api/categories';
 import { PrimaryButton } from '../../../../../src/components/PrimaryButton';
 import { useRequireProductEditor } from '../../../../../src/auth/useRequireProductEditor';
 import { hasLetter, sanitizeHebrewInput } from '../../../../../src/utils/hebrewInput';
-import { isConflictError } from '../../../../../src/api/errors';
+import { isConflictError, isForbiddenError, FORBIDDEN_MESSAGE } from '../../../../../src/api/errors';
 import { useAlert } from '../../../../../src/ui/AlertProvider';
 
 export default function NewCategoryScreen() {
@@ -29,7 +29,10 @@ export default function NewCategoryScreen() {
       router.back();
     } catch (err) {
       setIsSubmitting(false);
-      if (isConflictError(err)) {
+      if (isForbiddenError(err)) {
+        showAlert({ title: 'שגיאה', message: FORBIDDEN_MESSAGE });
+        queryClient.invalidateQueries({ queryKey: ['me'] });
+      } else if (isConflictError(err)) {
         setNameError('כבר קיימת קטגוריה בשם זה אצל ספק זה. יש לבחור שם אחר.');
       } else {
         showAlert({ title: 'שגיאה', message: 'יצירת הקטגוריה נכשלה. יש לנסות שוב.' });

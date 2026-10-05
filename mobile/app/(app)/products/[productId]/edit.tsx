@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { deleteProduct, updateProduct } from '../../../../src/api/products';
-import { isConflictError } from '../../../../src/api/errors';
+import { isConflictError, isForbiddenError, FORBIDDEN_MESSAGE } from '../../../../src/api/errors';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
 import { useRequireProductEditor } from '../../../../src/auth/useRequireProductEditor';
 import { hasLetter, sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
@@ -55,10 +55,13 @@ export default function EditProductScreen() {
     } catch (err) {
       showAlert({
         title: 'שגיאה',
-        message: isConflictError(err)
-          ? 'מוצר בשם הזה כבר קיים אצל הספק.'
-          : 'שמירת המוצר נכשלה. יש לנסות שוב.',
+        message: isForbiddenError(err)
+          ? FORBIDDEN_MESSAGE
+          : isConflictError(err)
+            ? 'מוצר בשם הזה כבר קיים אצל הספק.'
+            : 'שמירת המוצר נכשלה. יש לנסות שוב.',
       });
+      if (isForbiddenError(err)) queryClient.invalidateQueries({ queryKey: ['me'] });
     }
   };
 
@@ -68,7 +71,12 @@ export default function EditProductScreen() {
       await invalidateProducts();
       router.back();
     },
-    onError: () => {
+    onError: (err) => {
+      if (isForbiddenError(err)) {
+        showAlert({ title: 'שגיאה', message: FORBIDDEN_MESSAGE });
+        queryClient.invalidateQueries({ queryKey: ['me'] });
+        return;
+      }
       showAlert({ title: 'שגיאה', message: 'מחיקת המוצר נכשלה. יש לנסות שוב.' });
     },
   });

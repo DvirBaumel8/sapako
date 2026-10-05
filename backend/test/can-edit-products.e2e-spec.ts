@@ -217,4 +217,17 @@ describe('can-edit-products permission (e2e)', () => {
       .send({ name: 'שם חדש' })
       .expect(403);
   });
+
+  it('by-id routes answer 400 for a malformed id', async () => {
+    await setFlag(true);
+    await request(http())
+      .patch('/products/not-a-uuid')
+      .set(auth(fx.staffToken))
+      .send({ name: 'x' })
+      .expect(400);
+    await request(http())
+      .delete('/categories/not-a-uuid')
+      .set(auth(fx.staffToken))
+      .expect(400);
+  });
 });

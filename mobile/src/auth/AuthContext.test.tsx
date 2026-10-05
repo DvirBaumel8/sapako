@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { AppState, Text } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './AuthContext';
 import { getToken } from './tokenStorage';
@@ -90,5 +90,25 @@ describe('AuthProvider canEditProducts', () => {
     await settle();
     expect(fetchMe).toHaveBeenCalled();
     expect(screen.getByTestId('probe').props.children).toBe('false');
+  });
+});
+
+describe('AuthProvider app-foreground refetch', () => {
+  it('does not fetch /auth/me on foreground while logged out', async () => {
+    let handler: ((state: string) => void) | undefined;
+    const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((
+      _type: string,
+      listener: (state: string) => void,
+    ) => {
+      handler = listener;
+      return { remove: jest.fn() };
+    }) as never);
+    await renderProvider(null);
+    await act(async () => {
+      handler?.('active');
+    });
+    expect(handler).toBeDefined();
+    expect(fetchMe).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });

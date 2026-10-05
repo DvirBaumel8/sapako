@@ -6,7 +6,7 @@ import { deleteCategory, updateCategory } from '../../../../../../src/api/catego
 import { PrimaryButton } from '../../../../../../src/components/PrimaryButton';
 import { useRequireProductEditor } from '../../../../../../src/auth/useRequireProductEditor';
 import { hasLetter, sanitizeHebrewInput } from '../../../../../../src/utils/hebrewInput';
-import { isConflictError } from '../../../../../../src/api/errors';
+import { isConflictError, isForbiddenError, FORBIDDEN_MESSAGE } from '../../../../../../src/api/errors';
 import { useAlert } from '../../../../../../src/ui/AlertProvider';
 
 export default function EditCategoryScreen() {
@@ -32,7 +32,10 @@ export default function EditCategoryScreen() {
       await invalidateCategories();
       router.back();
     } catch (err) {
-      if (isConflictError(err)) {
+      if (isForbiddenError(err)) {
+        showAlert({ title: 'שגיאה', message: FORBIDDEN_MESSAGE });
+        queryClient.invalidateQueries({ queryKey: ['me'] });
+      } else if (isConflictError(err)) {
         setNameError('כבר קיימת קטגוריה בשם זה אצל ספק זה. יש לבחור שם אחר.');
       } else {
         showAlert({ title: 'שגיאה', message: 'שמירת הקטגוריה נכשלה. יש לנסות שוב.' });
@@ -50,7 +53,12 @@ export default function EditCategoryScreen() {
       await queryClient.invalidateQueries({ queryKey: ['products', providerId] });
       router.back();
     },
-    onError: () => {
+    onError: (err) => {
+      if (isForbiddenError(err)) {
+        showAlert({ title: 'שגיאה', message: FORBIDDEN_MESSAGE });
+        queryClient.invalidateQueries({ queryKey: ['me'] });
+        return;
+      }
       showAlert({ title: 'שגיאה', message: 'מחיקת הקטגוריה נכשלה. יש לנסות שוב.' });
     },
   });

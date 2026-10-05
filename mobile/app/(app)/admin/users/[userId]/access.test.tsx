@@ -229,6 +229,9 @@ describe('UserAccessScreen — can edit products', () => {
   it('hides the toggle for an admin user', async () => {
     (fetchUsers as jest.Mock).mockResolvedValue([{ ...staffUser, role: 'ADMIN' }]);
     await renderScreen();
+    // Wait for rendered data first, or the absence below holds vacuously
+    // while everything is still loading.
+    expect(await screen.findByText('תנובה')).toBeTruthy();
     await waitFor(() => expect(fetchUsers).toHaveBeenCalled());
     expect(screen.queryByLabelText('יכול לערוך מוצרים')).toBeNull();
   });

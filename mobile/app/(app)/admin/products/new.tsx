@@ -11,7 +11,7 @@ import { useRequireProductEditor } from '../../../../src/auth/useRequireProductE
 import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 import type { Branch, Provider } from '../../../../src/api/types';
-import { isConflictError } from '../../../../src/api/errors';
+import { isConflictError, isForbiddenError, FORBIDDEN_MESSAGE } from '../../../../src/api/errors';
 import { useAlert } from '../../../../src/ui/AlertProvider';
 import { UnitTypePicker } from '../../../../src/products/UnitTypePicker';
 import { CategoryPicker } from '../../../../src/products/CategoryPicker';
@@ -37,16 +37,26 @@ export default function NewProductScreen() {
   const [categoryId, setCategoryId] = useState<string | null>(null);
   // Arriving from a scan that matched nothing: the number is already known,
   // so it is carried over rather than typed in again.
-  const { barcode: scannedBarcode, providerId: presetProviderId } = useLocalSearchParams<{
+  const {
+    barcode: scannedBarcode,
+    providerId: presetProviderId,
+    branchId: presetBranchId,
+  } = useLocalSearchParams<{
     barcode?: string;
     providerId?: string;
+    branchId?: string;
   }>();
   const [barcode, setBarcode] = useState(scannedBarcode ?? '');
   const [isScannerVisible, setIsScannerVisible] = useState(false);
 
   useEffect(() => {
     if (!branches || primaryBranch) return;
-    const defaultBranch = branches.find((b) => b.name === DEFAULT_BRANCH_NAME) ?? branches[0];
+    // Arriving from a supplier's order screen: start on that order's branch so
+    // its suppliers load and the preset supplier can be found.
+    const defaultBranch =
+      branches.find((b) => b.id === presetBranchId) ??
+      branches.find((b) => b.name === DEFAULT_BRANCH_NAME) ??
+      branches[0];
     if (defaultBranch) {
       setSelectedBranchIds(new Set([defaultBranch.id]));
       setPrimaryBranch(defaultBranch);
@@ -163,10 +173,14 @@ export default function NewProductScreen() {
       // having ignored the tap.
       showAlert({
         title: 'שגיאה',
-        message: isConflictError(err)
-          ? 'מוצר בשם הזה כבר קיים אצל הספק.'
-          : 'יצירת המוצר נכשלה. יש לנסות שוב.',
+        message: isForbiddenError(err)
+          ? FORBIDDEN_MESSAGE
+          : isConflictError(err)
+            ? 'מוצר בשם הזה כבר קיים אצל הספק.'
+            : 'יצירת המוצר נכשלה. יש לנסות שוב.',
       });
+      // The permission was likely revoked: refresh it so the buttons go away.
+      if (isForbiddenError(err)) queryClient.invalidateQueries({ queryKey: ['me'] });
     } finally {
       setIsSubmitting(false);
     }

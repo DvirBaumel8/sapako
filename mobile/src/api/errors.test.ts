@@ -1,5 +1,5 @@
 import { AxiosError, AxiosHeaders } from 'axios';
-import { isConflictError, isUnauthorizedError, isUnreachableError } from './errors';
+import { isConflictError, isForbiddenError, isUnauthorizedError, isUnreachableError } from './errors';
 
 const withStatus = (status: number) =>
   new AxiosError('failed', 'ERR', undefined, undefined, {
@@ -55,5 +55,14 @@ describe('isConflictError', () => {
   it('still reports 409 as a conflict', () => {
     expect(isConflictError(withStatus(409))).toBe(true);
     expect(isConflictError(withStatus(401))).toBe(false);
+  });
+});
+
+describe('isForbiddenError', () => {
+  it('is true for 403 only', () => {
+    expect(isForbiddenError(withStatus(403))).toBe(true);
+    expect(isForbiddenError(withStatus(409))).toBe(false);
+    expect(isForbiddenError(withoutResponse())).toBe(false);
+    expect(isForbiddenError(new Error('x'))).toBe(false);
   });
 });

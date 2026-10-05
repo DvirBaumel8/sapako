@@ -8,6 +8,7 @@ import {
   Post,
   Req,
   UseGuards,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -62,7 +63,7 @@ export class CategoryAdminController {
   @Patch(':id')
   async update(
     @Req() req: { user: AuthenticatedUser },
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCategoryDto,
   ): Promise<Category> {
     const category = await this.categoriesService.findById(id);
@@ -76,7 +77,7 @@ export class CategoryAdminController {
   @Delete(':id')
   async remove(
     @Req() req: { user: AuthenticatedUser },
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     const category = await this.categoriesService.findById(id);
     await this.permissionsService.assertCanEditProducts(

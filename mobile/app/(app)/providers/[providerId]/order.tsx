@@ -647,7 +647,7 @@ export default function OrderBuilderScreen() {
         <View style={styles.editActionsRow}>
           <Pressable
             onPress={() =>
-              router.push({ pathname: '/admin/products/new', params: { providerId } })
+              router.push({ pathname: '/admin/products/new', params: { providerId, branchId: selectedBranch?.id } })
             }
             accessibilityRole="button"
             style={styles.editToggle}

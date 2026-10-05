@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders } from 'axios';
 import { AlertProvider } from '../ui/AlertProvider';
 import { AddUnknownProductModal } from './AddUnknownProductModal';
@@ -10,6 +11,12 @@ jest.mock('../api/catalog', () => ({ lookupCatalogItem: jest.fn() }));
 
 import { createProduct } from '../api/products';
 import { lookupCatalogItem } from '../api/catalog';
+
+let activeQueryClient: QueryClient | null = null;
+afterEach(() => {
+  activeQueryClient?.clear();
+  activeQueryClient = null;
+});
 
 const onCreated = jest.fn();
 const onClose = jest.fn();
@@ -29,18 +36,23 @@ beforeEach(() => {
 // Rendered conditionally by the order screen with `visible` already true, so
 // the mount and the opening are the same moment — which is what made the
 // reset effect's behaviour easy to get wrong.
-const renderModal = () =>
-  render(
-    <AlertProvider>
-      <AddUnknownProductModal
-        visible
-        providerId="provider-1"
-        barcode="7290000000001"
-        onClose={onClose}
-        onCreated={onCreated}
-      />
-    </AlertProvider>,
+const renderModal = () => {
+  const queryClient = new QueryClient();
+  activeQueryClient = queryClient;
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AlertProvider>
+        <AddUnknownProductModal
+          visible
+          providerId="provider-1"
+          barcode="7290000000001"
+          onClose={onClose}
+          onCreated={onCreated}
+        />
+      </AlertProvider>
+    </QueryClientProvider>,
   );
+};
 
 describe('AddUnknownProductModal', () => {
   it('shows the scanned barcode, so the user can check it before saving', async () => {

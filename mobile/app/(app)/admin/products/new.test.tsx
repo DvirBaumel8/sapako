@@ -23,10 +23,19 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('../../../../src/auth/useRequireProductEditor', () => ({ useRequireProductEditor: jest.fn() }));
 jest.mock('../../../../src/api/branches', () => ({
-  fetchAccessibleBranches: jest.fn().mockResolvedValue([{ id: 'b1', name: 'הילס' }]),
+  fetchAccessibleBranches: jest.fn().mockResolvedValue([
+    { id: 'b1', name: 'הילס' },
+    { id: 'b2', name: 'סניף שני' },
+  ]),
 }));
 jest.mock('../../../../src/api/providers', () => ({
-  fetchProvidersForBranch: jest.fn().mockResolvedValue([{ id: 'prov-1', name: 'י.ל.ת' }]),
+  fetchProvidersForBranch: jest.fn((branchId: string) =>
+    Promise.resolve(
+      branchId === 'b2'
+        ? [{ id: 'prov-b2', name: 'ספק שני' }]
+        : [{ id: 'prov-1', name: 'י.ל.ת' }],
+    ),
+  ),
 }));
 jest.mock('../../../../src/api/categories', () => ({
   fetchCategoriesForProvider: jest.fn().mockResolvedValue([]),
@@ -37,6 +46,7 @@ jest.mock('../../../../src/barcode/BarcodeScannerModal', () => ({
 }));
 
 import { createProduct } from '../../../../src/api/products';
+import { fetchProvidersForBranch } from '../../../../src/api/providers';
 
 let activeQueryClient: QueryClient | null = null;
 
@@ -82,6 +92,27 @@ describe('NewProductScreen', () => {
     );
     expect(await screen.findByPlaceholderText('שם המוצר')).toBeTruthy();
     expect(screen.getByText('ספק: י.ל.ת')).toBeTruthy();
+  });
+
+  it('starts on the branch given by the branchId param and preselects its supplier', async () => {
+    mockParams = { providerId: 'prov-b2', branchId: 'b2' };
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    activeQueryClient = queryClient;
+    await render(
+      <QueryClientProvider client={queryClient}>
+        <AlertProvider>
+          <NewProductScreen />
+        </AlertProvider>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('ספק: ספק שני')).toBeTruthy();
+    expect(fetchProvidersForBranch).toHaveBeenCalledWith('b2');
+  });
+
+  it('shows the permission message on 403 and refreshes the capability', async () => {
+    (createProduct as jest.Mock).mockRejectedValue(err(403));
+    await renderAndSubmit();
+    expect(await screen.findByText('אין לך הרשאה לערוך מוצרים אצל ספק זה.')).toBeTruthy();
   });
 
   it('explains a duplicate name on 409', async () => {
