@@ -13,8 +13,7 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
-import { Role } from '../users/role.enum';
+import { AuthenticatedUser } from '../auth/jwt.strategy';
 import { ProviderAccessGuard } from '../permissions/provider-access.guard';
 import { BranchAccessGuard } from '../permissions/branch-access.guard';
 import { PermissionsService } from '../permissions/permissions.service';
@@ -59,19 +58,26 @@ export class BranchProductsController {
 @Controller('providers/:providerId/products')
 @UseGuards(JwtAuthGuard, ProviderAccessGuard, RolesGuard)
 export class ProviderProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly permissionsService: PermissionsService,
+  ) {}
 
   @Get()
   findForProvider(@Param('providerId') providerId: string): Promise<Product[]> {
     return this.productsService.findActiveByProvider(providerId);
   }
 
+  // Admins, or staff with the can-edit-products flag and access to this
+  // provider. An explicit call rather than @Roles because the flag is a
+  // per-user DB value, not a role.
   @Post()
-  @Roles(Role.ADMIN)
-  create(
+  async create(
+    @Req() req: { user: AuthenticatedUser },
     @Param('providerId') providerId: string,
     @Body() dto: CreateProductDto,
   ): Promise<Product> {
+    await this.permissionsService.assertCanEditProducts(req.user, providerId);
     return this.productsService.create(providerId, dto);
   }
 
@@ -91,20 +97,38 @@ export class ProviderProductsController {
 @Controller('products')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ProductAdminController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly permissionsService: PermissionsService,
+  ) {}
 
+  // Admins, or staff with the can-edit-products flag and access to the
+  // product's provider. The provider comes from the product row, so this is
+  // an explicit call rather than @Roles (the flag is a per-user DB value).
   @Patch(':id')
-  @Roles(Role.ADMIN)
-  update(
+  async update(
+    @Req() req: { user: AuthenticatedUser },
     @Param('id') id: string,
     @Body() dto: UpdateProductDto,
   ): Promise<Product> {
+    const product = await this.productsService.findById(id);
+    await this.permissionsService.assertCanEditProducts(
+      req.user,
+      product.providerId,
+    );
     return this.productsService.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles(Role.ADMIN)
-  remove(@Param('id') id: string): Promise<void> {
+  async remove(
+    @Req() req: { user: AuthenticatedUser },
+    @Param('id') id: string,
+  ): Promise<void> {
+    const product = await this.productsService.findById(id);
+    await this.permissionsService.assertCanEditProducts(
+      req.user,
+      product.providerId,
+    );
     return this.productsService.remove(id);
   }
 }

@@ -95,10 +95,16 @@ describe('ProviderProductsController', () => {
     create: jest.fn(),
     updateNote: jest.fn(),
   };
+  const mockPermissionsService = { assertCanEditProducts: jest.fn() };
+  const req = { user: { userId: 'u1', role: Role.STAFF } };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new ProviderProductsController(mockProductsService as any);
+    mockPermissionsService.assertCanEditProducts.mockResolvedValue(undefined);
+    controller = new ProviderProductsController(
+      mockProductsService as any,
+      mockPermissionsService as any,
+    );
   });
 
   describe('guards', () => {
@@ -118,12 +124,12 @@ describe('ProviderProductsController', () => {
       expect(roles).toBeUndefined();
     });
 
-    it('restricts creating a product to ADMIN', () => {
+    it('has no @Roles on creating a product; the permission check is explicit', () => {
       const roles = Reflect.getMetadata(
         ROLES_KEY,
         ProviderProductsController.prototype.create,
       );
-      expect(roles).toEqual([Role.ADMIN]);
+      expect(roles).toBeUndefined();
     });
 
     it('leaves editing a note open to any authenticated role with provider access', () => {
@@ -155,10 +161,25 @@ describe('ProviderProductsController', () => {
       const created = { id: 'prod1', ...dto };
       mockProductsService.create.mockResolvedValue(created);
 
-      const result = await controller.create('p1', dto);
+      const result = await controller.create(req, 'p1', dto);
 
+      expect(mockPermissionsService.assertCanEditProducts).toHaveBeenCalledWith(
+        req.user,
+        'p1',
+      );
       expect(mockProductsService.create).toHaveBeenCalledWith('p1', dto);
       expect(result).toBe(created);
+    });
+
+    it('does not create when the permission check rejects', async () => {
+      mockPermissionsService.assertCanEditProducts.mockRejectedValue(
+        new Error('forbidden'),
+      );
+
+      await expect(
+        controller.create(req, 'p1', { name: 'x', unitType: 'ק"ג' }),
+      ).rejects.toThrow('forbidden');
+      expect(mockProductsService.create).not.toHaveBeenCalled();
     });
   });
 
@@ -184,13 +205,24 @@ describe('ProviderProductsController', () => {
 describe('ProductAdminController', () => {
   let controller: ProductAdminController;
   const mockProductsService = {
+    findById: jest.fn(),
     update: jest.fn(),
     remove: jest.fn(),
   };
+  const mockPermissionsService = { assertCanEditProducts: jest.fn() };
+  const req = { user: { userId: 'u1', role: Role.STAFF } };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new ProductAdminController(mockProductsService as any);
+    mockPermissionsService.assertCanEditProducts.mockResolvedValue(undefined);
+    mockProductsService.findById.mockResolvedValue({
+      id: 'prod1',
+      providerId: 'p9',
+    });
+    controller = new ProductAdminController(
+      mockProductsService as any,
+      mockPermissionsService as any,
+    );
   });
 
   describe('guards', () => {
@@ -202,20 +234,20 @@ describe('ProductAdminController', () => {
       expect(guards).toEqual([JwtAuthGuard, RolesGuard]);
     });
 
-    it('restricts updating a product to ADMIN', () => {
+    it('has no @Roles on updating a product; the permission check is explicit', () => {
       const roles = Reflect.getMetadata(
         ROLES_KEY,
         ProductAdminController.prototype.update,
       );
-      expect(roles).toEqual([Role.ADMIN]);
+      expect(roles).toBeUndefined();
     });
 
-    it('restricts removing a product to ADMIN', () => {
+    it('has no @Roles on removing a product; the permission check is explicit', () => {
       const roles = Reflect.getMetadata(
         ROLES_KEY,
         ProductAdminController.prototype.remove,
       );
-      expect(roles).toEqual([Role.ADMIN]);
+      expect(roles).toBeUndefined();
     });
   });
 
@@ -225,10 +257,25 @@ describe('ProductAdminController', () => {
       const updated = { id: 'prod1', name: 'עגבניות שרי' };
       mockProductsService.update.mockResolvedValue(updated);
 
-      const result = await controller.update('prod1', dto);
+      const result = await controller.update(req, 'prod1', dto);
 
+      expect(mockPermissionsService.assertCanEditProducts).toHaveBeenCalledWith(
+        req.user,
+        'p9',
+      );
       expect(mockProductsService.update).toHaveBeenCalledWith('prod1', dto);
       expect(result).toBe(updated);
+    });
+
+    it('does not update when the permission check rejects', async () => {
+      mockPermissionsService.assertCanEditProducts.mockRejectedValue(
+        new Error('forbidden'),
+      );
+
+      await expect(controller.update(req, 'prod1', {})).rejects.toThrow(
+        'forbidden',
+      );
+      expect(mockProductsService.update).not.toHaveBeenCalled();
     });
   });
 
@@ -236,9 +283,24 @@ describe('ProductAdminController', () => {
     it('delegates to the service with the id', async () => {
       mockProductsService.remove.mockResolvedValue(undefined);
 
-      await controller.remove('prod1');
+      await controller.remove(req, 'prod1');
 
+      expect(mockPermissionsService.assertCanEditProducts).toHaveBeenCalledWith(
+        req.user,
+        'p9',
+      );
       expect(mockProductsService.remove).toHaveBeenCalledWith('prod1');
+    });
+
+    it('does not remove when the permission check rejects', async () => {
+      mockPermissionsService.assertCanEditProducts.mockRejectedValue(
+        new Error('forbidden'),
+      );
+
+      await expect(controller.remove(req, 'prod1')).rejects.toThrow(
+        'forbidden',
+      );
+      expect(mockProductsService.remove).not.toHaveBeenCalled();
     });
   });
 });

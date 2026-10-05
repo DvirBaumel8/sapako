@@ -17,10 +17,16 @@ describe('ProviderCategoriesController', () => {
     findAllForProvider: jest.fn(),
     create: jest.fn(),
   };
+  const mockPermissionsService = { assertCanEditProducts: jest.fn() };
+  const req = { user: { userId: 'u1', role: Role.STAFF } };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new ProviderCategoriesController(mockCategoriesService as any);
+    mockPermissionsService.assertCanEditProducts.mockResolvedValue(undefined);
+    controller = new ProviderCategoriesController(
+      mockCategoriesService as any,
+      mockPermissionsService as any,
+    );
   });
 
   describe('guards', () => {
@@ -32,12 +38,12 @@ describe('ProviderCategoriesController', () => {
       expect(guards).toEqual([JwtAuthGuard, ProviderAccessGuard, RolesGuard]);
     });
 
-    it('restricts creating a category to ADMIN', () => {
+    it('has no @Roles on creating a category; the permission check is explicit', () => {
       const roles = Reflect.getMetadata(
         ROLES_KEY,
         ProviderCategoriesController.prototype.create,
       );
-      expect(roles).toEqual([Role.ADMIN]);
+      expect(roles).toBeUndefined();
     });
 
     it('leaves listing open to any authenticated role with provider access', () => {
@@ -56,7 +62,9 @@ describe('ProviderCategoriesController', () => {
 
       const result = await controller.findForProvider('p1');
 
-      expect(mockCategoriesService.findAllForProvider).toHaveBeenCalledWith('p1');
+      expect(mockCategoriesService.findAllForProvider).toHaveBeenCalledWith(
+        'p1',
+      );
       expect(result).toBe(categories);
     });
   });
@@ -67,10 +75,25 @@ describe('ProviderCategoriesController', () => {
       const created = { id: 'c1', name: 'גבינות' };
       mockCategoriesService.create.mockResolvedValue(created);
 
-      const result = await controller.create('p1', dto);
+      const result = await controller.create(req, 'p1', dto);
 
+      expect(mockPermissionsService.assertCanEditProducts).toHaveBeenCalledWith(
+        req.user,
+        'p1',
+      );
       expect(mockCategoriesService.create).toHaveBeenCalledWith('p1', dto);
       expect(result).toBe(created);
+    });
+
+    it('does not create when the permission check rejects', async () => {
+      mockPermissionsService.assertCanEditProducts.mockRejectedValue(
+        new Error('forbidden'),
+      );
+
+      await expect(
+        controller.create(req, 'p1', { name: 'גבינות' }),
+      ).rejects.toThrow('forbidden');
+      expect(mockCategoriesService.create).not.toHaveBeenCalled();
     });
   });
 });
@@ -78,35 +101,49 @@ describe('ProviderCategoriesController', () => {
 describe('CategoryAdminController', () => {
   let controller: CategoryAdminController;
   const mockCategoriesService = {
+    findById: jest.fn(),
     update: jest.fn(),
     remove: jest.fn(),
   };
+  const mockPermissionsService = { assertCanEditProducts: jest.fn() };
+  const req = { user: { userId: 'u1', role: Role.STAFF } };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new CategoryAdminController(mockCategoriesService as any);
+    mockPermissionsService.assertCanEditProducts.mockResolvedValue(undefined);
+    mockCategoriesService.findById.mockResolvedValue({
+      id: 'c1',
+      providerId: 'p9',
+    });
+    controller = new CategoryAdminController(
+      mockCategoriesService as any,
+      mockPermissionsService as any,
+    );
   });
 
   describe('guards', () => {
     it('requires authentication for the whole controller', () => {
-      const guards = Reflect.getMetadata(GUARDS_METADATA, CategoryAdminController);
+      const guards = Reflect.getMetadata(
+        GUARDS_METADATA,
+        CategoryAdminController,
+      );
       expect(guards).toEqual([JwtAuthGuard, RolesGuard]);
     });
 
-    it('restricts updating a category to ADMIN', () => {
+    it('has no @Roles on updating a category; the permission check is explicit', () => {
       const roles = Reflect.getMetadata(
         ROLES_KEY,
         CategoryAdminController.prototype.update,
       );
-      expect(roles).toEqual([Role.ADMIN]);
+      expect(roles).toBeUndefined();
     });
 
-    it('restricts removing a category to ADMIN', () => {
+    it('has no @Roles on removing a category; the permission check is explicit', () => {
       const roles = Reflect.getMetadata(
         ROLES_KEY,
         CategoryAdminController.prototype.remove,
       );
-      expect(roles).toEqual([Role.ADMIN]);
+      expect(roles).toBeUndefined();
     });
   });
 
@@ -116,10 +153,25 @@ describe('CategoryAdminController', () => {
       const updated = { id: 'c1', name: 'גבינות ומעדנים' };
       mockCategoriesService.update.mockResolvedValue(updated);
 
-      const result = await controller.update('c1', dto);
+      const result = await controller.update(req, 'c1', dto);
 
+      expect(mockPermissionsService.assertCanEditProducts).toHaveBeenCalledWith(
+        req.user,
+        'p9',
+      );
       expect(mockCategoriesService.update).toHaveBeenCalledWith('c1', dto);
       expect(result).toBe(updated);
+    });
+
+    it('does not update when the permission check rejects', async () => {
+      mockPermissionsService.assertCanEditProducts.mockRejectedValue(
+        new Error('forbidden'),
+      );
+
+      await expect(controller.update(req, 'c1', { name: 'x' })).rejects.toThrow(
+        'forbidden',
+      );
+      expect(mockCategoriesService.update).not.toHaveBeenCalled();
     });
   });
 
@@ -127,9 +179,22 @@ describe('CategoryAdminController', () => {
     it('delegates to the service with the id', async () => {
       mockCategoriesService.remove.mockResolvedValue(undefined);
 
-      await controller.remove('c1');
+      await controller.remove(req, 'c1');
 
+      expect(mockPermissionsService.assertCanEditProducts).toHaveBeenCalledWith(
+        req.user,
+        'p9',
+      );
       expect(mockCategoriesService.remove).toHaveBeenCalledWith('c1');
+    });
+
+    it('does not remove when the permission check rejects', async () => {
+      mockPermissionsService.assertCanEditProducts.mockRejectedValue(
+        new Error('forbidden'),
+      );
+
+      await expect(controller.remove(req, 'c1')).rejects.toThrow('forbidden');
+      expect(mockCategoriesService.remove).not.toHaveBeenCalled();
     });
   });
 });
