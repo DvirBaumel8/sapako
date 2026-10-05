@@ -29,8 +29,10 @@ jest.mock('../../../../src/branch/BranchContext', () => ({
   }),
 }));
 
+let mockCanEditProducts = false;
 jest.mock('../../../../src/auth/AuthContext', () => ({
   useAuth: () => ({
+    canEditProducts: mockCanEditProducts,
     isLoading: false,
     userId: 'user-1',
     role: 'STAFF',
@@ -83,6 +85,7 @@ jest.mock('../../../../src/api/orders', () => ({
   deleteOrder: jest.fn(),
 }));
 
+import { router } from 'expo-router';
 import { fetchProductsForProvider, updateProductNote } from '../../../../src/api/products';
 import { fetchCategoriesForProvider } from '../../../../src/api/categories';
 import {
@@ -127,6 +130,7 @@ const FIXTURE_ORDER: Order = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockCanEditProducts = false;
   mockUseLocalSearchParams.mockReturnValue({
     providerId: PROVIDER_ID,
     providerName: 'ספק בדיקה',
@@ -430,6 +434,48 @@ describe('scanning by an additional barcode', () => {
     await fireEvent.press(screen.getByTestId('fake-scan'));
 
     expect(await screen.findByText(/לא נמצא מוצר עם ברקוד 7290003706020/)).toBeTruthy();
+  });
+});
+
+describe('product editing for users with the can-edit-products permission', () => {
+  it('offers the edit toggle, add-product and categories buttons to an editor', async () => {
+    mockCanEditProducts = true;
+    await renderScreen();
+    expect(screen.queryByText('הוספת מוצר')).toBeNull();
+    expect(screen.queryByText('קטגוריות')).toBeNull();
+
+    await fireEvent.press(screen.getByText('עריכה'));
+
+    expect(screen.getByText('הוספת מוצר')).toBeTruthy();
+    expect(screen.getByText('קטגוריות')).toBeTruthy();
+    await fireEvent.press(screen.getByText('קטגוריות'));
+    expect(router.push).toHaveBeenCalledWith(`/providers/${PROVIDER_ID}/categories`);
+    await fireEvent.press(screen.getByText('הוספת מוצר'));
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: '/admin/products/new',
+      params: { providerId: PROVIDER_ID },
+    });
+  });
+
+  it('offers none of it to plain staff', async () => {
+    await renderScreen();
+    expect(screen.queryByText('עריכה')).toBeNull();
+    expect(screen.queryByText('הוספת מוצר')).toBeNull();
+    expect(screen.queryByText('קטגוריות')).toBeNull();
+  });
+
+  it('offers adding an unknown scanned barcode only to an editor', async () => {
+    mockCanEditProducts = true;
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId('fake-scan'));
+    expect(await screen.findByText('הוספת מוצר חדש')).toBeTruthy();
+  });
+
+  it('does not offer adding an unknown scanned barcode to plain staff', async () => {
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId('fake-scan'));
+    expect(await screen.findByText(/לא נמצא מוצר עם ברקוד 7290003706020/)).toBeTruthy();
+    expect(screen.queryByText('הוספת מוצר חדש')).toBeNull();
   });
 });
 

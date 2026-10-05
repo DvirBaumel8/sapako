@@ -14,7 +14,7 @@ import { SecondaryNavButton } from '../../src/ui/SecondaryNavButton';
 
 export default function HomeScreen() {
   const { selectedBranch } = useBranch();
-  const { role } = useAuth();
+  const { canEditProducts } = useAuth();
   const showAlert = useAlert();
   const [search, setSearch] = useState('');
   const [isScannerVisible, setIsScannerVisible] = useState(false);
@@ -96,7 +96,7 @@ export default function HomeScreen() {
     // this list is exactly the real matches) — no further filtering needed.
     const matches = resolveBarcodeMatches(providers, matchingProducts, barcode);
     if (matches.length === 0) {
-      if (role !== 'ADMIN') {
+      if (!canEditProducts) {
         showAlert({
           title: 'לא נמצא מוצר תואם',
           message: 'לא נמצא מוצר עם ברקוד זה אצל אף ספק בסניף.',

@@ -7,7 +7,7 @@ import { fetchProvidersForBranch } from '../../../../src/api/providers';
 import { createProduct } from '../../../../src/api/products';
 import { BarcodeScannerModal } from '../../../../src/barcode/BarcodeScannerModal';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
-import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
+import { useRequireProductEditor } from '../../../../src/auth/useRequireProductEditor';
 import { sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import { fuzzySearch } from '../../../../src/utils/fuzzySearch';
 import type { Branch, Provider } from '../../../../src/api/types';
@@ -20,7 +20,7 @@ import { DEFAULT_UNIT_TYPE } from '../../../../src/products/unitTypes';
 const DEFAULT_BRANCH_NAME = 'הילס';
 
 export default function NewProductScreen() {
-  useRequireAdmin();
+  useRequireProductEditor();
   const queryClient = useQueryClient();
   const showAlert = useAlert();
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: fetchAccessibleBranches });
@@ -37,7 +37,10 @@ export default function NewProductScreen() {
   const [categoryId, setCategoryId] = useState<string | null>(null);
   // Arriving from a scan that matched nothing: the number is already known,
   // so it is carried over rather than typed in again.
-  const { barcode: scannedBarcode } = useLocalSearchParams<{ barcode?: string }>();
+  const { barcode: scannedBarcode, providerId: presetProviderId } = useLocalSearchParams<{
+    barcode?: string;
+    providerId?: string;
+  }>();
   const [barcode, setBarcode] = useState(scannedBarcode ?? '');
   const [isScannerVisible, setIsScannerVisible] = useState(false);
 
@@ -55,6 +58,16 @@ export default function NewProductScreen() {
     queryFn: () => fetchProvidersForBranch(primaryBranch!.id),
     enabled: !!primaryBranch,
   });
+
+  // Arriving from a supplier's order screen: that supplier is preselected,
+  // once, if the user's provider list for the branch contains it.
+  const [didPreselectProvider, setDidPreselectProvider] = useState(false);
+  useEffect(() => {
+    if (didPreselectProvider || !providers || !presetProviderId) return;
+    setDidPreselectProvider(true);
+    const preset = providers.find((p) => p.id === presetProviderId);
+    if (preset) setProvider(preset);
+  }, [providers, presetProviderId, didPreselectProvider]);
 
   // Once a provider is chosen, only branches that actually have a
   // same-named provider are valid additional targets — showing every

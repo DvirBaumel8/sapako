@@ -21,7 +21,7 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   router: { back: jest.fn() },
 }));
-jest.mock('../../../../src/auth/useRequireAdmin', () => ({ useRequireAdmin: jest.fn() }));
+jest.mock('../../../../src/auth/useRequireProductEditor', () => ({ useRequireProductEditor: jest.fn() }));
 jest.mock('../../../../src/api/products', () => ({
   updateProduct: jest.fn(),
   deleteProduct: jest.fn(),

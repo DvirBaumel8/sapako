@@ -16,11 +16,12 @@ const err = (status?: number) =>
       })
     : new Error('boom');
 
+let mockParams: Record<string, string> = {};
 jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({}),
+  useLocalSearchParams: () => mockParams,
   router: { back: jest.fn() },
 }));
-jest.mock('../../../../src/auth/useRequireAdmin', () => ({ useRequireAdmin: jest.fn() }));
+jest.mock('../../../../src/auth/useRequireProductEditor', () => ({ useRequireProductEditor: jest.fn() }));
 jest.mock('../../../../src/api/branches', () => ({
   fetchAccessibleBranches: jest.fn().mockResolvedValue([{ id: 'b1', name: 'הילס' }]),
 }));
@@ -62,9 +63,27 @@ async function renderAndSubmit() {
   await fireEvent.press(screen.getByText('יצירת מוצר'));
 }
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockParams = {};
+});
 
 describe('NewProductScreen', () => {
+  it('preselects the supplier given by the providerId param', async () => {
+    mockParams = { providerId: 'prov-1' };
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    activeQueryClient = queryClient;
+    await render(
+      <QueryClientProvider client={queryClient}>
+        <AlertProvider>
+          <NewProductScreen />
+        </AlertProvider>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByPlaceholderText('שם המוצר')).toBeTruthy();
+    expect(screen.getByText('ספק: י.ל.ת')).toBeTruthy();
+  });
+
   it('explains a duplicate name on 409', async () => {
     (createProduct as jest.Mock).mockRejectedValue(err(409));
     await renderAndSubmit();

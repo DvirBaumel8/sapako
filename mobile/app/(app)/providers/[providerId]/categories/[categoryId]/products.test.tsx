@@ -14,8 +14,8 @@ jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
 }));
 
-jest.mock('../../../../../../src/auth/useRequireAdmin', () => ({
-  useRequireAdmin: jest.fn(),
+jest.mock('../../../../../../src/auth/useRequireProductEditor', () => ({
+  useRequireProductEditor: jest.fn(),
 }));
 
 jest.mock('../../../../../../src/api/products', () => ({

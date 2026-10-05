@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { deleteProduct, updateProduct } from '../../../../src/api/products';
 import { isConflictError } from '../../../../src/api/errors';
 import { PrimaryButton } from '../../../../src/components/PrimaryButton';
-import { useRequireAdmin } from '../../../../src/auth/useRequireAdmin';
+import { useRequireProductEditor } from '../../../../src/auth/useRequireProductEditor';
 import { hasLetter, sanitizeHebrewInput } from '../../../../src/utils/hebrewInput';
 import { useAlert } from '../../../../src/ui/AlertProvider';
 import { UnitTypePicker } from '../../../../src/products/UnitTypePicker';
@@ -13,7 +13,7 @@ import { CategoryPicker } from '../../../../src/products/CategoryPicker';
 import { DEFAULT_UNIT_TYPE } from '../../../../src/products/unitTypes';
 
 export default function EditProductScreen() {
-  useRequireAdmin();
+  useRequireProductEditor();
   const {
     productId,
     productName,

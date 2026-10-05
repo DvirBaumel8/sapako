@@ -44,7 +44,7 @@ export default function OrderBuilderScreen() {
     highlightProductId?: string;
   }>();
   const { selectedBranch } = useBranch();
-  const { role, userId } = useAuth();
+  const { role, userId, canEditProducts } = useAuth();
   const queryClient = useQueryClient();
   const showAlert = useAlert();
   const [order, setOrder] = useState<Order | null>(null);
@@ -448,7 +448,7 @@ export default function OrderBuilderScreen() {
   const handleBarcodeScanned = (barcode: string) => {
     const match = products?.find((product) => productMatchesBarcode(product, barcode));
     if (!match) {
-      if (role !== 'ADMIN') {
+      if (!canEditProducts) {
         showAlert({
           title: 'לא נמצא מוצר תואם',
           message: `לא נמצא מוצר עם ברקוד ${barcode} בקטלוג של הספק הזה.`,
@@ -511,7 +511,7 @@ export default function OrderBuilderScreen() {
               </Text>
             </Pressable>
           </View>
-          {role === 'ADMIN' && isEditingProducts && (
+          {canEditProducts && isEditingProducts && (
             <Pressable
               hitSlop={8}
               onPress={() =>
@@ -624,7 +624,7 @@ export default function OrderBuilderScreen() {
         <Pressable onPress={() => setIsScannerVisible(true)} style={styles.scanButton}>
           <Text style={styles.scanButtonText}>סריקת ברקוד</Text>
         </Pressable>
-        {role === 'ADMIN' && (
+        {canEditProducts && (
           <Pressable
             onPress={() => setIsEditingProducts((previous) => !previous)}
             accessibilityRole="button"
@@ -643,6 +643,26 @@ export default function OrderBuilderScreen() {
           </Pressable>
         )}
       </View>
+      {canEditProducts && isEditingProducts && (
+        <View style={styles.editActionsRow}>
+          <Pressable
+            onPress={() =>
+              router.push({ pathname: '/admin/products/new', params: { providerId } })
+            }
+            accessibilityRole="button"
+            style={styles.editToggle}
+          >
+            <Text style={styles.editToggleText}>הוספת מוצר</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push(`/providers/${providerId}/categories`)}
+            accessibilityRole="button"
+            style={styles.editToggle}
+          >
+            <Text style={styles.editToggleText}>קטגוריות</Text>
+          </Pressable>
+        </View>
+      )}
       <BarcodeScannerModal
         visible={isScannerVisible}
         onScanned={handleBarcodeScanned}
@@ -772,6 +792,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#eef2ff',
     alignItems: 'center',
   },
+  editActionsRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
   editToggleActive: { backgroundColor: '#2563eb' },
   editToggleText: { color: '#2563eb', fontWeight: '600', fontSize: 14 },
   editToggleTextActive: { color: '#fff' },

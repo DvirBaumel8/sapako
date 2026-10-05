@@ -9,9 +9,9 @@ jest.mock('expo-router', () => ({
   router: { push: (...args: unknown[]) => mockPush(...args) },
 }));
 
-let mockRole = 'ADMIN';
+let mockCanEdit = true;
 jest.mock('../../../../../src/auth/AuthContext', () => ({
-  useAuth: () => ({ role: mockRole }),
+  useAuth: () => ({ canEditProducts: mockCanEdit }),
 }));
 
 jest.mock('../../../../../src/api/categories', () => ({
@@ -29,7 +29,7 @@ let activeQueryClient: QueryClient | null = null;
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockRole = 'ADMIN';
+  mockCanEdit = true;
   (fetchCategoriesForProvider as jest.Mock).mockResolvedValue(CATEGORIES);
 });
 
@@ -68,15 +68,15 @@ describe('CategoriesScreen', () => {
     });
   });
 
-  it('offers add/edit controls to an admin', async () => {
+  it('offers add/edit controls to a user who can edit products', async () => {
     await renderScreen();
 
     expect(screen.getByText('+ הוספת קטגוריה')).toBeTruthy();
     expect(screen.getByLabelText('עריכת קטגוריות')).toBeTruthy();
   });
 
-  it('hides add/edit controls from non-admin staff', async () => {
-    mockRole = 'STAFF';
+  it('hides add/edit controls from users who cannot edit products', async () => {
+    mockCanEdit = false;
     await renderScreen();
 
     expect(screen.queryByText('+ הוספת קטגוריה')).toBeNull();

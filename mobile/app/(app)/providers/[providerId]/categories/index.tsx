@@ -7,8 +7,7 @@ import { useAuth } from '../../../../../src/auth/AuthContext';
 
 export default function CategoriesScreen() {
   const { providerId } = useLocalSearchParams<{ providerId: string }>();
-  const { role } = useAuth();
-  const isAdmin = role === 'ADMIN';
+  const { canEditProducts } = useAuth();
   const { data: categories, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['categories', providerId],
     queryFn: () => fetchCategoriesForProvider(providerId),
@@ -20,7 +19,7 @@ export default function CategoriesScreen() {
 
   return (
     <View style={styles.container}>
-      {isAdmin && (
+      {canEditProducts && (
         <View style={styles.actionRow}>
           <Pressable
             onPress={() => router.push(`/providers/${providerId}/categories/new`)}
@@ -61,7 +60,7 @@ export default function CategoriesScreen() {
             >
               <Text style={styles.categoryName}>{item.name}</Text>
             </Pressable>
-            {isAdmin && isEditing && (
+            {canEditProducts && isEditing && (
               <Pressable
                 onPress={() =>
                   router.push({

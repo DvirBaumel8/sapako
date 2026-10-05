@@ -4,13 +4,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { deleteCategory, updateCategory } from '../../../../../../src/api/categories';
 import { PrimaryButton } from '../../../../../../src/components/PrimaryButton';
-import { useRequireAdmin } from '../../../../../../src/auth/useRequireAdmin';
+import { useRequireProductEditor } from '../../../../../../src/auth/useRequireProductEditor';
 import { hasLetter, sanitizeHebrewInput } from '../../../../../../src/utils/hebrewInput';
 import { isConflictError } from '../../../../../../src/api/errors';
 import { useAlert } from '../../../../../../src/ui/AlertProvider';
 
 export default function EditCategoryScreen() {
-  useRequireAdmin();
+  useRequireProductEditor();
   const { providerId, categoryId, categoryName } = useLocalSearchParams<{
     providerId: string;
     categoryId: string;

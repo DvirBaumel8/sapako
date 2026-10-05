@@ -4,7 +4,7 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchProductsForProvider, updateProduct } from '../../../../../../src/api/products';
 import { fetchCategoriesForProvider } from '../../../../../../src/api/categories';
-import { useRequireAdmin } from '../../../../../../src/auth/useRequireAdmin';
+import { useRequireProductEditor } from '../../../../../../src/auth/useRequireProductEditor';
 import { useAlert } from '../../../../../../src/ui/AlertProvider';
 import { Toggle } from '../../../../../../src/ui/Toggle';
 import { common } from '../../../../../../src/ui/commonStyles';
@@ -23,7 +23,7 @@ import type { Product } from '../../../../../../src/api/types';
  * shows which, so that's a visible choice, not a silent steal.
  */
 export default function CategoryProductsScreen() {
-  useRequireAdmin();
+  useRequireProductEditor();
   const { providerId, categoryId, categoryName } = useLocalSearchParams<{
     providerId: string;
     categoryId: string;

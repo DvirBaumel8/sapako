@@ -24,8 +24,8 @@ jest.mock('expo-router', () => ({
   router: { back: (...args: unknown[]) => mockBack(...args) },
 }));
 
-jest.mock('../../../../../../src/auth/useRequireAdmin', () => ({
-  useRequireAdmin: jest.fn(),
+jest.mock('../../../../../../src/auth/useRequireProductEditor', () => ({
+  useRequireProductEditor: jest.fn(),
 }));
 
 jest.mock('../../../../../../src/api/categories', () => ({
