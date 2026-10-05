@@ -71,6 +71,8 @@ export function ProductNoteDialog({ product, onSaved, onClose }: ProductNoteDial
             value={text}
             onChangeText={setText}
             placeholder="למשל: להזמין רק ביום ראשון"
+            // Light enough not to be mistaken for a note that's already there.
+            placeholderTextColor="#b8bcc4"
             maxLength={NOTE_MAX_LENGTH}
             multiline
             autoFocus
@@ -123,8 +125,11 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    padding: spacing.lg,
+    // Pinned near the top, not centered: the input autofocuses, and on a
+    // phone the keyboard covered the Save button of a centered dialog.
+    justifyContent: 'flex-start',
+    paddingTop: 80,
+    paddingHorizontal: spacing.lg,
   },
   sheet: {
     backgroundColor: colors.surface,

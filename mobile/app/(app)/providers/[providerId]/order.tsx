@@ -844,7 +844,7 @@ const styles = StyleSheet.create({
   noteIconBox: { height: 16, justifyContent: 'center', overflow: 'visible' },
   // Dimmed: the emoji renders as a bright white notepad on iOS and glared
   // against the white card.
-  noteIcon: { fontSize: 15, lineHeight: 16, filter: 'brightness(0.85)' },
+  noteIcon: { fontSize: 15, lineHeight: 16, filter: 'brightness(0.65)' },
   noteIconEmpty: { opacity: 0.3 },
   // height and lineHeight are fixed at 16 so the extra row height is exactly
   // NOTE_LINE_HEIGHT (card gap 10 + 16) in productRowLayout.ts.
