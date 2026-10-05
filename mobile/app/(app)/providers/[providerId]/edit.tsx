@@ -148,6 +148,9 @@ export default function EditProviderScreen() {
       <Text style={styles.label}>מחלקות</Text>
       {/* Wrapped rather than a horizontal list: a scrolling row silently hid
           departments off the left edge with nothing to indicate more existed. */}
+      {activeDepartments?.length === 0 && (
+        <Text style={styles.statusText}>אין מחלקות בסניף הזה. יש להוסיף מחלקה קודם.</Text>
+      )}
       <View style={styles.departmentWrap}>
         {activeDepartments?.map((item) => (
           <Pressable

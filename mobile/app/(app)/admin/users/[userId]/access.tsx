@@ -233,6 +233,9 @@ export default function UserAccessScreen() {
           keyExtractor={(provider) => provider.id}
           contentContainerStyle={[common.list, styles.listContent]}
           style={styles.providerList}
+          ListEmptyComponent={
+            isProvidersOpen ? <Text style={common.statusText}>אין ספקים בסניף הזה.</Text> : null
+          }
           ListHeaderComponent={
             <View style={styles.headerSections}>
               <View style={common.cardRow}>
@@ -264,6 +267,9 @@ export default function UserAccessScreen() {
                       onValueChange={(next) => toggleAllDepartments(activeBranch.id, next)}
                     />
                   </View>
+                )}
+                {isDepartmentsOpen && access.departments.length === 0 && (
+                  <Text style={common.statusText}>אין מחלקות בסניף הזה.</Text>
                 )}
                 {isDepartmentsOpen &&
                   access.departments.map((department) => (

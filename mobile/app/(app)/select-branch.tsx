@@ -57,6 +57,13 @@ export default function SelectBranchScreen() {
           <SecondaryNavButton label="ניהול" onPress={() => router.push('/admin')} />
         ) : null
       }
+      ListEmptyComponent={
+        <Text style={styles.emptyText}>
+          {role === 'ADMIN'
+            ? "אין עדיין סניפים. אפשר להוסיף סניף דרך 'ניהול'."
+            : 'אין לך עדיין גישה לאף סניף. יש לפנות למנהל כדי לקבל הרשאות.'}
+        </Text>
+      }
       renderItem={({ item }) => (
         <Pressable
           style={styles.item}
@@ -76,5 +83,6 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { padding: 16, gap: 8 },
   item: { padding: 16, borderWidth: 1, borderColor: '#ddd', borderRadius: 8 },
+  emptyText: { textAlign: 'center', marginTop: 12, color: '#666' },
   itemText: { fontSize: 16, fontWeight: '600' },
 });

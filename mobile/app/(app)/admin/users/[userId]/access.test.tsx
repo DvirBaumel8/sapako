@@ -262,3 +262,43 @@ describe('UserAccessScreen — can edit products', () => {
     ).toBe(false);
   });
 });
+
+describe('UserAccessScreen — empty branch', () => {
+  async function renderEmptyBranch(view: { departments: unknown[]; providers: unknown[] }) {
+    (fetchAccess as jest.Mock).mockResolvedValue(view);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    activeQueryClient = queryClient;
+    await render(
+      <QueryClientProvider client={queryClient}>
+        <AlertProvider>
+          <UserAccessScreen />
+        </AlertProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('ספקים (' + view.providers.length + ')')).toBeTruthy());
+  }
+
+  it('explains a branch with no providers and no departments', async () => {
+    await renderEmptyBranch({ departments: [], providers: [] });
+
+    expect(screen.getByText('אין ספקים בסניף הזה.')).toBeTruthy();
+    expect(screen.getByText('אין מחלקות בסניף הזה.')).toBeTruthy();
+  });
+
+  it('does not show the empty messages while the lists are populated', async () => {
+    await renderScreen();
+
+    expect(screen.queryByText('אין ספקים בסניף הזה.')).toBeNull();
+    expect(screen.queryByText('אין מחלקות בסניף הזה.')).toBeNull();
+  });
+
+  it('hides the empty messages when the sections are collapsed', async () => {
+    await renderEmptyBranch({ departments: [], providers: [] });
+
+    await fireEvent.press(screen.getByText('ספקים (0)'));
+    await fireEvent.press(screen.getByText('מחלקות (0)'));
+
+    expect(screen.queryByText('אין ספקים בסניף הזה.')).toBeNull();
+    expect(screen.queryByText('אין מחלקות בסניף הזה.')).toBeNull();
+  });
+});
