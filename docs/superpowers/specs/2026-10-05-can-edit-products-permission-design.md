@@ -62,8 +62,12 @@ New `PermissionsService.canEditProductsOf(user, providerId): Promise<boolean>`:
 `true` if ADMIN; else `true` only if the user row has `canEditProducts` AND
 `hasProviderAccess(user, providerId)`.
 
-New guard `ProductEditorGuard` that resolves the provider and calls it,
-throwing `403` otherwise. How it finds the provider per route:
+`PermissionsService.assertCanEditProducts(user, providerId)` throws `403`
+when that returns false. It is called at the start of each route below,
+after resolving the provider (an explicit call rather than a guard: the
+by-id routes need ProductsService/CategoriesService to find the provider,
+and a guard in PermissionsModule depending on those would create a module
+cycle):
 
 | Route | Provider comes from |
 |---|---|
@@ -72,7 +76,7 @@ throwing `403` otherwise. How it finds the provider per route:
 | `PATCH /products/:id`, `DELETE /products/:id` | the product's `providerId` (404 if the product doesn't exist) |
 | `PATCH /categories/:id`, `DELETE /categories/:id` | the category's `providerId` (404 if missing) |
 
-These routes drop `@Roles(Role.ADMIN)` and use `ProductEditorGuard` instead.
+These routes drop `@Roles(Role.ADMIN)` and call `assertCanEditProducts` instead.
 Everything else keeps its current guards. `PATCH /products/:id` keeps
 validating that a new `categoryId` belongs to the product's own provider
 (existing check) — so an editor can't attach a category from another
