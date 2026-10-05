@@ -196,7 +196,7 @@ describe('UsersService', () => {
       expect(mockRepo.save).toHaveBeenCalledWith(user);
     });
 
-    it('rejects changing to another user\'s username', async () => {
+    it("rejects changing to another user's username", async () => {
       mockRepo.findOneBy.mockResolvedValue({
         id: 'u1',
         username: 'danny',
@@ -205,9 +205,9 @@ describe('UsersService', () => {
       });
       mockRepo.findOne.mockResolvedValue({ id: 'u2', username: 'taken' });
 
-      await expect(
-        service.update('u1', { username: 'taken' }),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.update('u1', { username: 'taken' })).rejects.toThrow(
+        ConflictException,
+      );
       expect(mockRepo.save).not.toHaveBeenCalled();
     });
 
@@ -218,6 +218,46 @@ describe('UsersService', () => {
         service.update('missing', { username: 'new-name' }),
       ).rejects.toThrow(NotFoundException);
       expect(mockRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('canEditProducts', () => {
+    it('sets the flag on update and saves', async () => {
+      const user = { id: 'u1', username: 'd', canEditProducts: false } as User;
+      mockRepo.findOneBy.mockResolvedValue(user);
+      mockRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+      const updated = await service.update('u1', { canEditProducts: true });
+
+      expect(updated.canEditProducts).toBe(true);
+      expect(mockRepo.save).toHaveBeenCalledWith(user);
+    });
+
+    it('leaves the flag unchanged when omitted', async () => {
+      const user = { id: 'u1', username: 'd', canEditProducts: true } as User;
+      mockRepo.findOneBy.mockResolvedValue(user);
+      mockRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+      const updated = await service.update('u1', {});
+
+      expect(updated.canEditProducts).toBe(true);
+    });
+
+    it('toSafeUser includes the flag and still no passwordHash', () => {
+      const safe = service.toSafeUser(
+        {
+          id: 'u1',
+          username: 'd',
+          passwordHash: 'x',
+          role: Role.STAFF,
+          canEditProducts: true,
+          createdAt: new Date(),
+        } as any,
+        0,
+      );
+
+      expect(safe.canEditProducts).toBe(true);
+      expect(safe).not.toHaveProperty('passwordHash');
     });
   });
 

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { UserProviderAccess } from './user-provider-access.entity';
@@ -8,6 +12,7 @@ import { Provider } from '../providers/provider.entity';
 import { Department } from '../departments/department.entity';
 import { resolveAccess, AccessInput } from './resolveAccess';
 import { Role } from '../users/role.enum';
+import { User } from '../users/user.entity';
 import { AuthenticatedUser } from '../auth/jwt.strategy';
 
 @Injectable()
@@ -23,6 +28,8 @@ export class PermissionsService {
     private readonly providerRepo: Repository<Provider>,
     @InjectRepository(Department)
     private readonly departmentRepo: Repository<Department>,
+    @InjectRepository(User)
+    private readonly usersRepo: Repository<User>,
   ) {}
 
   /** Providers of one branch with the departments they belong to. */
@@ -108,6 +115,36 @@ export class PermissionsService {
     }).isGranted;
   }
 
+  /**
+   * Product/category writes: admins always; staff only with the flag AND
+   * access to that provider. Read from the database on every call so that
+   * revoking the flag takes effect on the very next request, not at the
+   * token's expiry.
+   */
+  async canEditProductsOf(
+    user: AuthenticatedUser,
+    providerId: string,
+  ): Promise<boolean> {
+    if (user.role === Role.ADMIN) return true;
+    const row = await this.usersRepo.findOne({
+      where: { id: user.userId },
+      select: { id: true, canEditProducts: true },
+    });
+    if (!row?.canEditProducts) return false;
+    return this.hasProviderAccess(user, providerId);
+  }
+
+  async assertCanEditProducts(
+    user: AuthenticatedUser,
+    providerId: string,
+  ): Promise<void> {
+    if (!(await this.canEditProductsOf(user, providerId))) {
+      throw new ForbiddenException(
+        'No permission to edit products for this provider',
+      );
+    }
+  }
+
   async hasBranchAccess(
     user: AuthenticatedUser,
     branchId: string,
@@ -158,8 +195,9 @@ export class PermissionsService {
       return this.providerRepo.count();
     }
     const { input, providers } = await this.buildAccessInput(user.userId);
-    return providers.filter((provider) => resolveAccess(provider.id, input).isGranted)
-      .length;
+    return providers.filter(
+      (provider) => resolveAccess(provider.id, input).isGranted,
+    ).length;
   }
 
   async getAccessForBranch(userId: string, branchId: string) {

@@ -22,6 +22,11 @@ export class User {
   @Column({ type: 'enum', enum: Role, default: Role.STAFF })
   role: Role;
 
+  // Lets a STAFF user manage products and categories of the suppliers they
+  // can already access. Ignored for ADMIN, who can do everything anyway.
+  @Column({ default: false })
+  canEditProducts: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

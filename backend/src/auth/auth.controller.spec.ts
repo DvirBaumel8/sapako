@@ -3,14 +3,19 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { AuthController } from './auth.controller';
 import { LoginDto } from './dto/login.dto';
+import { Role } from '../users/role.enum';
 
 describe('AuthController', () => {
   let controller: AuthController;
   const mockAuthService = { login: jest.fn() };
+  const mockUsersService = { findById: jest.fn() };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new AuthController(mockAuthService as any);
+    controller = new AuthController(
+      mockAuthService as any,
+      mockUsersService as any,
+    );
   });
 
   describe('login', () => {
@@ -48,6 +53,44 @@ describe('AuthController', () => {
       const guards = Reflect.getMetadata(GUARDS_METADATA, AuthController);
 
       expect(guards).toBeUndefined();
+    });
+  });
+
+  describe('me', () => {
+    it('returns the identity and flag from the user row', async () => {
+      mockUsersService.findById.mockResolvedValue({
+        id: 'u1',
+        username: 'danny',
+        role: Role.STAFF,
+        canEditProducts: true,
+        passwordHash: 'secret',
+      });
+
+      const result = await controller.me({
+        user: { userId: 'u1', role: Role.STAFF },
+      });
+
+      expect(result).toEqual({
+        userId: 'u1',
+        username: 'danny',
+        role: Role.STAFF,
+        canEditProducts: true,
+      });
+    });
+
+    it('reports canEditProducts true for an ADMIN even if the column is false', async () => {
+      mockUsersService.findById.mockResolvedValue({
+        id: 'a1',
+        username: 'boss',
+        role: Role.ADMIN,
+        canEditProducts: false,
+      });
+
+      const result = await controller.me({
+        user: { userId: 'a1', role: Role.ADMIN },
+      });
+
+      expect(result.canEditProducts).toBe(true);
     });
   });
 

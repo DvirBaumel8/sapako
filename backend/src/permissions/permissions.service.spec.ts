@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { In } from 'typeorm';
@@ -9,6 +9,7 @@ import { UserProviderBlock } from './user-provider-block.entity';
 import { Provider } from '../providers/provider.entity';
 import { Department } from '../departments/department.entity';
 import { Role } from '../users/role.enum';
+import { User } from '../users/user.entity';
 
 describe('PermissionsService', () => {
   let service: PermissionsService;
@@ -42,6 +43,7 @@ describe('PermissionsService', () => {
     findOne: jest.fn(),
     find: jest.fn(),
   };
+  const usersRepo = { findOne: jest.fn(), findOneBy: jest.fn() };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -66,6 +68,7 @@ describe('PermissionsService', () => {
         { provide: getRepositoryToken(UserProviderBlock), useValue: blockRepo },
         { provide: getRepositoryToken(Provider), useValue: providerRepo },
         { provide: getRepositoryToken(Department), useValue: departmentRepo },
+        { provide: getRepositoryToken(User), useValue: usersRepo },
       ],
     }).compile();
     service = module.get(PermissionsService);
@@ -759,6 +762,61 @@ describe('PermissionsService', () => {
         userId: 'u1',
         providerId: 'p1',
       });
+    });
+  });
+
+  describe('canEditProductsOf / assertCanEditProducts', () => {
+    const staff = { userId: 'u1', role: Role.STAFF };
+
+    it('lets ADMIN through without reading the user row', async () => {
+      expect(
+        await service.canEditProductsOf(
+          { userId: 'a', role: Role.ADMIN },
+          'p1',
+        ),
+      ).toBe(true);
+      expect(usersRepo.findOne).not.toHaveBeenCalled();
+    });
+
+    it('denies STAFF without the flag, without checking provider access', async () => {
+      usersRepo.findOne.mockResolvedValue({ id: 'u1', canEditProducts: false });
+      const spy = jest.spyOn(service, 'hasProviderAccess');
+
+      expect(await service.canEditProductsOf(staff, 'p1')).toBe(false);
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('allows STAFF with the flag and provider access', async () => {
+      usersRepo.findOne.mockResolvedValue({ id: 'u1', canEditProducts: true });
+      jest.spyOn(service, 'hasProviderAccess').mockResolvedValue(true);
+
+      expect(await service.canEditProductsOf(staff, 'p1')).toBe(true);
+    });
+
+    it('denies STAFF with the flag but no access to the provider', async () => {
+      usersRepo.findOne.mockResolvedValue({ id: 'u1', canEditProducts: true });
+      jest.spyOn(service, 'hasProviderAccess').mockResolvedValue(false);
+
+      expect(await service.canEditProductsOf(staff, 'p1')).toBe(false);
+    });
+
+    it('denies STAFF whose user row no longer exists', async () => {
+      usersRepo.findOne.mockResolvedValue(null);
+
+      expect(await service.canEditProductsOf(staff, 'p1')).toBe(false);
+    });
+
+    it('assert throws Forbidden when denied and resolves when allowed', async () => {
+      usersRepo.findOne.mockResolvedValue({ id: 'u1', canEditProducts: false });
+      await expect(service.assertCanEditProducts(staff, 'p1')).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      usersRepo.findOne.mockResolvedValue({ id: 'u1', canEditProducts: true });
+      jest.spyOn(service, 'hasProviderAccess').mockResolvedValue(true);
+      await expect(
+        service.assertCanEditProducts(staff, 'p1'),
+      ).resolves.toBeUndefined();
     });
   });
 });

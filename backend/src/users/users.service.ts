@@ -56,7 +56,7 @@ export class UsersService {
 
   async update(
     id: string,
-    input: { username?: string; password?: string },
+    input: { username?: string; password?: string; canEditProducts?: boolean },
   ): Promise<User> {
     const user = await this.findById(id);
 
@@ -70,6 +70,10 @@ export class UsersService {
 
     if (input.password) {
       user.passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
+    }
+
+    if (input.canEditProducts !== undefined) {
+      user.canEditProducts = input.canEditProducts;
     }
 
     return this.usersRepo.save(user);
@@ -125,6 +129,7 @@ export class UsersService {
       id: user.id,
       username: user.username,
       role: user.role,
+      canEditProducts: user.canEditProducts,
       createdAt: user.createdAt,
       providerAccessCount,
     } as SafeUser;
