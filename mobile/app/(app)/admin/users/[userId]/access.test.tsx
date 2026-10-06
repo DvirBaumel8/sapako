@@ -302,3 +302,95 @@ describe('UserAccessScreen — empty branch', () => {
     expect(screen.queryByText('אין מחלקות בסניף הזה.')).toBeNull();
   });
 });
+
+describe('UserAccessScreen — search', () => {
+  const searchView = {
+    departments: [
+      { id: 'dep-1', name: 'חלב וביצים', isGranted: true },
+      { id: 'dep-2', name: 'ירקות', isGranted: false },
+    ],
+    providers: [
+      { id: 'prov-1', name: 'תנובה', isGranted: true, reason: 'NONE' },
+      { id: 'prov-2', name: 'שטראוס', isGranted: false, reason: 'NONE' },
+      { id: 'prov-3', name: 'יוטבתה', isGranted: false, reason: 'NONE' },
+    ],
+  };
+
+  beforeEach(() => {
+    (fetchAccess as jest.Mock).mockResolvedValue(searchView);
+  });
+
+  const search = (text: string) =>
+    fireEvent.changeText(screen.getByLabelText('חיפוש ספק או מחלקה'), text);
+
+  it('filters providers and departments by a mid-word substring and updates the counts', async () => {
+    await renderScreen();
+    expect(screen.getByText('מחלקות (2)')).toBeTruthy();
+    expect(screen.getByText('ספקים (3)')).toBeTruthy();
+
+    await search('וט');
+
+    expect(screen.getByText('יוטבתה')).toBeTruthy();
+    expect(screen.queryByText('תנובה')).toBeNull();
+    expect(screen.queryByText('שטראוס')).toBeNull();
+    expect(screen.getByText('ספקים (1)')).toBeTruthy();
+    expect(screen.getByText('מחלקות (0)')).toBeTruthy();
+
+    await search('רקו');
+
+    expect(screen.getByText('ירקות')).toBeTruthy();
+    expect(screen.queryByText('חלב וביצים')).toBeNull();
+    expect(screen.getByText('מחלקות (1)')).toBeTruthy();
+    expect(screen.getByText('ספקים (0)')).toBeTruthy();
+  });
+
+  it('opens collapsed sections while searching and restores them when cleared', async () => {
+    await renderScreen();
+    await fireEvent.press(screen.getByText('ספקים (3)'));
+    await fireEvent.press(screen.getByText('מחלקות (2)'));
+    expect(screen.queryByText('תנובה')).toBeNull();
+    expect(screen.queryByText('ירקות')).toBeNull();
+
+    await search('ת');
+    expect(screen.getByText('תנובה')).toBeTruthy();
+    expect(screen.getByText('ירקות')).toBeTruthy();
+
+    await search('');
+    expect(screen.queryByText('תנובה')).toBeNull();
+    expect(screen.queryByText('ירקות')).toBeNull();
+  });
+
+  it('keeps the all-providers toggle acting on every provider while filtered', async () => {
+    await renderScreen();
+    // Only the filtered provider is granted, but not all providers are.
+    await search('תנו');
+
+    expect(
+      screen.getByLabelText('הרשאה לכל הספקים בסניף').props.accessibilityState.checked,
+    ).toBe(false);
+
+    await fireEvent.press(screen.getByLabelText('הרשאה לכל הספקים בסניף'));
+
+    await waitFor(() =>
+      expect(setBranchAccess).toHaveBeenCalledWith('user-1', 'branch-1', true),
+    );
+  });
+
+  it('hides the all-departments row while searching', async () => {
+    await renderScreen();
+    await search('ירק');
+
+    expect(screen.queryByText('הרשאה לכל המחלקות')).toBeNull();
+
+    await search('');
+    expect(screen.getByText('הרשאה לכל המחלקות')).toBeTruthy();
+  });
+
+  it('shows a no-results message when nothing matches', async () => {
+    await renderScreen();
+    await search('zzz');
+
+    expect(screen.getByText('לא נמצאו תוצאות לחיפוש.')).toBeTruthy();
+    expect(screen.queryByText('אין ספקים בסניף הזה.')).toBeNull();
+  });
+});

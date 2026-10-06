@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -18,6 +18,7 @@ import { useAlert } from '../../../../../src/ui/AlertProvider';
 import { common } from '../../../../../src/ui/commonStyles';
 import { colors, spacing } from '../../../../../src/ui/theme';
 import { Toggle } from '../../../../../src/ui/Toggle';
+import { fuzzySearch } from '../../../../../src/utils/fuzzySearch';
 
 function reasonLine(provider: AccessView['providers'][number]): string | null {
   if (provider.reason === 'DEPARTMENT' && provider.viaDepartmentName) {
@@ -44,6 +45,8 @@ export default function UserAccessScreen() {
   // live catalogue — so reaching one section means scrolling past the other.
   const [isDepartmentsOpen, setIsDepartmentsOpen] = useState(true);
   const [isProvidersOpen, setIsProvidersOpen] = useState(true);
+  // Kept across branch switches on purpose.
+  const [searchQuery, setSearchQuery] = useState('');
 
   const activeBranch = selectedBranch ?? branches?.[0] ?? null;
 
@@ -187,6 +190,21 @@ export default function UserAccessScreen() {
   const isProviderGranted = (provider: AccessView['providers'][number]) =>
     pendingProviders[provider.id] ?? provider.isGranted;
 
+  const isSearching = searchQuery.trim().length > 0;
+  const filteredDepartments = useMemo(
+    () => fuzzySearch(access?.departments ?? [], searchQuery, (department) => department.name),
+    [access?.departments, searchQuery],
+  );
+  const filteredProviders = useMemo(
+    () => fuzzySearch(access?.providers ?? [], searchQuery, (provider) => provider.name),
+    [access?.providers, searchQuery],
+  );
+  // Searching forces both sections open without touching the user's own
+  // collapse state, so clearing the search puts things back as they were.
+  const showDepartments = isSearching || isDepartmentsOpen;
+  const showProviders = isSearching || isProvidersOpen;
+
+  // The "all" toggles deliberately stay computed from the unfiltered lists.
   const allProvidersGranted =
     !!access && access.providers.length > 0 && access.providers.every((provider) => isProviderGranted(provider));
 
@@ -226,15 +244,28 @@ export default function UserAccessScreen() {
           );
         })}
       </View>
+      <TextInput
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="חיפוש ספק או מחלקה"
+        accessibilityLabel="חיפוש ספק או מחלקה"
+        style={styles.search}
+      />
       {isLoading && <Text style={common.statusText}>טוען…</Text>}
       {activeBranch && access && (
         <FlatList
-          data={isProvidersOpen ? access.providers : []}
+          data={showProviders ? filteredProviders : []}
           keyExtractor={(provider) => provider.id}
           contentContainerStyle={[common.list, styles.listContent]}
           style={styles.providerList}
           ListEmptyComponent={
-            isProvidersOpen ? <Text style={common.statusText}>אין ספקים בסניף הזה.</Text> : null
+            !showProviders ? null : isSearching ? (
+              filteredDepartments.length === 0 ? (
+                <Text style={common.statusText}>לא נמצאו תוצאות לחיפוש.</Text>
+              ) : null
+            ) : (
+              <Text style={common.statusText}>אין ספקים בסניף הזה.</Text>
+            )
           }
           ListHeaderComponent={
             <View style={styles.headerSections}>
@@ -253,11 +284,11 @@ export default function UserAccessScreen() {
                 style={styles.sectionHeader}
                 accessibilityRole="button"
               >
-                <Text style={common.title}>מחלקות ({access.departments.length})</Text>
-                <Text style={styles.sectionChevron}>{isDepartmentsOpen ? '⌄' : '⌃'}</Text>
+                <Text style={common.title}>מחלקות ({filteredDepartments.length})</Text>
+                <Text style={styles.sectionChevron}>{showDepartments ? '⌄' : '⌃'}</Text>
               </Pressable>
               <View style={styles.section}>
-                {isDepartmentsOpen && access.departments.length > 0 && (
+                {showDepartments && !isSearching && access.departments.length > 0 && (
                   <View style={[common.cardRow, styles.allDepartmentsRow]}>
                     <Text style={common.label}>הרשאה לכל המחלקות</Text>
                     <Toggle
@@ -268,11 +299,11 @@ export default function UserAccessScreen() {
                     />
                   </View>
                 )}
-                {isDepartmentsOpen && access.departments.length === 0 && (
+                {showDepartments && !isSearching && access.departments.length === 0 && (
                   <Text style={common.statusText}>אין מחלקות בסניף הזה.</Text>
                 )}
-                {isDepartmentsOpen &&
-                  access.departments.map((department) => (
+                {showDepartments &&
+                  filteredDepartments.map((department) => (
                   <View key={department.id} style={common.cardRow}>
                     <Text style={common.label}>{department.name}</Text>
                     <Toggle
@@ -290,8 +321,8 @@ export default function UserAccessScreen() {
                 style={styles.sectionHeader}
                 accessibilityRole="button"
               >
-                <Text style={common.title}>ספקים ({access.providers.length})</Text>
-                <Text style={styles.sectionChevron}>{isProvidersOpen ? '⌄' : '⌃'}</Text>
+                <Text style={common.title}>ספקים ({filteredProviders.length})</Text>
+                <Text style={styles.sectionChevron}>{showProviders ? '⌄' : '⌃'}</Text>
               </Pressable>
             </View>
           }
@@ -328,6 +359,18 @@ const styles = StyleSheet.create({
   branchChipSelected: { backgroundColor: colors.accent },
   branchChipTextSelected: { color: colors.surface },
   canEditRow: { marginHorizontal: spacing.lg, marginTop: spacing.sm },
+  search: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    textAlign: 'right',
+    fontSize: 15,
+  },
   providerList: { flex: 1 },
   sectionHeader: {
     flexDirection: 'row',
